@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Official News, Master Term Calendar, Administrative Bulletins &amp; Visual Dispatch for Laerskool Kempton Park Full Service School.">
+  <title>News, Term Calendar &amp; Bulletins | Laerskool Kempton Park</title>
+  
+  <link rel="stylesheet" href="assets/css/variables.css?v=3.1">
+  <link rel="stylesheet" href="assets/css/base.css?v=3.1">
+  <link rel="stylesheet" href="assets/css/components.css?v=3.1">
+  <link rel="stylesheet" href="assets/css/pages.css?v=3.1">
+  <link rel="icon" type="image/png" href="assets/images/logo_official.png">
+  <script src="assets/js/search-palette.js" defer></script>
+  <script src="assets/js/modal-dialog.js" defer></script>
+  <script src="assets/js/calendar-module.js" defer></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-content">Skip to institutional content</a>
+
+  <!-- Utility Bar -->
+  <div class="utility-bar" role="region" aria-label="Official Communications Bar">
+    <div class="container utility-inner">
+      <div class="utility-left">
+        <span class="language-clarifier-seal" title="Medium of Instruction">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          100% English-Medium Primary &amp; Full-Service School
+        </span>
+        <div class="utility-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          <a href="tel:0113946421">011 394 6421</a>
+        </div>
+        <div class="utility-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span>Kittyhawk St, Rhodesfield (Near Gautrain)</span>
+        </div>
+        <button type="button" class="utility-search-btn btn-search-trigger" aria-label="Quick Search across site">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Quick Search</span>
+          <kbd>⌘K</kbd>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architectural Main Header -->
+  <header class="main-header" role="banner">
+    <div class="container header-inner">
+      <a href="index.html" class="brand-link" aria-label="Laerskool Kempton Park Home">
+        <div class="brand-crest-frame">
+          <img src="assets/images/logo_official.png" alt="Laerskool Kempton Park Official Swallow Crest" class="brand-crest-img">
+        </div>
+        <div class="brand-text-block">
+          <span class="brand-primary-name">Laerskool Kempton Park</span>
+          <span class="brand-sub-designation">Full Service School • Est. 1903</span>
+        </div>
+      </a>
+
+      <nav class="nav-menu" role="navigation" aria-label="Institutional Navigation">
+        <a href="index.html" class="nav-link">Our School</a>
+        <a href="about.html" class="nav-link">Heritage &amp; People</a>
+        <a href="full-service.html" class="nav-link">Full-Service &amp; Clinical</a>
+        <a href="school-life.html" class="nav-link">Curriculum &amp; Life</a>
+        <a href="admissions.html" class="nav-link">Admissions &amp; Parents</a>
+        <a href="news.html" class="nav-link active">News &amp; Calendar</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+      </nav>
+
+      <button class="mobile-nav-toggle" aria-label="Open Navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile Drawer -->
+  <div class="mobile-drawer" aria-hidden="true" role="dialog">
+    <div class="mobile-drawer-content">
+      <div class="flex-between">
+        <span class="brand-primary-name" style="font-size: 1.35rem;">Navigation</span>
+        <button class="mobile-drawer-close" aria-label="Close Menu">&times;</button>
+      </div>
+      <div class="language-clarifier-seal mt-2">100% English Medium Primary</div>
+      <button type="button" class="btn btn-outline btn-search-trigger mt-3" style="width: 100%; justify-content: center; gap: 0.5rem;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Quick Search (Cmd+K)
+      </button>
+      <nav class="flex flex-col gap-3 mt-4">
+        <a href="index.html" class="nav-link">Our School</a>
+        <a href="about.html" class="nav-link">Heritage &amp; People</a>
+        <a href="full-service.html" class="nav-link">Full-Service &amp; Clinical</a>
+        <a href="school-life.html" class="nav-link">Curriculum &amp; Life</a>
+        <a href="admissions.html" class="nav-link">Admissions &amp; Parents</a>
+        <a href="news.html" class="nav-link active">News &amp; Calendar</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+      </nav>
+      <div class="mt-auto flex flex-col gap-2 pt-4">
+        <a href="admissions.html#fees" class="btn btn-gold" style="width: 100%;">Fee Calculator</a>
+        <a href="tel:0113946421" class="btn btn-outline" style="width: 100%;">Call Front Office</a>
+      </div>
+    </div>
+  </div>
+
+  <main id="main-content">
+    <!-- Editorial Page Hero -->
+    <section class="page-hero">
+      <div class="container page-hero-inner">
+        <span class="page-hero-tag">Campus Happenings &amp; Visual Dispatch</span>
+        <h1>News, Bulletins &amp; Master Calendar</h1>
+        <p>
+          Celebrating our learners' milestones, athletic achievements, and providing essential administrative notices for current and prospective Kempie families.
+        </p>
+      </div>
+    </section>
+
+    <!-- Subpage Navigation Anchors -->
+    <div class="subpage-anchor-bar">
+      <div class="container subpage-anchor-nav">
+        <a href="#bulletins" class="active">Administrative Bulletins</a>
+        <a href="#calendar">Master Term Calendar</a>
+        <a href="#gallery">Authentic Photojournalism</a>
+      </div>
+    </div>
+
+    <!-- 1. Important Bulletins -->
+    <section class="section-padding bg-white" id="bulletins">
+      <div class="container">
+        <div class="section-header text-center">
+          <span class="section-tag">Important Bulletins</span>
+          <h2>Current Parent Announcements</h2>
+          <p>Key administrative dates, admissions deadlines, and urgent communication links.</p>
+        </div>
+
+        <div class="grid grid-cols-3">
+          <!-- Notice 1 -->
+          <div class="card border-top-gold p-4 flex flex-col">
+            <div class="flex-between mb-2">
+              <span class="section-tag badge-gold m-0">Admissions</span>
+              <span class="text-xs text-muted font-bold">Deadline Alert</span>
+            </div>
+            <h3 class="font-editorial text-navy mb-2" style="font-size: 1.35rem;">Grade R Applications 2026/2027</h3>
+            <p class="text-muted text-xs mb-3" style="line-height: 1.65;">
+              Direct school applications for Grade R close strictly on <strong>Friday, 9 October</strong>. Collect printed application packs from reception or access requirements online.
+            </p>
+            <a href="admissions.html#checklist" class="btn btn-gold btn-sm mt-auto" style="align-self: flex-start;">Enrolment Checklist &rarr;</a>
+          </div>
+
+          <!-- Notice 2 -->
+          <div class="card border-top-blue p-4 flex flex-col">
+            <div class="flex-between mb-2">
+              <span class="section-tag badge-blue m-0">Broadcast</span>
+              <span class="text-xs text-muted font-bold">Active Channel</span>
+            </div>
+            <h3 class="font-editorial text-navy mb-2" style="font-size: 1.35rem;">D6 Communicator &amp; Emergency Alerts</h3>
+            <p class="text-muted text-xs mb-3" style="line-height: 1.65;">
+              Parents are urged to verify phone numbers on our broadcast channel for real-time sports cancellation notifications, weather bulletins, and term assessment reports.
+            </p>
+            <a href="contact.html" class="btn btn-outline btn-sm mt-auto" style="align-self: flex-start;">Verify Details &rarr;</a>
+          </div>
+
+          <!-- Notice 3 -->
+          <div class="card border-top-teal p-4 flex flex-col">
+            <div class="flex-between mb-2">
+              <span class="section-tag badge-teal m-0">Inclusion</span>
+              <span class="text-xs text-muted font-bold">Annual Protocol</span>
+            </div>
+            <h3 class="font-editorial text-navy mb-2" style="font-size: 1.35rem;">ISP &amp; Therapy Consultations</h3>
+            <p class="text-muted text-xs mb-3" style="line-height: 1.65;">
+              Parents of learners requiring examination concessions (extra time, scribes) are reminded to schedule confidential reviews with Ms. D. Opperman before term deadlines.
+            </p>
+            <a href="full-service.html#referral" class="btn btn-outline btn-sm mt-auto" style="align-self: flex-start;">Consultation Guide &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Master Term Calendar -->
+    <section class="section-padding bg-cream" id="calendar">
+      <div class="container">
+        <div class="section-header text-center">
+          <span class="section-tag">2026 Academic Year</span>
+          <h2>Master Term Calendar &amp; School Dates</h2>
+          <p>Synchronized term dates, sports fixtures, public holidays, and parent-teacher conference schedules.</p>
+        </div>
+
+        <div class="grid grid-cols-4">
+          <!-- Term 1 -->
+          <div class="card p-4 border-top-gold">
+            <div class="flex-between items-center mb-2">
+              <span class="badge-gold section-tag m-0 text-xs">Term 1</span>
+              <span class="text-xs text-muted font-bold">Jan &ndash; Mar</span>
+            </div>
+            <h4 class="font-editorial text-navy mb-2" style="font-size: 1.2rem;">Athletics &amp; Welcome</h4>
+            <ul class="text-xs text-muted flex flex-col gap-2" style="list-style: none; padding-left: 0;">
+              <li><strong>15 Jan:</strong> School Reopens (Term 1 Start)</li>
+              <li><strong>24 Jan:</strong> Inter-House Athletics Day</li>
+              <li><strong>12 Feb:</strong> Gr R &amp; 1 Parent Info Evening</li>
+              <li><strong>06 Mar:</strong> Inter-School Athletics Champs</li>
+              <li><strong>27 Mar:</strong> Term 1 Closes &amp; Reports</li>
+            </ul>
+          </div>
+
+          <!-- Term 2 -->
+          <div class="card p-4 border-top-blue">
+            <div class="flex-between items-center mb-2">
+              <span class="badge-blue section-tag m-0 text-xs">Term 2</span>
+              <span class="text-xs text-muted font-bold">Apr &ndash; Jun</span>
+            </div>
+            <h4 class="font-editorial text-navy mb-2" style="font-size: 1.2rem;">Winter Sports &amp; Exams</h4>
+            <ul class="text-xs text-muted flex flex-col gap-2" style="list-style: none; padding-left: 0;">
+              <li><strong>08 Apr:</strong> School Reopens (Term 2 Start)</li>
+              <li><strong>22 Apr:</strong> Rugby &amp; Netball Leagues</li>
+              <li><strong>15 May:</strong> Mid-Year Assessment Window</li>
+              <li><strong>12 Jun:</strong> Term 2 Closes</li>
+            </ul>
+          </div>
+
+          <!-- Term 3 -->
+          <div class="card p-4 border-top-teal">
+            <div class="flex-between items-center mb-2">
+              <span class="badge-teal section-tag m-0 text-xs">Term 3</span>
+              <span class="text-xs text-muted font-bold">Jul &ndash; Sep</span>
+            </div>
+            <h4 class="font-editorial text-navy mb-2" style="font-size: 1.2rem;">Culture &amp; Spring Sports</h4>
+            <ul class="text-xs text-muted flex flex-col gap-2" style="list-style: none; padding-left: 0;">
+              <li><strong>08 Jul:</strong> School Reopens (Term 3 Start)</li>
+              <li><strong>25 Jul:</strong> Soccer &amp; Cross Country</li>
+              <li><strong>14 Aug:</strong> Lethabo Cultural Festival</li>
+              <li><strong>04 Sep:</strong> Kempies Got Talent Showcase</li>
+              <li><strong>19 Sep:</strong> Term 3 Closes</li>
+            </ul>
+          </div>
+
+          <!-- Term 4 -->
+          <div class="card p-4 border-top-purple">
+            <div class="flex-between items-center mb-2">
+              <span class="badge-purple section-tag m-0 text-xs">Term 4</span>
+              <span class="text-xs text-muted font-bold">Oct &ndash; Dec</span>
+            </div>
+            <h4 class="font-editorial text-navy mb-2" style="font-size: 1.2rem;">Finals &amp; Valedictory</h4>
+            <ul class="text-xs text-muted flex flex-col gap-2" style="list-style: none; padding-left: 0;">
+              <li><strong>06 Oct:</strong> School Reopens (Term 4 Start)</li>
+              <li><strong>09 Oct:</strong> Grade R Applications Deadline</li>
+              <li><strong>10 Nov:</strong> Final Year-End CAPS Exams</li>
+              <li><strong>01 Dec:</strong> Grade 7 Valedictory</li>
+              <li><strong>10 Dec:</strong> Term 4 Closes &amp; Final Reports</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Photojournalism Gallery -->
+    <section class="section-padding bg-white" id="gallery">
+      <div class="container">
+        <div class="section-header text-center">
+          <span class="section-tag">Campus Life Moments</span>
+          <h2>Authentic Photojournalism Gallery</h2>
+          <p>Unfiltered captures of academic joy, athletic grit, and community fellowship at Laerskool Kempton Park.</p>
+        </div>
+
+        <div class="grid grid-cols-4">
+          <div class="card overflow-hidden">
+            <div style="height: 180px; overflow: hidden;">
+              <img src="assets/images/actual/student_event_1.jpg" alt="Learners participating in campus event" class="w-full" style="height: 100%; object-fit: cover;">
+            </div>
+            <div class="p-3">
+              <span class="text-xs text-muted">Campus Fellowship &bull; Assemblies</span>
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <div style="height: 180px; overflow: hidden;">
+              <img src="assets/images/actual/student_event_2.jpg" alt="Learner celebration" class="w-full" style="height: 100%; object-fit: cover;">
+            </div>
+            <div class="p-3">
+              <span class="text-xs text-muted">Academic Merit Recognition</span>
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <div style="height: 180px; overflow: hidden;">
+              <img src="assets/images/actual/student_event_3.jpg" alt="Sports field action" class="w-full" style="height: 100%; object-fit: cover;">
+            </div>
+            <div class="p-3">
+              <span class="text-xs text-muted">Inter-House Athletics &amp; Track</span>
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <div style="height: 180px; overflow: hidden;">
+              <img src="assets/images/actual/student_event_4.jpg" alt="Cultural performance" class="w-full" style="height: 100%; object-fit: cover;">
+            </div>
+            <div class="p-3">
+              <span class="text-xs text-muted">Lethabo Cultural Heritage Day</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Global Footer -->
+  <footer class="main-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <div class="flex" style="align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+            <div class="brand-crest-frame" style="width: 48px; height: 48px; background: transparent; box-shadow: none;">
+              <img src="assets/images/logo_official.png" alt="Crest" class="brand-crest-img">
+            </div>
+            <div>
+              <span style="font-family: var(--font-editorial); color: #FFFFFF; font-size: 1.25rem; font-weight: 700; display: block;">Laerskool Kempton Park</span>
+              <span style="font-size: 0.7rem; color: var(--color-accent-gold); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Full Service Primary School</span>
+            </div>
+          </div>
+          <p style="font-size: var(--text-sm); line-height: 1.6; color: #CBD5E1;">
+            A premier English-medium public school dedicated to academic CAPS excellence, multi-disciplinary clinical therapies, athletic discipline, and safe-haven community care.
+          </p>
+          <div class="language-clarifier-seal mt-3">100% English Medium Primary</div>
+        </div>
+
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul class="footer-links">
+            <li><a href="about.html">120-Year Heritage &amp; Ethos</a></li>
+            <li><a href="about.html#leadership">Leadership &amp; SMT Directory</a></li>
+            <li><a href="full-service.html">Full-Service Therapy Wing</a></li>
+            <li><a href="school-life.html">Curriculum Across 3 Phases</a></li>
+            <li><a href="school-life.html#sports">Seasonal Sports Schedule</a></li>
+            <li><a href="about.html#community">Aquaponics &amp; Feeding Scheme</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Admissions &amp; Parents</h4>
+          <ul class="footer-links">
+            <li><a href="admissions.html">GDE Enrolment Roadmap</a></li>
+            <li><a href="admissions.html#checklist">Interactive Document Checklist</a></li>
+            <li><a href="admissions.html#fees">School Fees &amp; Debit Schedules</a></li>
+            <li><a href="admissions.html#subsidies">Statutory Fee Exemption Form</a></li>
+            <li><a href="admissions.html#stationery">Stationery Packs (Gr R–7)</a></li>
+            <li><a href="admissions.html#downloads">Parent Downloads Hub</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Campus Contact</h4>
+          <p style="font-size: var(--text-sm); margin-bottom: 0.5rem; color: #CBD5E1;">
+            Kittyhawk Street, Rhodesfield<br>
+            Kempton Park, Gauteng, 1619
+          </p>
+          <p style="font-size: var(--text-sm); margin-bottom: 0.5rem; color: #CBD5E1;">
+            <strong>Front Desk &amp; Admissions (ext 105):</strong> Ms. P. Moyaha<br>
+            <strong>GDE Subsidies:</strong> Ms. N. Zikhali &amp; Ms. H. Ash<br>
+            <strong>Finance (ext 106):</strong> Ms. Y. Smith
+          </p>
+          <p style="font-size: var(--text-xs); color: var(--color-accent-gold);">
+            <strong>Office Hours:</strong> Mon &ndash; Fri: 07:15 &ndash; 15:00
+          </p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>
+          &copy; 2026 Laerskool Kempton Park Full Service School. All rights reserved. &bull; GDE Registration &bull; EMIS No: 700151124
+        </div>
+        <div class="flex" style="gap: 1.5rem; flex-wrap: wrap;">
+          <a href="admissions.html#downloads" style="color: #CBD5E1;">PAIA Manual</a>
+          <a href="admissions.html#downloads" style="color: #CBD5E1;">Code of Conduct</a>
+          <a href="full-service.html" style="color: #CBD5E1;">SEND Report</a>
+          <a href="contact.html" style="color: #CBD5E1;">Child Protection Lead</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/accessibility.js"></script>
+  <script src="assets/js/data-loader.js"></script>
+</body>
+</html>
