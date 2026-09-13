@@ -1,0 +1,16 @@
+# Firebase cache & logs
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary and editor files
+*.tmp
+*.bak
+.vscode/
+.idea/
