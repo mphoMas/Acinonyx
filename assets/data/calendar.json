@@ -1,0 +1,47 @@
+{
+  "terms": [
+    {
+      "term": "Term 1 (Jan – Mar)",
+      "theme": "Athletics & Fresh Beginnings",
+      "events": [
+        { "date": "15 Jan", "title": "School Reopens (Term 1 Start)", "tag": "Academic" },
+        { "date": "24 Jan", "title": "Inter-House Athletics Day", "tag": "Sports" },
+        { "date": "12 Feb", "title": "Grade R & 1 Parent Information Evening", "tag": "Parents" },
+        { "date": "06 Mar", "title": "Inter-School Athletics Championships", "tag": "Sports" },
+        { "date": "27 Mar", "title": "Term 1 Closes & Report Issuance", "tag": "Academic" }
+      ]
+    },
+    {
+      "term": "Term 2 (Apr – Jun)",
+      "theme": "Winter Sports & Academic Focus",
+      "events": [
+        { "date": "08 Apr", "title": "School Reopens (Term 2 Start)", "tag": "Academic" },
+        { "date": "22 Apr", "title": "Rugby & Netball League Commences", "tag": "Sports" },
+        { "date": "15 May", "title": "Mid-Year Assessment Window Opens", "tag": "Academic" },
+        { "date": "12 Jun", "title": "Term 2 Closes", "tag": "Academic" }
+      ]
+    },
+    {
+      "term": "Term 3 (Jul – Sep)",
+      "theme": "Culture, Heritage & Spring Sports",
+      "events": [
+        { "date": "08 Jul", "title": "School Reopens (Term 3 Start)", "tag": "Academic" },
+        { "date": "25 Jul", "title": "Soccer & Cross Country League", "tag": "Sports" },
+        { "date": "14 Aug", "title": "Lethabo Cultural Heritage Festival", "tag": "Culture" },
+        { "date": "04 Sep", "title": "Kempies Got Talent Showcase", "tag": "Culture" },
+        { "date": "19 Sep", "title": "Term 3 Closes", "tag": "Academic" }
+      ]
+    },
+    {
+      "term": "Term 4 (Oct – Dec)",
+      "theme": "Final Examinations & Valedictory",
+      "events": [
+        { "date": "06 Oct", "title": "School Reopens (Term 4 Start)", "tag": "Academic" },
+        { "date": "09 Oct", "title": "Grade R 2027 Applications Closing Date", "tag": "Admissions" },
+        { "date": "10 Nov", "title": "Final Year-End CAPS Examinations", "tag": "Academic" },
+        { "date": "01 Dec", "title": "Grade 7 Valedictory & Prize Giving", "tag": "Celebration" },
+        { "date": "10 Dec", "title": "Term 4 Closes & Final Reports", "tag": "Academic" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "smt": [
+    {
+      "role": "Principal",
+      "name": "Mrs. P. Pillay",
+      "subtitle": "Executive Institutional Leadership",
+      "email": "admin@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 101",
+      "bio": "Steering academic distinction, inclusive pastoral care, and whole-child development across our accredited Full-Service primary school."
+    },
+    {
+      "role": "Deputy Principal",
+      "name": "Mrs. Y. Raspal",
+      "subtitle": "Academic Governance & Operations",
+      "email": "admin@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 102"
+    },
+    {
+      "role": "Deputy Principal",
+      "name": "Ms. A. Weideman",
+      "subtitle": "Student Affairs & Pastoral Wellbeing",
+      "email": "a.weideman@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 103"
+    }
+  ],
+  "phaseHeads": [
+    {
+      "phase": "Foundation Phase (Gr R – 3)",
+      "name": "Ms. T. Van Heerden",
+      "email": "foundation@laerskoolkempton.co.za"
+    },
+    {
+      "phase": "Intermediate Phase (Gr 4 – 6)",
+      "name": "Ms. K. Delport",
+      "email": "intermediate@laerskoolkempton.co.za"
+    },
+    {
+      "phase": "Senior Phase (Gr 7)",
+      "name": "Ms. J. O'Kelly",
+      "email": "senior@laerskoolkempton.co.za"
+    },
+    {
+      "phase": "Full Service & Guidance",
+      "name": "Ms. D. Opperman",
+      "email": "fullservice@laerskoolkempton.co.za"
+    }
+  ],
+  "adminTeam": [
+    {
+      "role": "Front Desk & Admissions Lead",
+      "name": "Ms. P. Moyaha",
+      "email": "admin@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 105"
+    },
+    {
+      "role": "Admissions & GDE Subsidies",
+      "name": "Ms. N. Zikhali",
+      "email": "subsidies@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 107"
+    },
+    {
+      "role": "Finance & Fee Accounts",
+      "name": "Ms. Y. Smith",
+      "email": "finance@laerskoolkempton.co.za",
+      "phone": "011 394 6421 ext. 106"
+    },
+    {
+      "role": "Reception",
+      "name": "Ms. H. Ash",
+      "email": "admin@laerskoolkempton.co.za",
+      "phone": "011 394 6421"
+    }
+  ],
+  "specialisedStaff": [
+    {
+      "role": "Occupational Therapist",
+      "name": "Ms. A. Louw"
+    },
+    {
+      "role": "Learner Support Educator (LSE)",
+      "name": "Ms. A. Rabbolini"
+    },
+    {
+      "role": "Learner Support Educator (LSE)",
+      "name": "Ms. T. Pillay"
+    },
+    {
+      "role": "Speech Therapist",
+      "name": "Ms. E. Krause"
+    },
+    {
+      "role": "School Nurse",
+      "name": "Sr. B. Howe"
+    },
+    {
+      "role": "Kip McGrath Remedial",
+      "name": "Mr. L. Hayward"
+    }
+  ],
+  "gradeLeaders": [
+    {
+      "grade": "Grade R",
+      "name": "Ms. I. Steenberg"
+    },
+    {
+      "grade": "Grade 1",
+      "name": "Ms. A. Du Toit"
+    },
+    {
+      "grade": "Grade 2",
+      "name": "Ms. L. Van Der Sandt & Ms. N. Nortje"
+    },
+    {
+      "grade": "Grade 3",
+      "name": "Ms. B. Delport"
+    },
+    {
+      "grade": "Grade 4",
+      "name": "Ms. L. Julyan"
+    },
+    {
+      "grade": "Grade 5",
+      "name": "Ms. M. Peens"
+    },
+    {
+      "grade": "Grade 6",
+      "name": "Ms. R. Holtzhausen"
+    },
+    {
+      "grade": "Grade 7",
+      "name": "Ms. E. Venter"
+    }
+  ],
+  "generalAssistants": [
+    "Mr. A. Mvimbi",
+    "Mr. M. Majola",
+    "Ms. N. Sopangisa",
+    "Mr. P. Mathoa (General Assistant / Aquaponics)",
+    "Mr. R. Njomo",
+    "Mrs. P. Mokoena",
+    "Mrs. K. Maona"
+  ]
+}

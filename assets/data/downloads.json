@@ -1,0 +1,30 @@
+{
+  "categories": [
+    {
+      "name": "Stationery & Textbooks",
+      "items": [
+        { "title": "Grade R Stationery & Requirement Pack", "fileSize": "320 KB", "type": "PDF", "desc": "Sensory, play, and writing supplies for early childhood learning." },
+        { "title": "Foundation Phase (Grade 1 – 3) Stationery List", "fileSize": "410 KB", "type": "PDF", "desc": "Exercise books, coloring media, and reading workbooks." },
+        { "title": "Intermediate Phase (Grade 4 – 6) Stationery List", "fileSize": "440 KB", "type": "PDF", "desc": "Subject workbooks, scientific calculators, and geometry sets." },
+        { "title": "Senior Phase (Grade 7) Stationery List", "fileSize": "460 KB", "type": "PDF", "desc": "High school transition materials, subject files, and project equipment." }
+      ]
+    },
+    {
+      "name": "Policies & Governance",
+      "items": [
+        { "title": "School Prospectus & Information Booklet", "fileSize": "1.2 MB", "type": "PDF", "desc": "Full guide to school ethos, curriculum, and extra-curricular offerings." },
+        { "title": "Code of Conduct & Disciplinary Policy", "fileSize": "680 KB", "type": "PDF", "desc": "Our commitment to mutual respect, discipline, and safe haven rules." },
+        { "title": "Uniform & Learner Appearance Guide", "fileSize": "850 KB", "type": "PDF", "desc": "Detailed visual guide for summer, winter, and sports team kits." },
+        { "title": "Full-Service & Inclusion Concession Policy", "fileSize": "520 KB", "type": "PDF", "desc": "Procedures for ISP assessment, exam concessions, and therapy referrals." }
+      ]
+    },
+    {
+      "name": "Finance & Admissions",
+      "items": [
+        { "title": "Annual School Fee Schedule 2026/2027", "fileSize": "390 KB", "type": "PDF", "desc": "Transparent fee schedule, debit order discounts, and payment terms." },
+        { "title": "GDE Fee Exemption & Subsidy Application Form", "fileSize": "510 KB", "type": "PDF", "desc": "Confidential subsidy application managed via Ms. N. Zikhali." },
+        { "title": "Grade R Application Checklist & Intake Form", "fileSize": "480 KB", "type": "PDF", "desc": "Step-by-step checklist of certified documents for new enrolments." }
+      ]
+    }
+  ]
+}
