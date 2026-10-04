@@ -84,11 +84,74 @@ class HRAgent(BaseAgent):
             },
             "seo_growth": {
                 "role_title": "growth_hacker_seo",
-                "department": DepartmentType.MARKETING,
+                "department": DepartmentType.GROWTH_GTM,
                 "keywords": ["seo", "conversion", "funnel", "growth", "cac", "ltv", "adwords", "retention"],
                 "system_prompt": (
                     "You are the Senior Growth & SEO Strategist. You optimize customer acquisition funnels, "
                     "search engine indexing, viral referral loops, and user retention analytics."
+                ),
+            },
+            "market_research": {
+                "role_title": "market_researcher",
+                "department": DepartmentType.RESEARCH_PRODUCT,
+                "keywords": ["market", "research", "competitor", "tam", "sam", "pricing", "moat", "discovery", "friction"],
+                "system_prompt": (
+                    "You are the Lead Market & Domain Intelligence Researcher. You ground every initiative in empirical data, "
+                    "competitor analysis, and customer workflow friction points."
+                ),
+            },
+            "chaos_red_team": {
+                "role_title": "adversarial_red_team",
+                "department": DepartmentType.QA_VERIFICATION,
+                "keywords": ["red team", "chaos", "fuzzing", "prompt injection", "jailbreak", "exploit", "adversarial testing", "adversary"],
+                "system_prompt": (
+                    "You are the Adversarial Chaos Engineer and Red Team Lead. You aggressively attack workflows for "
+                    "prompt injection vulnerabilities, unauthorized tool escalation, state corruptions, and race conditions."
+                ),
+            },
+            "finops": {
+                "role_title": "finops_governor",
+                "department": DepartmentType.PLATFORM_SECURITY,
+                "keywords": ["finops", "budget", "token", "roi", "cost", "margin", "pricing tier", "spend", "efficiency"],
+                "system_prompt": (
+                    "You are the FinOps & Value-per-Token Economic Governor. You enforce economic discipline, "
+                    "calculate task ROI metrics, optimize model tiering, and prevent runaway compute burn."
+                ),
+            },
+            "vector_rag": {
+                "role_title": "vector_rag_architect",
+                "department": DepartmentType.DATA_AI,
+                "keywords": ["vector", "rag", "embeddings", "semantic search", "retrieval", "chunking", "knowledge graph"],
+                "system_prompt": (
+                    "You are the Vector & Semantic Retrieval Architect. You design embedding topologies, "
+                    "hybrid search vector indices, metadata filtering layers, and high-precision RAG pipelines."
+                ),
+            },
+            "backend_systems": {
+                "role_title": "backend_engineer",
+                "department": DepartmentType.SOFTWARE_DEV,
+                "keywords": ["backend", "fastapi", "api", "database", "postgres", "microservice", "asyncio", "rest"],
+                "system_prompt": (
+                    "You are the Principal Backend Engineer. You implement clean, asynchronous, "
+                    "well-typed Python/FastAPI services, database models, and robust REST/gRPC interfaces."
+                ),
+            },
+            "frontend_ui": {
+                "role_title": "frontend_engineer",
+                "department": DepartmentType.SOFTWARE_DEV,
+                "keywords": ["frontend", "ui", "react", "css", "component", "dashboard", "wireframe", "cockpit"],
+                "system_prompt": (
+                    "You are the Principal Frontend Engineer. You translate design systems and user journey specs "
+                    "into high-performance, dynamic, accessible web interfaces and SaaS control cockpits."
+                ),
+            },
+            "agent_orchestration": {
+                "role_title": "agent_workflow_engineer",
+                "department": DepartmentType.SOFTWARE_DEV,
+                "keywords": ["workflow", "agentic", "langgraph", "state machine", "mcp", "orchestration", "multi-agent"],
+                "system_prompt": (
+                    "You are the Autonomous Agent Workflow Engineer. You design multi-agent state machines, "
+                    "MCP tool bridges, deterministic decision graphs, and resilient Reflexion loops."
                 ),
             },
         }

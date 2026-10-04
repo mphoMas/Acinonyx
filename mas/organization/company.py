@@ -10,11 +10,26 @@ from mas.core.event_bus import EventBus
 from mas.core.state import StateMachine
 from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
-from mas.organization.department import Department, DepartmentType
+from mas.organization.department import Department, DepartmentType, Guild, GuildType
 from mas.organization.hr import HRAgent
-from mas.organization.roles import ClientManagerAgent, DesignerAgent, MarketingAgent, ProductManagerAgent
+from mas.organization.roles import (
+    ClientManagerAgent,
+    DesignerAgent,
+    MarketingAgent,
+    ProductManagerAgent,
+    MarketResearcherAgent,
+    DataEngineerAgent,
+    VectorRAGArchitectAgent,
+    BackendEngineerAgent,
+    FrontendEngineerAgent,
+    AgentWorkflowEngineerAgent,
+    AdversarialRedTeamAgent,
+    FinOpsGovernorAgent,
+    TechnicalWriterAgent,
+    DevAdvocateAgent,
+)
 from mas.organization.executive import CIOAgent
-from mas.squad.squad import EngineerAgent, QAAgent
+from mas.squad.squad import ArchitectAgent, EngineerAgent, QAAgent
 from mas.tools.executor import register_default_tools
 from mas.tools.filesystem import register_filesystem_tools
 from mas.tools.git_tool import register_git_tools
@@ -183,3 +198,71 @@ class ConsultingEnterprise:
         norm = os.path.abspath(path)
         allowed = self.state_machine.get("allowed_projects", [])
         return any(norm.startswith(os.path.abspath(proj)) for proj in allowed)
+
+
+class AcinonyxEnterprise(ConsultingEnterprise):
+    """
+    Acinonyx Labs 10/10 Masterwork Enterprise Runtime.
+    Houses the 7 Capability Guilds and provisions the full suite of specialized agents:
+    - Executive & Strategy (CIO, HR, Chief Architect)
+    - Research & Product (Market Research Lead, Product Lead, Design Lead)
+    - Data & AI (Data Engineer, Vector/RAG Architect)
+    - Software Engineering (Backend, Frontend, Agent Workflow, Senior Engineer)
+    - Independent QA & Verification (QA Critic, Adversarial Chaos Red Team)
+    - Platform & Security (FinOps Governor, Security SRE)
+    - Growth & GTM (Marketing Lead, Technical Writer, Developer Advocate)
+    """
+
+    def __init__(
+        self,
+        name: str = "Acinonyx Labs (Autonomous SaaS Studio)",
+        enable_live_dispatch: Optional[bool] = None,
+        allowed_projects: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            enable_live_dispatch=enable_live_dispatch,
+            allowed_projects=allowed_projects,
+        )
+
+        # 1. Initialize v2.0 Specialized Agents
+        self.chief_architect = ArchitectAgent(mcp_client=self.mcp_client, name="chief_architect")
+        self.market_researcher = MarketResearcherAgent(mcp_client=self.mcp_client)
+        self.data_engineer = DataEngineerAgent(mcp_client=self.mcp_client)
+        self.vector_rag_architect = VectorRAGArchitectAgent(mcp_client=self.mcp_client)
+        self.backend_engineer = BackendEngineerAgent(mcp_client=self.mcp_client)
+        self.frontend_engineer = FrontendEngineerAgent(mcp_client=self.mcp_client)
+        self.agent_workflow_engineer = AgentWorkflowEngineerAgent(mcp_client=self.mcp_client)
+        self.adversarial_red_team = AdversarialRedTeamAgent(mcp_client=self.mcp_client)
+        self.finops_governor = FinOpsGovernorAgent(mcp_client=self.mcp_client)
+        self.technical_writer = TechnicalWriterAgent(mcp_client=self.mcp_client)
+        self.dev_advocate = DevAdvocateAgent(mcp_client=self.mcp_client)
+
+        # 2. Onboard Specialized Agents into their Capability Guilds
+        self._onboard_guild_staff()
+
+    def _onboard_guild_staff(self) -> None:
+        guild_placements = [
+            (self.chief_architect, DepartmentType.EXECUTIVE),
+            (self.market_researcher, DepartmentType.RESEARCH_PRODUCT),
+            (self.data_engineer, DepartmentType.DATA_AI),
+            (self.vector_rag_architect, DepartmentType.DATA_AI),
+            (self.backend_engineer, DepartmentType.SOFTWARE_DEV),
+            (self.frontend_engineer, DepartmentType.SOFTWARE_DEV),
+            (self.agent_workflow_engineer, DepartmentType.SOFTWARE_DEV),
+            (self.adversarial_red_team, DepartmentType.QA_VERIFICATION),
+            (self.finops_governor, DepartmentType.PLATFORM_SECURITY),
+            (self.technical_writer, DepartmentType.GROWTH_GTM),
+            (self.dev_advocate, DepartmentType.GROWTH_GTM),
+        ]
+
+        for agent, guild_type in guild_placements:
+            self.hire_agent(agent, guild_type)
+
+    def get_guild(self, guild_type: DepartmentType) -> Department:
+        """Retrieve a specific Capability Guild."""
+        return self.departments[guild_type]
+
+    def list_guild_agents(self, guild_type: DepartmentType) -> List[str]:
+        """List all active agent names within a specific Capability Guild."""
+        return self.departments[guild_type].list_agents()

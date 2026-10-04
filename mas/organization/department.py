@@ -10,6 +10,7 @@ from mas.core.agent import BaseAgent
 
 
 class DepartmentType(str, Enum):
+    # Core Legacy & Compatibility Departments
     EXECUTIVE = "executive"
     CLIENT_MANAGEMENT = "client_management"
     PRODUCT = "product"
@@ -17,6 +18,18 @@ class DepartmentType(str, Enum):
     ENGINEERING = "engineering"
     MARKETING = "marketing"
     HUMAN_RESOURCES = "human_resources"
+
+    # Acinonyx Labs v2.0 Capability Guilds
+    RESEARCH_PRODUCT = "research_product"
+    DATA_AI = "data_ai"
+    SOFTWARE_DEV = "software_dev"
+    QA_VERIFICATION = "qa_verification"
+    PLATFORM_SECURITY = "platform_security"
+    GROWTH_GTM = "growth_gtm"
+
+
+# Semantic Aliases for the 10/10 Architecture
+GuildType = DepartmentType
 
 
 class Department:
@@ -47,3 +60,7 @@ class Department:
     @property
     def headcount(self) -> int:
         return len(self.members)
+
+
+# Semantic Alias for 10/10 Liquid Architecture
+Guild = Department
