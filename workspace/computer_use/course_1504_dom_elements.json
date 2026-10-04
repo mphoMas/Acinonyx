@@ -1,0 +1,17 @@
+[
+  {
+    "tag": "LI",
+    "text": "navigate_next",
+    "className": "breadcrumb-item ql-label-medium"
+  },
+  {
+    "tag": "LI",
+    "text": "Professional Agentic Architect Certification\nnavigate_next",
+    "className": "breadcrumb-item ql-label-medium"
+  },
+  {
+    "tag": "LI",
+    "text": "Understand Google Cloud Agents",
+    "className": "breadcrumb-item ql-label-medium"
+  }
+]

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mas-core"
+version = "0.2.0"
+description = "ACINONYX Multi-Agent Operating Runtime"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Acinonyx" }]
+dependencies = []
+
+[project.optional-dependencies]
+http = []
+dev = []
+
+[project.scripts]
+mas = "mas.cli:main"
+mas-doctor = "mas.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mas*"]
+
+[tool.setuptools.package-data]
+mas = ["py.typed"]

@@ -1,0 +1,14 @@
+# Environment and secrets
+.env
+.env.*
+*.token
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Runtime outputs & audit logs
+workspace/audit/
+workspace/scratch/

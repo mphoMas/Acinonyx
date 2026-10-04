@@ -1,0 +1,34 @@
+navigate_next
+Professional Agentic Architect Certification
+navigate_next
+Understand Google Cloud Agents
+
+Apply your skills in Google Cloud console
+
+Course
+Understand Google Cloud Agents
+8 hours
+Introductory
+Updated 3 months ago
+
+This course provides a comprehensive overview of Google Cloud's agent platforms, Gemini Enterprise app, Conversational Agents, Customer Experience (CX) Studio, Gemini Enterprise Agent Platform, and Agent Development Kit. Learners will understand the unique capabilities of each offering, distinguish between the optimal solution for specific use cases, and gain foundational knowledge in creating search and chat applications. Explore other content in the Gemini Enterprise Agent Ready (GEAR) program.
+
+Earn a badge today!
+
+Home
+Catalog
+Paths
+Subscriptions
+Activities
+Achievements
+Settings
+Sign in or Join
+Youtube
+Help Center
+Terms
+Privacy
+The Power of Challenge Labs
+
+Now you can fast track your way to a skill badge without having to take the entire course. If you're confident with your skills, jump straight to the challenge lab.
+
+Your progress will carry over, but the completion percentage might change.
