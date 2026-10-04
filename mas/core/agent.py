@@ -5,15 +5,99 @@ Architect: Acinonyx
 
 from __future__ import annotations
 import asyncio
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import json
+import re
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 from mas.core.event_bus import EventBus
 from mas.core.message import ContentType, Message, Role, TokenUsage, MessageMetadata
 from mas.mcp.transport import MCPClient
 from mas.observability import METRICS, LOGGER
+from mas.providers.base import ToolCall
 
 if TYPE_CHECKING:
     from mas.memory.episodic import EpisodicMemory, Reflection
     from mas.memory.working import WorkingMemory
+
+
+def _extract_text_tool_calls(content: str, available_tool_names: Set[str]) -> List[ToolCall]:
+    """
+    Extract structured tool calls from model text output when native function calling is not emitted.
+    Supports markdown JSON code blocks, raw JSON with 'tool'/'name'/'action',
+    and ReAct 'Action: ... Action Input: ...' patterns.
+    """
+    tool_calls: List[ToolCall] = []
+    if not content or not available_tool_names:
+        return tool_calls
+
+    # Pattern 1: Markdown JSON block ```json { ... } ``` or raw JSON
+    json_blocks = re.findall(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content)
+    candidates = list(json_blocks) if json_blocks else []
+
+    # Also find bracketed JSON outside fences if none found
+    if not candidates:
+        first_brace = content.find("{")
+        last_brace = content.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            candidates.append(content[first_brace : last_brace + 1])
+
+    for cand in candidates:
+        try:
+            parsed = json.loads(cand.strip())
+            if isinstance(parsed, dict):
+                t_name = parsed.get("tool") or parsed.get("name") or parsed.get("action")
+                t_args = parsed.get("arguments") or parsed.get("args") or parsed.get("action_input") or {}
+                if not t_name:
+                    if "code" in parsed and "run_python" in available_tool_names:
+                        t_name = "run_python"
+                        t_args = {"code": parsed["code"]}
+                    elif "query" in parsed and "web_search" in available_tool_names:
+                        t_name = "web_search"
+                        t_args = {"query": parsed["query"]}
+
+                if t_name and str(t_name).strip() in available_tool_names:
+                    if isinstance(t_args, str):
+                        try:
+                            t_args = json.loads(t_args)
+                        except Exception:
+                            t_args = {"input": t_args}
+                    tool_calls.append(
+                        ToolCall(
+                            id=f"text_call_{t_name}",
+                            name=str(t_name).strip(),
+                            arguments=t_args if isinstance(t_args, dict) else {"input": t_args},
+                        )
+                    )
+        except Exception:
+            continue
+
+    if tool_calls:
+        return tool_calls
+
+    # Pattern 2: ReAct style Action: <tool_name>\nAction Input: <input>
+    action_match = re.search(r"Action:\s*([a-zA-Z0-9_-]+)", content, re.IGNORECASE)
+    input_match = re.search(r"Action Input:\s*([\s\S]+?)(?=\n\s*(?:Observation|Action|Thought|$)|\Z)", content, re.IGNORECASE)
+    if action_match:
+        act_name = action_match.group(1).strip()
+        if act_name in available_tool_names:
+            act_input_raw = input_match.group(1).strip() if input_match else "{}"
+            try:
+                act_args = json.loads(act_input_raw)
+            except Exception:
+                if act_name == "run_python":
+                    act_args = {"code": act_input_raw}
+                elif act_name == "web_search":
+                    act_args = {"query": act_input_raw}
+                else:
+                    act_args = {"input": act_input_raw}
+            tool_calls.append(
+                ToolCall(
+                    id=f"react_call_{act_name}",
+                    name=act_name,
+                    arguments=act_args if isinstance(act_args, dict) else {"input": act_args},
+                )
+            )
+
+    return tool_calls
 
 
 class BaseAgent:
@@ -109,10 +193,39 @@ class BaseAgent:
         Reasoning Controller.
         If an LLMProvider is attached, executes inference and handles any MCP tool calls
         in a ReAct reasoning loop.
+        Supports both native provider tool calling and structured text ReAct patterns.
         Otherwise, acts as a deterministic echo/pass-through (demo mode).
         """
         if self.llm_provider:
             available_tools = await self.mcp_client.list_tools() if self.mcp_client else None
+            tool_names: Set[str] = {t["name"] for t in available_tools} if available_tools else set()
+
+            # Ensure prompt informs model of available tools and JSON invocation contract if tools exist
+            if available_tools and context_messages:
+                first_msg = context_messages[0]
+                if first_msg.role == Role.SYSTEM and "Available tools:" not in first_msg.content:
+                    catalog_lines = []
+                    for t in available_tools:
+                        props = t.get("inputSchema", {}).get("properties", {})
+                        arg_str = ", ".join(f"{k}: {v.get('type', 'any')}" for k, v in props.items())
+                        catalog_lines.append(f"- {t['name']}({arg_str}): {t.get('description', '')}")
+                    tool_guidance = (
+                        "\n\nAvailable tools:\n" + "\n".join(catalog_lines) +
+                        "\nTo execute a tool, respond with a JSON block:\n"
+                        "```json\n"
+                        '{"tool": "tool_name", "arguments": {"param": "value"}}\n'
+                        "```\n"
+                        "When you receive the tool observation, explain the results or output your final answer directly."
+                    )
+                    augmented_first = Message(
+                        sender=first_msg.sender,
+                        recipient=first_msg.recipient,
+                        role=first_msg.role,
+                        content=first_msg.content + tool_guidance,
+                        content_type=first_msg.content_type,
+                        metadata=first_msg.metadata,
+                    )
+                    context_messages = [augmented_first] + list(context_messages[1:])
 
             # ReAct Loop (up to 5 iterative tool turns)
             for _ in range(5):
@@ -121,7 +234,12 @@ class BaseAgent:
                     self.total_tokens_consumed += resp.token_usage.total_tokens
                     METRICS.incr("tokens.total", resp.token_usage.total_tokens)
 
-                if not resp.tool_calls:
+                # Collect tool calls (native or parsed from text)
+                tool_calls = list(resp.tool_calls) if resp.tool_calls else []
+                if not tool_calls and tool_names and resp.content:
+                    tool_calls = _extract_text_tool_calls(resp.content, tool_names)
+
+                if not tool_calls:
                     content = resp.content
                     if self.require_grounding and self._evidence_ids:
                         from mas.validation import require_grounding
@@ -132,7 +250,18 @@ class BaseAgent:
                     return content
 
                 if self.mcp_client:
-                    for tc in resp.tool_calls:
+                    intermediate_thought = resp.content or f"Calling tool: {', '.join(tc.name for tc in tool_calls)}"
+                    self.working_memory.add(
+                        Message(
+                            sender=self.name,
+                            recipient="supervisor",
+                            role=Role.ASSISTANT,
+                            content=intermediate_thought,
+                            content_type=ContentType.TEXT,
+                        )
+                    )
+
+                    for tc in tool_calls:
                         METRICS.incr("tools.calls")
                         tool_result = await self.mcp_client.call_tool(
                             tc.name,
@@ -145,7 +274,7 @@ class BaseAgent:
                             sender="mcp_tool",
                             recipient=self.name,
                             role=Role.TOOL,
-                            content=f"Tool [{tc.name}] id={evidence_id} Result:\n{tool_result}",
+                            content=f"Observation from tool [{tc.name}] id={evidence_id}:\n{tool_result}",
                             content_type=ContentType.TOOL_RESULT,
                             metadata=MessageMetadata(extra={"evidence_id": evidence_id}),
                         )

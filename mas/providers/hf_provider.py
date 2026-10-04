@@ -47,15 +47,54 @@ class HuggingFaceProvider(LLMProvider):
         except Exception:
             self._client = None
 
-    def _sync_inference_client(self, api_messages: List[Dict[str, str]], temperature: float, max_tokens: int) -> ProviderResponse:
-        completion = self._client.chat.completions.create(
-            model=self.model_name,
-            messages=api_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    def _sync_inference_client(
+        self,
+        api_messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> ProviderResponse:
+        kwargs: Dict[str, Any] = {
+            "model": self.model_name,
+            "messages": api_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        try:
+            completion = self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if tools and "tools" in str(exc).lower():
+                kwargs.pop("tools", None)
+                completion = self._client.chat.completions.create(**kwargs)
+            else:
+                raise exc
+
         choice = completion.choices[0]
         content_text = choice.message.content or ""
+        tool_calls: List[ToolCall] = []
+
+        if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                fn_name = getattr(tc.function, "name", "")
+                fn_args_raw = getattr(tc.function, "arguments", "{}")
+                if isinstance(fn_args_raw, str):
+                    try:
+                        fn_args = json.loads(fn_args_raw)
+                    except Exception:
+                        fn_args = {"input": fn_args_raw}
+                else:
+                    fn_args = fn_args_raw or {}
+                tool_calls.append(
+                    ToolCall(
+                        id=getattr(tc, "id", f"call_{fn_name}"),
+                        name=fn_name,
+                        arguments=fn_args,
+                    )
+                )
+
         token_usage = None
         if hasattr(completion, "usage") and completion.usage:
             token_usage = TokenUsage(
@@ -65,8 +104,9 @@ class HuggingFaceProvider(LLMProvider):
             )
         return ProviderResponse(
             content=content_text,
+            tool_calls=tool_calls,
             token_usage=token_usage,
-            finish_reason=choice.finish_reason or "stop",
+            finish_reason=choice.finish_reason or ("tool_calls" if tool_calls else "stop"),
         )
 
     def _sync_http_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -108,10 +148,24 @@ class HuggingFaceProvider(LLMProvider):
 
         limit = max_tokens or 2048
 
+        # Map tools to OpenAI specification if provided
+        formatted_tools = None
+        if tools:
+            formatted_tools = []
+            for t in tools:
+                formatted_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": t.get("name"),
+                        "description": t.get("description", ""),
+                        "parameters": t.get("inputSchema", {}),
+                    },
+                })
+
         # Strategy 1: Use huggingface_hub.InferenceClient if available
         if self._client:
             try:
-                return await asyncio.to_thread(self._sync_inference_client, api_messages, temperature, limit)
+                return await asyncio.to_thread(self._sync_inference_client, api_messages, temperature, limit, formatted_tools)
             except Exception as exc:
                 logger.warning(f"InferenceClient error ({exc}), falling back to direct HTTP...")
 
@@ -122,6 +176,8 @@ class HuggingFaceProvider(LLMProvider):
             "temperature": temperature,
             "max_tokens": limit,
         }
+        if formatted_tools:
+            payload["tools"] = formatted_tools
 
         try:
             raw_response = await asyncio.to_thread(self._sync_http_request, payload)
@@ -148,6 +204,27 @@ class HuggingFaceProvider(LLMProvider):
 
         choice = choices[0]
         content_text = choice.get("message", {}).get("content", "")
+        tool_calls: List[ToolCall] = []
+
+        raw_tc = choice.get("message", {}).get("tool_calls", [])
+        for tc in raw_tc:
+            fn = tc.get("function", {})
+            args_str = fn.get("arguments", "{}")
+            if isinstance(args_str, str):
+                try:
+                    fn_args = json.loads(args_str)
+                except Exception:
+                    fn_args = {"input": args_str}
+            else:
+                fn_args = args_str or {}
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", f"call_{fn.get('name')}"),
+                    name=fn.get("name", ""),
+                    arguments=fn_args,
+                )
+            )
+
         usage_data = raw_response.get("usage", {})
         token_usage = None
         if usage_data:
@@ -159,6 +236,7 @@ class HuggingFaceProvider(LLMProvider):
 
         return ProviderResponse(
             content=content_text,
+            tool_calls=tool_calls,
             token_usage=token_usage,
             finish_reason=choice.get("finish_reason", "stop"),
         )
