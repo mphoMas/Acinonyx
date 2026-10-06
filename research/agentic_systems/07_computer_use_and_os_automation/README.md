@@ -20,6 +20,8 @@ graph TD
     Root --> Ch3["Chapter 3: Sandboxing, Security & GCP Architecture<br>• Prompt Injection & Exfiltration Threats<br>• gVisor Kernel Isolation, Xvfb Virtual Displays<br>• Vertex AI Reasoning Engine Managed Sandboxes"]
     
     Root --> Ch4["Chapter 4: MAS-Core Blueprint & Enterprise DataOps<br>• Native MCP Tool Specification in Python<br>• 'API-less' Enterprise Data Ingestion Pod (SAP/Power BI to BigQuery)<br>• Production Deployment Patterns"]
+    
+    Root --> Ch5["Chapter 5: Cross-Guild State-of-the-Art Analysis<br>• All 7 Guild Findings & Benchmark Metrics<br>• Token FinOps & Security Scope Jails<br>• Production Synthesis Matrix"]
 ```
 
 ---
@@ -47,6 +49,11 @@ graph TD
    * Complete, copy-paste production Python blueprint for `mas/tools/computer_use.py`.
    * Native Model Context Protocol (MCP) tool bindings over JSON-RPC 2.0.
    * High-value commercial use case: **The API-less Data Ingestion Pod** (extracting data from legacy desktop ERPs/portals into Google BigQuery).
+
+5. **[Chapter 5: Cross-Guild State-of-the-Art Analysis & Strategic Blueprint](05_cross_guild_state_of_the_art_analysis.md)**
+   * All 7 Capability Guild findings (CIO, Product, Data, Engineering, QA/Red Team, FinOps, GTM).
+   * Benchmark metrics (OSWorld 1.0 vs 2.0), token compression economics (~78% savings), and scope jails.
+   * Comprehensive evolution matrix comparing Legacy RPA, 1st Gen CUAs, and MAS-Core Enterprise CUAs.
 
 ---
 

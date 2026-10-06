@@ -1,0 +1,14 @@
+{
+  "name": "mas-core",
+  "version": "0.2.0",
+  "description": "ACINONYX Multi-Agent Operating Runtime Browser Automation",
+  "scripts": {
+    "install:browsers": "playwright install chromium",
+    "install:browsers:all": "playwright install",
+    "install:deps": "playwright install-deps"
+  },
+  "dependencies": {
+    "playwright": "1.49.1",
+    "playwright-core": "1.49.1"
+  }
+}

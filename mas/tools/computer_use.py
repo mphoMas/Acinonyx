@@ -28,6 +28,7 @@ from mas.tools.display import VirtualDisplayConfig, VirtualDisplayManager
 from mas.tools.grounding import (
     UIElementMark,
     compress_and_encode_frame,
+    compute_visual_diff,
     overlay_set_of_marks,
     scale_coordinates,
 )
@@ -78,6 +79,42 @@ class ComputerUseScopeJail:
                 raise ComputerUseSecurityError(f"Destructive system command pattern blocked by Scope Jail: '{text}'")
 
 
+def draw_hardware_cursor(image: Image.Image, x: int, y: int, is_click: bool = False) -> Image.Image:
+    """Renders a high-visibility OS mouse cursor onto the framebuffer image."""
+    from PIL import ImageDraw
+    img_copy = image.copy()
+    draw = ImageDraw.Draw(img_copy, "RGBA")
+
+    if is_click:
+        draw.ellipse([x - 18, y - 18, x + 18, y + 18], outline=(255, 68, 68, 220), width=3)
+        draw.ellipse([x - 10, y - 10, x + 10, y + 10], fill=(255, 68, 68, 140), outline=(255, 200, 200, 255), width=1)
+        draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(255, 255, 255, 255))
+
+    arrow = [
+        (x, y),
+        (x, y + 22),
+        (x + 5, y + 17),
+        (x + 10, y + 26),
+        (x + 14, y + 24),
+        (x + 9, y + 15),
+        (x + 16, y + 15)
+    ]
+    shadow = [(px + 2, py + 2) for px, py in arrow]
+    draw.polygon(shadow, fill=(0, 0, 0, 140))
+    draw.polygon(arrow, fill=(20, 20, 20, 255))
+    inner_arrow = [
+        (x + 1, y + 2),
+        (x + 1, y + 19),
+        (x + 5, y + 15),
+        (x + 9, y + 23),
+        (x + 12, y + 22),
+        (x + 8, y + 14),
+        (x + 14, y + 14)
+    ]
+    draw.polygon(inner_arrow, fill=(255, 255, 255, 255))
+    return img_copy.convert("RGB")
+
+
 class ComputerUseController:
     """
     Main controller for desktop OS automation.
@@ -94,6 +131,7 @@ class ComputerUseController:
         self.audit_log_path = audit_log_path
         self.cursor_x: int = 0
         self.cursor_y: int = 0
+        self.last_action_was_click: bool = False
         self.last_marks: Dict[int, UIElementMark] = {}
         self.jail = ComputerUseScopeJail()
         self._ensure_audit_log_dir()
@@ -140,6 +178,7 @@ class ComputerUseController:
         apply_som: bool = False,
         max_dimension: int = 1024,
         quality: int = 85,
+        draw_cursor: bool = True,
     ) -> Dict[str, Any]:
         """
         Grab the virtual framebuffer, optionally overlay Set-of-Mark tags,
@@ -174,15 +213,14 @@ class ComputerUseController:
             # Draw bottom taskbar
             draw.rectangle([0, height - 40, width, height], fill=(24, 28, 34))
             draw.rectangle([10, height - 34, 80, height - 6], fill=(57, 62, 70))
-            # Draw cursor representation
-            draw.polygon(
-                [
-                    (self.cursor_x, self.cursor_y),
-                    (self.cursor_x + 10, self.cursor_y + 10),
-                    (self.cursor_x + 3, self.cursor_y + 11),
-                    (self.cursor_x, self.cursor_y + 15),
-                ],
-                fill=(255, 255, 255),
+
+        # Always render the high-visibility cursor pointer onto the captured frame
+        if raw_image is not None and draw_cursor:
+            raw_image = draw_hardware_cursor(
+                raw_image,
+                self.cursor_x,
+                self.cursor_y,
+                is_click=self.last_action_was_click,
             )
 
         marks_dict: Optional[Dict[int, UIElementMark]] = None
@@ -227,6 +265,7 @@ class ComputerUseController:
 
         self.cursor_x = target_x
         self.cursor_y = target_y
+        self.last_action_was_click = False
 
         self._execute_xdotool(["mousemove", str(target_x), str(target_y)])
         self._log_audit("mouse_move", {"x": target_x, "y": target_y})
@@ -246,6 +285,7 @@ class ComputerUseController:
         if x is not None and y is not None:
             self.mouse_move(x, y, scaled=scaled)
 
+        self.last_action_was_click = True
         btn_map = {"left": "1", "middle": "2", "right": "3"}
         btn_code = btn_map.get(button.lower(), "1")
 
@@ -302,6 +342,82 @@ class ComputerUseController:
         self._log_audit("key_combination", {"keys": keys})
         METRICS.incr("computer_use.key_combinations")
         return {"success": True, "keys": keys}
+
+    def execute_action_chain(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Execute an atomic batch sequence of discrete actions in a single roundtrip.
+        Eliminates LLM conversational turn latency by chaining e.g. click -> type -> key.
+        """
+        results = []
+        for i, act in enumerate(actions):
+            action_name = act.get("action", "").lower()
+            res: Dict[str, Any] = {}
+            if action_name in ("move", "mouse_move"):
+                res = self.mouse_move(act.get("x", 0), act.get("y", 0), scaled=act.get("scaled", False))
+            elif action_name in ("click", "mouse_click"):
+                res = self.mouse_click(
+                    x=act.get("x"),
+                    y=act.get("y"),
+                    button=act.get("button", "left"),
+                    click_count=act.get("click_count", 1),
+                    scaled=act.get("scaled", False),
+                )
+            elif action_name in ("click_element", "click_id"):
+                res = self.click_element_by_id(int(act.get("element_id", 0)))
+            elif action_name in ("type", "type_text"):
+                res = self.type_text(act.get("text", ""), delay_ms=act.get("delay_ms", 12.0))
+            elif action_name in ("key", "key_combination"):
+                keys = act.get("keys", [])
+                if isinstance(keys, str):
+                    keys = [keys]
+                res = self.key_combination(keys)
+            elif action_name in ("drag", "mouse_drag"):
+                res = self.mouse_drag(
+                    act.get("start_x", 0), act.get("start_y", 0),
+                    act.get("end_x", 0), act.get("end_y", 0)
+                )
+            elif action_name in ("scroll", "mouse_scroll"):
+                res = self.mouse_scroll(clicks=act.get("clicks", 3), direction=act.get("direction", "down"))
+            elif action_name in ("sleep", "wait"):
+                time.sleep(float(act.get("seconds", 0.1)))
+                res = {"success": True, "slept_seconds": act.get("seconds", 0.1)}
+            else:
+                res = {"success": False, "error": f"Unknown action in chain: {action_name}"}
+
+            results.append({"step": i + 1, "action": action_name, "result": res})
+            if not res.get("success", False):
+                return {"success": False, "executed_steps": i + 1, "total_steps": len(actions), "results": results}
+
+        return {"success": True, "executed_steps": len(actions), "results": results}
+
+    def wait_for_state_change(
+        self,
+        timeout_sec: float = 3.0,
+        poll_interval_sec: float = 0.1,
+    ) -> Dict[str, Any]:
+        """
+        Wait until screen pixels change (e.g. after clicking a link or button),
+        eliminating temporal race conditions before taking subsequent actions.
+        """
+        init_frame = self.take_screenshot()
+        init_b64 = init_frame.get("base64_data", "")
+
+        deadline = time.time() + timeout_sec
+        changed = False
+
+        while time.time() < deadline:
+            time.sleep(poll_interval_sec)
+            curr_frame = self.take_screenshot()
+            curr_b64 = curr_frame.get("base64_data", "")
+            if curr_b64 != init_b64:
+                changed = True
+                break
+
+        return {
+            "success": True,
+            "state_changed": changed,
+            "timed_out": not changed,
+        }
 
     def get_status(self) -> Dict[str, Any]:
         """Return operational state of the Computer Use engine."""
@@ -457,6 +573,39 @@ def register_computer_use_tools(registry: MCPRegistry) -> None:
             "required": ["keys"],
         },
         handler=lambda **kwargs: controller.key_combination(keys=kwargs["keys"]),
+    )
+
+    registry.register_tool(
+        name="computer_action_chain",
+        description="Execute a batch of sequential actions in a single atomic roundtrip (e.g. click -> type -> key) to maximize speed and minimize conversational turns.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "List of action dictionaries with 'action' and parameters (x, y, text, element_id, keys, etc.)",
+                },
+            },
+            "required": ["actions"],
+        },
+        handler=lambda **kwargs: controller.execute_action_chain(actions=kwargs["actions"]),
+    )
+
+    registry.register_tool(
+        name="computer_wait_for_change",
+        description="Wait for virtual display pixels to change or settle, eliminating temporal race conditions before taking subsequent actions.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "timeout_sec": {"type": "number", "default": 3.0, "description": "Maximum seconds to wait"},
+                "poll_interval_sec": {"type": "number", "default": 0.1, "description": "Interval between visual checks"},
+            },
+        },
+        handler=lambda **kwargs: controller.wait_for_state_change(
+            timeout_sec=kwargs.get("timeout_sec", 3.0),
+            poll_interval_sec=kwargs.get("poll_interval_sec", 0.1),
+        ),
     )
 
     registry.register_tool(

@@ -22,6 +22,8 @@ from mas.tools.computer_use import (
 from mas.tools.display import VirtualDisplayConfig, VirtualDisplayManager
 from mas.tools.grounding import (
     compress_and_encode_frame,
+    compute_visual_diff,
+    detect_ui_elements,
     overlay_set_of_marks,
     scale_coordinates,
 )
@@ -61,6 +63,31 @@ class TestComputerUseGrounding(unittest.TestCase):
         self.assertEqual(marks[1].center_y, 75)
         self.assertEqual(marks[2].center_x, 300)
         self.assertEqual(marks[2].center_y, 250)
+
+    def test_detect_ui_elements(self):
+        img = Image.new("RGB", (640, 480), color=(20, 20, 20))
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(img)
+        # Draw high-contrast simulated button
+        draw.rectangle([100, 100, 240, 150], fill=(240, 240, 240))
+        elements = detect_ui_elements(img)
+        self.assertTrue(len(elements) > 0)
+        # Ensure returned elements have valid bounds
+        for x1, y1, x2, y2 in elements:
+            self.assertTrue(0 <= x1 < x2 <= 640)
+            self.assertTrue(0 <= y1 < y2 <= 480)
+
+    def test_compute_visual_diff(self):
+        img1 = Image.new("RGB", (200, 200), color=(0, 0, 0))
+        img2 = Image.new("RGB", (200, 200), color=(0, 0, 0))
+        # Identical images diff should be 0.0
+        diff_same = compute_visual_diff(img1, img2)
+        self.assertEqual(diff_same, 0.0)
+
+        # Different images diff should be > 0.0
+        img3 = Image.new("RGB", (200, 200), color=(255, 255, 255))
+        diff_changed = compute_visual_diff(img1, img3)
+        self.assertTrue(diff_changed > 0.9)
 
 
 class TestComputerUseScopeJail(unittest.TestCase):
@@ -160,6 +187,8 @@ class TestComputerUseControllerAndMCP(unittest.TestCase):
             "computer_type_text",
             "computer_key_combination",
             "computer_click_element_id",
+            "computer_action_chain",
+            "computer_wait_for_change",
             "computer_status",
         }
         self.assertTrue(expected_tools.issubset(tool_names), f"Missing tools: {expected_tools - tool_names}")
@@ -168,6 +197,24 @@ class TestComputerUseControllerAndMCP(unittest.TestCase):
         status_res = registry.call_tool("computer_status", {})
         self.assertIn("display", status_res)
         self.assertIn("cursor", status_res)
+
+    def test_action_chain_execution(self):
+        chain = [
+            {"action": "move", "x": 120, "y": 80},
+            {"action": "click", "button": "left", "click_count": 1},
+            {"action": "type", "text": "hello"},
+            {"action": "key", "keys": ["Return"]},
+        ]
+        res = self.controller.execute_action_chain(chain)
+        self.assertTrue(res["success"])
+        self.assertEqual(res["executed_steps"], 4)
+        self.assertEqual(len(res["results"]), 4)
+
+    def test_wait_for_state_change(self):
+        # In mock simulation, screens are deterministic unless state moves
+        wait_res = self.controller.wait_for_state_change(timeout_sec=0.2, poll_interval_sec=0.05)
+        self.assertTrue(wait_res["success"])
+        self.assertIn("state_changed", wait_res)
 
 
 class TestMultimodalMessagingAndCapabilities(unittest.TestCase):

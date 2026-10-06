@@ -20,20 +20,20 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from mas.organization.company import ConsultingEnterprise
+from mas.organization.company import AcinonyxEnterprise, ConsultingEnterprise
 from mas.organization.engagement import ConsultingEngagement, EngagementArtifacts
 from mas.tools.git_tool import git_branch_tool, git_status_tool
 
 
 # Global singleton instance for stdio session
-_ENTERPRISE: Optional[ConsultingEnterprise] = None
+_ENTERPRISE: Optional[AcinonyxEnterprise] = None
 _LATEST_ARTIFACTS: Optional[EngagementArtifacts] = None
 
 
-def get_enterprise() -> ConsultingEnterprise:
+def get_enterprise() -> AcinonyxEnterprise:
     global _ENTERPRISE
     if _ENTERPRISE is None:
-        _ENTERPRISE = ConsultingEnterprise()
+        _ENTERPRISE = AcinonyxEnterprise()
     return _ENTERPRISE
 
 
