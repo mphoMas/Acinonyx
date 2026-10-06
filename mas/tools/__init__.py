@@ -32,6 +32,23 @@ from mas.tools.delegation_tool import (
     delegate_subtask_tool,
     register_delegation_tools,
 )
+from mas.tools.patch_tool import (
+    fs_patch_file_tool,
+    register_patch_tools,
+)
+from mas.tools.knowledge_vault_tool import (
+    query_knowledge_vault_tool,
+    register_knowledge_vault_tools,
+)
+from mas.tools.hitl_tool import (
+    ask_human_clarification_tool,
+    register_hitl_tools,
+)
+from mas.tools.pii_tool import (
+    pii_anonymize_text_tool,
+    pii_deanonymize_text_tool,
+    register_pii_tools,
+)
 
 __all__ = [
     "run_python_code",
@@ -53,4 +70,13 @@ __all__ = [
     "register_storage_tools",
     "delegate_subtask_tool",
     "register_delegation_tools",
+    "fs_patch_file_tool",
+    "register_patch_tools",
+    "query_knowledge_vault_tool",
+    "register_knowledge_vault_tools",
+    "ask_human_clarification_tool",
+    "register_hitl_tools",
+    "pii_anonymize_text_tool",
+    "pii_deanonymize_text_tool",
+    "register_pii_tools",
 ]

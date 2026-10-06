@@ -40,6 +40,10 @@ from mas.tools.bigquery_tool import register_bigquery_tools
 from mas.tools.data_contract_tool import register_data_contract_tools
 from mas.tools.storage_tool import register_storage_tools
 from mas.tools.delegation_tool import register_delegation_tools
+from mas.tools.patch_tool import register_patch_tools
+from mas.tools.knowledge_vault_tool import register_knowledge_vault_tools
+from mas.tools.hitl_tool import register_hitl_tools
+from mas.tools.pii_tool import register_pii_tools
 
 
 class ConsultingEnterprise:
@@ -89,6 +93,10 @@ class ConsultingEnterprise:
         register_data_contract_tools(self.mcp_registry)
         register_storage_tools(self.mcp_registry)
         register_delegation_tools(self.mcp_registry)
+        register_patch_tools(self.mcp_registry)
+        register_knowledge_vault_tools(self.mcp_registry)
+        register_hitl_tools(self.mcp_registry)
+        register_pii_tools(self.mcp_registry)
         self._register_default_prompts()
         self.mcp_client = MCPClient(self.mcp_registry)
 

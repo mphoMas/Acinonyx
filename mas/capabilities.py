@@ -49,6 +49,10 @@ CAPABILITIES: List[Capability] = [
     Capability("data_contract_validator", CapabilityStatus.IMPLEMENTED, "YAML Data Contract validation asserting schema, nullability, uniqueness & enums", "mas.tools.data_contract_tool"),
     Capability("gcs_storage_manager", CapabilityStatus.IMPLEMENTED, "Google Cloud Storage bucket listing and object reading/writing", "mas.tools.storage_tool"),
     Capability("agent_to_agent_delegation", CapabilityStatus.IMPLEMENTED, "Dynamic subtask delegation to specialized agent personas within ReAct loop", "mas.tools.delegation_tool"),
+    Capability("surgical_file_patching", CapabilityStatus.IMPLEMENTED, "Surgical contiguous line replacement preventing full-file overwrite token bloat", "mas.tools.patch_tool"),
+    Capability("research_knowledge_vault_rag", CapabilityStatus.IMPLEMENTED, "Active full-text retrieval across 8-volume AI Encyclopedia and research archives", "mas.tools.knowledge_vault_tool"),
+    Capability("human_in_the_loop_gate", CapabilityStatus.IMPLEMENTED, "Structured clarification question queue with interactive and autonomous resolution", "mas.tools.hitl_tool"),
+    Capability("popia_pii_anonymizer", CapabilityStatus.IMPLEMENTED, "POPIA & GDPR compliance tool redacting South African IDs (Luhn), cards, emails & phones", "mas.tools.pii_tool"),
 ]
 
 
