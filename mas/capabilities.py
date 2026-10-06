@@ -45,6 +45,10 @@ CAPABILITIES: List[Capability] = [
     Capability("multi_tenant_iam", CapabilityStatus.IMPLEMENTED, "OAuth/PAB PBAC/RBAC tenant isolation + HMAC token auth + workspace jailing", "mas.iam"),
     Capability("managed_vector_saas", CapabilityStatus.IMPLEMENTED, "Vertex AI, Pinecone, Qdrant & mock vector store adapters", "mas.memory.vector_saas"),
     Capability("computer_use", CapabilityStatus.IMPLEMENTED, "Virtual Xvfb display + discrete OS mouse/keyboard actions + SoM grounding + Scope Jail", "mas.tools.computer_use"),
+    Capability("bigquery_finops_sql", CapabilityStatus.IMPLEMENTED, "Native Google Cloud BigQuery execution + dry-run cost estimation + mandatory labeling", "mas.tools.bigquery_tool"),
+    Capability("data_contract_validator", CapabilityStatus.IMPLEMENTED, "YAML Data Contract validation asserting schema, nullability, uniqueness & enums", "mas.tools.data_contract_tool"),
+    Capability("gcs_storage_manager", CapabilityStatus.IMPLEMENTED, "Google Cloud Storage bucket listing and object reading/writing", "mas.tools.storage_tool"),
+    Capability("agent_to_agent_delegation", CapabilityStatus.IMPLEMENTED, "Dynamic subtask delegation to specialized agent personas within ReAct loop", "mas.tools.delegation_tool"),
 ]
 
 

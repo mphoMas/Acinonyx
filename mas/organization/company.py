@@ -36,6 +36,10 @@ from mas.tools.git_tool import register_git_tools
 from mas.tools.package_tool import register_package_tools
 from mas.tools.browser_tool import register_browser_tools
 from mas.tools.computer_use import register_computer_use_tools
+from mas.tools.bigquery_tool import register_bigquery_tools
+from mas.tools.data_contract_tool import register_data_contract_tools
+from mas.tools.storage_tool import register_storage_tools
+from mas.tools.delegation_tool import register_delegation_tools
 
 
 class ConsultingEnterprise:
@@ -81,6 +85,10 @@ class ConsultingEnterprise:
         register_package_tools(self.mcp_registry)
         register_browser_tools(self.mcp_registry)
         register_computer_use_tools(self.mcp_registry)
+        register_bigquery_tools(self.mcp_registry)
+        register_data_contract_tools(self.mcp_registry)
+        register_storage_tools(self.mcp_registry)
+        register_delegation_tools(self.mcp_registry)
         self._register_default_prompts()
         self.mcp_client = MCPClient(self.mcp_registry)
 
