@@ -4,7 +4,7 @@ Tests for mas.orchestration (Supervisor, DebateEngine, SOPPipeline).
 
 import unittest
 from mas.core.agent import BaseAgent
-from mas.core.message import Message, Role
+from mas.core.message import Role
 from mas.orchestration.supervisor import SupervisorAgent
 from mas.orchestration.debate import DebateEngine
 from mas.orchestration.pipeline import SOPPipeline

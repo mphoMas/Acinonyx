@@ -9,9 +9,7 @@ Architect: Acinonyx
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 import logging
 import time
 import uuid
@@ -21,24 +19,17 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from mas.core.agent import BaseAgent
 from mas.core.event_bus import EventBus
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, MessageMetadata, Role
 from mas.memory.episodic import EpisodicMemory
-from mas.observability import LOGGER, METRICS
-from mas.organization.department import DepartmentType
 from mas.organization.roles import (
     AdversarialRedTeamAgent,
-    AgentWorkflowEngineerAgent,
     BackendEngineerAgent,
-    DataEngineerAgent,
     DesignerAgent,
     DevAdvocateAgent,
     FinOpsGovernorAgent,
-    FrontendEngineerAgent,
     MarketResearcherAgent,
-    MarketingAgent,
     ProductManagerAgent,
     TechnicalWriterAgent,
-    VectorRAGArchitectAgent,
 )
 from mas.squad.squad import ArchitectAgent, EngineerAgent, QAAgent
 

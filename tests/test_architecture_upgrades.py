@@ -11,12 +11,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mas.audit import JsonlAuditLog
 from mas.capabilities import capability_matrix, summary_counts
 from mas.config import RuntimeConfig, configure
 from mas.core.agent import BaseAgent
 from mas.core.event_bus import EventBus
-from mas.core.message import Message, MessageMetadata, Role
+from mas.core.message import Message, MessageMetadata
 from mas.eval import run_default_evals
 from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
@@ -24,7 +23,7 @@ from mas.orchestration.debate import DebateEngine
 from mas.orchestration.pipeline import SOPPipeline
 from mas.orchestration.supervisor import FailurePolicy, SupervisorAgent
 from mas.security import sanitize_tool_arguments, filter_user_text
-from mas.tools.executor import register_default_tools, run_python_code
+from mas.tools.executor import run_python_code
 from mas.validation import SchemaSpec, ValidationError, validate_against_schema, validate_message
 
 

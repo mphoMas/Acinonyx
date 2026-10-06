@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 from mas.core.message import Message
 
 logger = logging.getLogger("mas.swarm")

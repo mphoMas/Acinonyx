@@ -12,7 +12,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # Ensure project root is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,9 +20,9 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from mas.organization.company import AcinonyxEnterprise, ConsultingEnterprise
+from mas.organization.company import AcinonyxEnterprise
 from mas.organization.engagement import ConsultingEngagement, EngagementArtifacts
-from mas.tools.git_tool import git_branch_tool, git_status_tool
+from mas.tools.git_tool import git_branch_tool
 
 
 # Global singleton instance for stdio session
@@ -52,7 +52,7 @@ async def tool_mas_projects(arguments: Dict[str, Any]) -> str:
         "### MAS Project Registry",
         f"• **Current Client:** {current}",
         f"• **Live Dispatch:** {'ARMED (Live Execution)' if is_live else 'STAGED (Preview / Dry-Run)'}",
-        f"• **Allowed Project Roots:**",
+        "• **Allowed Project Roots:**",
     ]
     for p in allowed:
         lines.append(f"  - `{p}`")

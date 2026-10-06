@@ -9,9 +9,9 @@ Architect: Acinonyx
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict
 from mas.mcp.protocol import MCPRegistry
-from mas.observability import LOGGER, METRICS
+from mas.observability import METRICS
 
 
 def _validate_luhn(number_str: str) -> bool:

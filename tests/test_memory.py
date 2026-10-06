@@ -3,9 +3,9 @@ Tests for mas.memory (WorkingMemory, EpisodicMemory, and Reflexion).
 """
 
 import unittest
-from mas.core.message import Message, Role, TokenUsage
+from mas.core.message import Message, Role
 from mas.memory.working import WorkingMemory
-from mas.memory.episodic import EpisodicMemory, Trajectory
+from mas.memory.episodic import EpisodicMemory
 
 
 class TestMemorySubsystems(unittest.TestCase):

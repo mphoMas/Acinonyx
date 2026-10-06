@@ -3,10 +3,9 @@ tests/test_v2_organization.py: Verification suite for Acinonyx Labs v2.0 (10/10)
 Tests 7 Capability Guilds, 10 specialized agent roles, AcinonyxEnterprise, and HR recruiting.
 """
 
-import asyncio
 import unittest
 from mas.organization.department import DepartmentType, GuildType, Department, Guild
-from mas.organization.company import AcinonyxEnterprise, ConsultingEnterprise
+from mas.organization.company import AcinonyxEnterprise
 from mas.organization.roles import (
     MarketResearcherAgent,
     DataEngineerAgent,

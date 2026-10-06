@@ -3,7 +3,6 @@ tests.test_dataops_and_delegation: Unit and integration tests for Enterprise Big
 Data Contract Validation, GCS Storage, and Dynamic Multi-Agent Delegation tools.
 """
 
-import os
 import unittest
 from mas.capabilities import capability_matrix
 from mas.mcp.protocol import MCPRegistry

@@ -5,14 +5,12 @@ Tests sandboxed Python execution, live web search, ReAct tool extraction, and ag
 Architect: Acinonyx
 """
 
-import asyncio
-import os
 import unittest
 from mas.core.agent import BaseAgent, _extract_text_tool_calls
-from mas.core.message import ContentType, Message, Role, TokenUsage
+from mas.core.message import Message, Role, TokenUsage
 from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
-from mas.providers.base import LLMProvider, ProviderResponse, ToolCall
+from mas.providers.base import LLMProvider, ProviderResponse
 from mas.tools.browser_tool import register_browser_tools, web_search_tool
 from mas.tools.executor import register_default_tools, run_python_code
 

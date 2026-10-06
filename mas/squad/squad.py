@@ -4,11 +4,10 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from mas.core.agent import BaseAgent
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, Role
 from mas.mcp.transport import MCPClient
 from mas.memory.episodic import EpisodicMemory
 

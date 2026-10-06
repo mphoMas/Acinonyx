@@ -13,7 +13,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mas.core.event_bus import EventBus
-from mas.core.message import Message, Role, MessageMetadata
+from mas.core.message import Message, MessageMetadata
 from mas.core.swarm import SwarmHub, SwarmNode
 
 

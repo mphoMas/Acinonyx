@@ -11,17 +11,14 @@ import os
 import sys
 import time
 import base64
-import json
-import math
 import subprocess
 from pathlib import Path
-from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from mas.tools.display import VirtualDisplayManager, VirtualDisplayConfig
-from mas.tools.computer_use import ComputerUseController, draw_hardware_cursor
+from mas.tools.computer_use import ComputerUseController
 
 
 ARTIFACT_DIR = Path("/home/acinonyx/.gemini/antigravity-ide/brain/cb20c3b1-4785-4d47-9c27-9d47cfab2e33")

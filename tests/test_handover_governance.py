@@ -5,16 +5,15 @@ and stdio MCP governance patterns from the MAS handover plan.
 Architect: Acinonyx
 """
 
-import asyncio
 import os
 import shutil
 import tempfile
 import unittest
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.engagement import ConsultingEngagement
-from mas.providers.gateway import TokenBudgetGovernor, ModelGatewayServer
+from mas.providers.gateway import TokenBudgetGovernor
 from mas.tools.filesystem import fs_read_file, fs_write_file, set_allowed_roots
-from mas.tools.browser_tool import web_fetch_url_tool, web_search_tool, _strip_html_tags
+from mas.tools.browser_tool import web_search_tool, _strip_html_tags
 from scripts.mas_mcp_stdio import handle_request
 
 

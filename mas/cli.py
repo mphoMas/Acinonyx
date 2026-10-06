@@ -11,7 +11,7 @@ from typing import Optional
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from mas.capabilities import capability_matrix, summary_counts
+    from mas.capabilities import summary_counts
     from mas.config import CONFIG, configure
     from mas.mcp.protocol import MCPRegistry
     from mas.tools.executor import register_default_tools

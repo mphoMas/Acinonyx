@@ -4,10 +4,9 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-import uuid
 from typing import Any, Callable, Dict, List, Optional
 from mas.core.message import Message, TokenUsage
-from mas.providers.base import LLMProvider, ProviderResponse, ToolCall
+from mas.providers.base import LLMProvider, ProviderResponse
 
 
 class MockLLMProvider(LLMProvider):

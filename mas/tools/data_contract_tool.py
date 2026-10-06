@@ -8,13 +8,12 @@ Architect: Acinonyx
 from __future__ import annotations
 
 import csv
-import json
 import os
 from typing import Any, Dict, List, Optional, Set
 import yaml
 
 from mas.mcp.protocol import MCPRegistry
-from mas.observability import LOGGER, METRICS
+from mas.observability import METRICS
 
 
 def data_contract_validate_tool(

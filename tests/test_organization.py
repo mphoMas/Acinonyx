@@ -6,7 +6,6 @@ import unittest
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.department import DepartmentType
 from mas.organization.engagement import ConsultingEngagement
-from mas.organization.hr import HRAgent, JobRequisition
 
 
 class TestEnterpriseOrganization(unittest.IsolatedAsyncioTestCase):

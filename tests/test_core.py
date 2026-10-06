@@ -4,7 +4,7 @@ Tests for mas.core (Message, EventBus, StateMachine, BaseAgent).
 
 import asyncio
 import unittest
-from mas.core.message import Message, Role, ContentType, TokenUsage, MessageMetadata
+from mas.core.message import Message, Role, TokenUsage, MessageMetadata
 from mas.core.event_bus import EventBus
 from mas.core.state import StateMachine
 from mas.core.agent import BaseAgent

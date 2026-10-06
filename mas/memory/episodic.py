@@ -16,7 +16,7 @@ import struct
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 from mas.core.message import Message
 
 
@@ -288,6 +288,18 @@ class SQLiteVectorDatabase:
 
     def close(self) -> None:
         self._conn.close()
+
+    def __enter__(self) -> "SQLiteVectorDatabase":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self._conn.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

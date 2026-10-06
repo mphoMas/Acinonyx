@@ -4,7 +4,6 @@ End-to-end integration test: MCP Tool execution with Reflexion self-healing loop
 
 import unittest
 from mas.core.agent import BaseAgent
-from mas.core.message import Message, Role
 from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
 from mas.tools.executor import register_default_tools

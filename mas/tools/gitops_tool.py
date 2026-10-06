@@ -14,8 +14,8 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
-from mas.core.message import Message, MessageMetadata, Role
+from typing import Any, Dict, Optional
+from mas.core.message import Message, MessageMetadata
 from mas.mcp.protocol import MCPRegistry
 
 

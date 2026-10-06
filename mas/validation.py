@@ -117,7 +117,7 @@ def validate_data_contract(content: str) -> Tuple[bool, str, Dict[str, Any]]:
                 data = parsed
             else:
                 return False, "Data contract JSON must be an object", {}
-        except Exception as jexc:
+        except Exception:
             return False, f"Failed to parse data contract as YAML or JSON: {exc}", {}
 
     required_top_keys = ["dataset", "version", "owner", "schema"]

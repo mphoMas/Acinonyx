@@ -4,9 +4,8 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
 from mas.core.agent import BaseAgent
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, Role
 
 
 class ClientManagerAgent(BaseAgent):

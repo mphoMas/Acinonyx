@@ -7,9 +7,9 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 from mas.core.message import Message
-from mas.validation import ValidationError, validate_message
+from mas.validation import validate_message
 
 
 SubscriberCallback = Callable[[Message], Coroutine[Any, Any, None]]

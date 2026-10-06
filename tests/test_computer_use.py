@@ -4,15 +4,13 @@ Verifies discrete OS action spaces, Set-of-Mark grounding, virtual display isola
 Token FinOps compression, security Scope Jails, and MCP tool registration.
 """
 
-import json
 import os
 import unittest
 from PIL import Image
 
-from mas.capabilities import CAPABILITIES, capability_matrix
+from mas.capabilities import capability_matrix
 from mas.core.message import ContentType, Message, Role
 from mas.mcp.protocol import MCPRegistry
-from mas.providers.http_provider import OpenAICompatibleProvider
 from mas.tools.computer_use import (
     ComputerUseController,
     ComputerUseScopeJail,

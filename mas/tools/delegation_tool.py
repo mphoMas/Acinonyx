@@ -7,9 +7,8 @@ Architect: Acinonyx
 
 from __future__ import annotations
 
-import asyncio
 import inspect
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
 

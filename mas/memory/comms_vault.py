@@ -8,14 +8,13 @@ Architect: Acinonyx
 
 from __future__ import annotations
 
-import collections
+import contextlib
 import json
-import os
 import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional
 
 
 DEFAULT_DB_PATH = Path("/home/acinonyx/Desktop/MAS/about_me/comms_vault.db")
@@ -85,12 +84,18 @@ class CommsVault:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_db()
 
-    def get_connection(self) -> sqlite3.Connection:
+    @contextlib.contextmanager
+    def get_connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection that commits/rolls back and is always closed on exit."""
         conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA journal_mode = WAL;")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.execute("PRAGMA journal_mode = WAL;")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def init_db(self) -> None:
         """Initialize relational schema, FTS5 index, and analytical views."""

@@ -6,10 +6,10 @@ Architect: Acinonyx
 from __future__ import annotations
 import asyncio
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set
 from mas.core.agent import BaseAgent
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, MessageMetadata, Role
 
 
 @dataclass
@@ -150,7 +150,7 @@ class DebateEngine:
             )
 
         synthesis_prompt_lines = [
-            f"You are the Impartial Moderator Judge.",
+            "You are the Impartial Moderator Judge.",
             f"Analyze the following {self.max_rounds}-round multi-agent debate transcript for '{proposition_or_problem}':\n",
             f"(Anti-sycophancy score={syc:.3f}; lower means more independent claims)\n",
         ]

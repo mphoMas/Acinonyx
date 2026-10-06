@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import base64
 import io
-import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 

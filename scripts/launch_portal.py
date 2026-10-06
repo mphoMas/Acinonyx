@@ -8,7 +8,6 @@ Architect: cloud_architect / MAS Swarm
 
 import http.server
 import socketserver
-import os
 import sys
 from pathlib import Path
 
@@ -34,7 +33,7 @@ def run():
                 print("=" * 70)
                 print(f"👉 Local Web Portal:  http://localhost:{PORT}/portal/")
                 print(f"📁 Serving Root:      {ROOT_DIR}")
-                print(f"📊 66 Documents • 4 Simulators • 8 Seminal PDFs • Cryptographic Merkle")
+                print("📊 66 Documents • 4 Simulators • 8 Seminal PDFs • Cryptographic Merkle")
                 print("=" * 70)
                 print("Press Ctrl+C to terminate the local server.\n")
                 httpd.serve_forever()

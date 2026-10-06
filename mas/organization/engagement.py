@@ -4,12 +4,9 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from mas.core.agent import BaseAgent
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from typing import Dict, List
+from mas.core.message import Message, MessageMetadata
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.hr import JobRequisition
 

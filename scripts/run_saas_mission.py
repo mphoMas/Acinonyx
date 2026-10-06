@@ -8,14 +8,12 @@ Architect: Acinonyx
 """
 
 import asyncio
-import json
 import time
 from mas.organization.company import AcinonyxEnterprise
 from mas.orchestration.strike_pod import (
     StrikePodOrchestrator,
     PodMissionSpec,
     PodMissionResult,
-    PodStatus,
 )
 
 
@@ -65,7 +63,7 @@ async def main():
 
     print(f"[MISSION INITIATED]: {mission_spec.title}")
     print(f"[MISSION ID]:        {mission_spec.mission_id}")
-    print(f"[TARGET PIPELINE]:   Research-1st 5-Phase DAG + Level 2 Gated Milestones\n")
+    print("[TARGET PIPELINE]:   Research-1st 5-Phase DAG + Level 2 Gated Milestones\n")
 
     start_time = time.time()
     result: PodMissionResult = await orchestrator.run_ephemeral_mission(mission_spec)

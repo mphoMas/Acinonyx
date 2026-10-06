@@ -27,3 +27,6 @@ include = ["mas*"]
 
 [tool.setuptools.package-data]
 mas = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

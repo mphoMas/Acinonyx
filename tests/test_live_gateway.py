@@ -3,7 +3,6 @@ tests.test_live_gateway: Test suite verifying the OpenAI-compatible Live Model G
 Architect: Acinonyx
 """
 
-import asyncio
 import unittest
 from mas.core.message import Message, Role
 from mas.organization.company import ConsultingEnterprise

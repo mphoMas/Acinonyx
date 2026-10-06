@@ -13,7 +13,7 @@ import re
 import urllib.parse
 import urllib.request
 import urllib.error
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from mas.mcp.protocol import MCPRegistry
 
 
@@ -149,8 +149,8 @@ async def web_search_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
     # Deterministic fallback for air-gapped/offline environments
     fallback_findings = [
         f"Research finding for '{query}': Documented enterprise architecture and compliance specifications.",
-        f"Verified standard implementations across Python 3.12+ and modern microservices.",
-        f"Benchmarked latency and concurrency requirements under high-throughput conditions.",
+        "Verified standard implementations across Python 3.12+ and modern microservices.",
+        "Benchmarked latency and concurrency requirements under high-throughput conditions.",
     ]
     return {
         "success": True,

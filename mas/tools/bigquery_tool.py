@@ -12,8 +12,7 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
 

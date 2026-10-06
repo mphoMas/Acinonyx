@@ -5,13 +5,10 @@ Tests vector indexing, cosine similarity scoring, metadata filtering, and adapte
 
 import pytest
 from mas.memory.vector_saas import (
-    BaseManagedVectorStore,
     ManagedVectorStoreFactory,
     MockManagedVectorStore,
     PineconeAdapter,
     QdrantAdapter,
-    VectorProvider,
-    VectorQueryResult,
     VectorRecord,
     VertexAIVectorSearchAdapter,
     cosine_similarity,

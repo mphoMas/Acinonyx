@@ -3,7 +3,6 @@ tests.test_advanced_tooling_suite: Unit tests for surgical file patching,
 research knowledge vault RAG, human-in-the-loop gates, and POPIA/GDPR PII anonymization.
 """
 
-import json
 import os
 import unittest
 from mas.capabilities import capability_matrix

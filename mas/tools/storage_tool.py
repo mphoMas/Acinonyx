@@ -10,10 +10,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from mas.mcp.protocol import MCPRegistry
-from mas.observability import LOGGER, METRICS
+from mas.observability import METRICS
 
 
 def _find_gcloud_or_gsutil() -> Optional[str]:

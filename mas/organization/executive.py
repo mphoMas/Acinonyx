@@ -11,7 +11,6 @@ Architect: Acinonyx
 from __future__ import annotations
 
 import asyncio
-import json
 import platform
 import os
 import shutil
@@ -85,7 +84,7 @@ class InfrastructureAuditReport:
         sw = self.software
         ws = self.workspace
         lines = [
-            f"# 🖥️  CIO Infrastructure Audit Report",
+            "# 🖥️  CIO Infrastructure Audit Report",
             f"**Company:** {self.company}",
             f"**Auditor:** {self.auditor}",
             f"**Timestamp:** {self.audit_timestamp}",
@@ -93,8 +92,8 @@ class InfrastructureAuditReport:
             "---",
             "",
             "## 1. Hardware Profile",
-            f"| Field | Value |",
-            f"|---|---|",
+            "| Field | Value |",
+            "|---|---|",
             f"| OS | {hw.os_name} {hw.os_release} |",
             f"| Kernel | {hw.os_version} |",
             f"| Architecture | {hw.machine} |",
@@ -122,8 +121,8 @@ class InfrastructureAuditReport:
             "---",
             "",
             "## 2. Software Profile",
-            f"| Field | Value |",
-            f"|---|---|",
+            "| Field | Value |",
+            "|---|---|",
             f"| Python Version | {sw.python_version} |",
             f"| Python Executable | {sw.python_executable} |",
             f"| Python Path | {sw.python_path} |",
@@ -167,8 +166,8 @@ class InfrastructureAuditReport:
             "---",
             "",
             "## 3. Workspace Profile",
-            f"| Field | Value |",
-            f"|---|---|",
+            "| Field | Value |",
+            "|---|---|",
             f"| Root | {ws.root_path} |",
             f"| Total Files | {ws.total_files} |",
             f"| Total Directories | {ws.total_dirs} |",

@@ -4,8 +4,8 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
 from mas.core.agent import BaseAgent
 from mas.core.message import ContentType, Message, MessageMetadata, Role
 from mas.validation import SchemaSpec, validate_against_schema

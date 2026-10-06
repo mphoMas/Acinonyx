@@ -17,7 +17,6 @@ Project Leads:
 import asyncio
 import glob
 import hashlib
-import json
 import os
 import re
 import sys
@@ -254,7 +253,7 @@ async def run_verification_swarm():
     # 2. Compute Merkle Provenance Hash
     all_md_paths = glob.glob(f"{RESEARCH_ROOT}/**/*.md", recursive=True)
     merkle_root = compute_merkle_provenance(all_md_paths)
-    print(f"[PHASE 2]: Computed Cryptographic Merkle Root (SHA-256):")
+    print("[PHASE 2]: Computed Cryptographic Merkle Root (SHA-256):")
     print(f"  Root: {merkle_root}\n")
 
     # 3. Publish Agent Reviews to EventBus
@@ -301,7 +300,7 @@ async def run_verification_swarm():
     duration = time.time() - start_time
     print("\n=================================================================")
     print(f" COMPOSITE SWARM VALIDATION SCORE: {composite_score:.2f} / 10.0 ({percentage:.1f}%)")
-    print(f" STATUS: RATIFIED & VERIFIED (Unanimous Sign-Off)")
+    print(" STATUS: RATIFIED & VERIFIED (Unanimous Sign-Off)")
     print(f" AUDIT TRAIL: {bus.stats['published_count']} durable messages published on EventBus.")
     print(f" DURATION:    {duration:.2f} seconds")
     print("=================================================================\n")

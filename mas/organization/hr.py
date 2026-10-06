@@ -7,9 +7,9 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 from mas.core.agent import BaseAgent
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, Role
 from mas.organization.department import DepartmentType
 
 

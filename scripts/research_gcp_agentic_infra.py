@@ -6,11 +6,8 @@ Architect: Acinonyx
 """
 
 import asyncio
-import json
 import os
 import sys
-import urllib.parse
-import urllib.request
 
 pkg_dir = "/home/acinonyx/Desktop/MAS/bin/packages"
 browser_dir = "/home/acinonyx/Desktop/MAS/bin/browsers"

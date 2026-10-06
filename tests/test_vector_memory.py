@@ -7,7 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from mas.memory.episodic import EpisodicMemory, Reflection, SQLiteVectorDatabase, SemanticVectorizer, Trajectory
+from mas.memory.episodic import EpisodicMemory, Reflection, SQLiteVectorDatabase, SemanticVectorizer
 
 
 class TestSemanticVectorizer(unittest.TestCase):

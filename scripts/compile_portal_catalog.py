@@ -7,7 +7,6 @@ and compiles an optimized, zero-latency catalog for the web portal.
 Architect: data_architect_ai / MAS Swarm
 """
 
-import os
 import re
 import json
 import glob
@@ -323,7 +322,7 @@ def compile_catalog():
         f.write(";\n")
         
     print(f"✅ [SUCCESS] Compiled {len(documents)} research documents!")
-    print(f"📄 Output files written to:")
+    print("📄 Output files written to:")
     print(f"   • {json_path} ({json_path.stat().st_size / 1024:.1f} KB)")
     print(f"   • {js_path} ({js_path.stat().st_size / 1024:.1f} KB)")
 

@@ -3,11 +3,9 @@ tests/test_strike_pod.py: Unit tests for the Liquid Strike Pod Orchestrator.
 Validates dynamic assembly, Level 2 Gated Milestones, Merkle provenance, and auto-disbandment.
 """
 
-import asyncio
 import unittest
 from mas.organization.company import AcinonyxEnterprise
 from mas.orchestration.strike_pod import (
-    LiquidStrikePod,
     StrikePodOrchestrator,
     PodMissionSpec,
     PodMissionResult,

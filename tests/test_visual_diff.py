@@ -21,7 +21,7 @@ if pkg_dir not in sys.path:
 from PIL import Image, ImageDraw
 from mas.mcp.protocol import MCPRegistry
 from mas.tools.browser_tool import register_browser_tools
-from mas.tools.visual_diff import compute_visual_diff, VisualDiffMetrics
+from mas.tools.visual_diff import compute_visual_diff
 
 
 class TestVisualRegressionDiffing(unittest.TestCase):

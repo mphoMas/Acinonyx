@@ -18,7 +18,7 @@ import time
 import urllib.request
 import urllib.error
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 
@@ -201,7 +201,7 @@ class ModelGatewayRequestHandler(SimpleHTTPRequestHandler):
                 resp = self._forward_upstream(payload)
                 self._send_json(resp)
                 return
-            except Exception as e:
+            except Exception:
                 # Fallback to internal cognitive engine if upstream fails
                 pass
 
@@ -253,95 +253,95 @@ class ModelGatewayRequestHandler(SimpleHTTPRequestHandler):
         # --- Role: Client Director / Intake ---
         if "client" in sys_lower or "intake" in sys_lower:
             content = (
-                f"### Client Onboarding & Commercial Scope Brief\n"
-                f"**Mandate:** Formulate rigorous commercial and architectural boundaries.\n"
-                f"1. **Core Objectives:** Deliver resilient, cloud-native enterprise SaaS conforming to client expectations.\n"
-                f"2. **Critical Success Metrics:** 99.99% uptime, zero high-severity CVEs, sub-100ms P99 API latency.\n"
-                f"3. **Governance Gate:** Passed to Product Management and HR for competency gap analysis."
+                "### Client Onboarding & Commercial Scope Brief\n"
+                "**Mandate:** Formulate rigorous commercial and architectural boundaries.\n"
+                "1. **Core Objectives:** Deliver resilient, cloud-native enterprise SaaS conforming to client expectations.\n"
+                "2. **Critical Success Metrics:** 99.99% uptime, zero high-severity CVEs, sub-100ms P99 API latency.\n"
+                "3. **Governance Gate:** Passed to Product Management and HR for competency gap analysis."
             )
 
         # --- Role: HR Talent Ops / Requisitions ---
         elif "human resources" in sys_lower or "hr" in sys_lower or "recruitment" in sys_lower:
             content = (
-                f"### HR Talent Operations Competency Audit\n"
-                f"Audited requirements against current organizational roster.\n"
-                f"- Evaluated domain requirements: Architecture, Security, FinTech, DevOps, UI/UX.\n"
-                f"- Deployed specialized agent nodes to fulfill SDLC capability coverage."
+                "### HR Talent Operations Competency Audit\n"
+                "Audited requirements against current organizational roster.\n"
+                "- Evaluated domain requirements: Architecture, Security, FinTech, DevOps, UI/UX.\n"
+                "- Deployed specialized agent nodes to fulfill SDLC capability coverage."
             )
 
         # --- Role: Product Manager / PRD ---
         elif "product" in sys_lower or "prd" in sys_lower or "specification" in sys_lower:
             content = (
-                f"# Product Requirements Document (PRD)\n"
-                f"**Status:** APPROVED FOR IMPLEMENTATION\n\n"
-                f"## 1. Executive Summary\n"
-                f"Architected to fulfill enterprise SaaS specifications with zero external dependencies and sub-millisecond dispatch.\n\n"
-                f"## 2. Core Functional Epics\n"
-                f"- **EPIC-1 (Auth & RBAC):** JWT token lifecycle with asymmetric cryptographic signatures.\n"
-                f"- **EPIC-2 (High-Throughput Ingestion):** Async event-driven processing pipeline.\n"
-                f"- **EPIC-3 (Vector Memory & Search):** Embedded SQLite semantic similarity lookup.\n\n"
-                f"## 3. Acceptance Criteria\n"
-                f"- 100% unit and integration test coverage across all domain packages.\n"
-                f"- Full backward compatibility across state checkpoints."
+                "# Product Requirements Document (PRD)\n"
+                "**Status:** APPROVED FOR IMPLEMENTATION\n\n"
+                "## 1. Executive Summary\n"
+                "Architected to fulfill enterprise SaaS specifications with zero external dependencies and sub-millisecond dispatch.\n\n"
+                "## 2. Core Functional Epics\n"
+                "- **EPIC-1 (Auth & RBAC):** JWT token lifecycle with asymmetric cryptographic signatures.\n"
+                "- **EPIC-2 (High-Throughput Ingestion):** Async event-driven processing pipeline.\n"
+                "- **EPIC-3 (Vector Memory & Search):** Embedded SQLite semantic similarity lookup.\n\n"
+                "## 3. Acceptance Criteria\n"
+                "- 100% unit and integration test coverage across all domain packages.\n"
+                "- Full backward compatibility across state checkpoints."
             )
 
         # --- Role: UI/UX Designer / Design System ---
         elif "design" in sys_lower or "designer" in sys_lower or "ui" in sys_lower:
             content = (
-                f"# Enterprise UI/UX Design System & Token Catalog\n\n"
-                f"```css\n"
-                f":root {{\n"
-                f"  --color-primary: #00c896;\n"
-                f"  --color-bg-canvas: #090d16;\n"
-                f"  --color-surface-card: #0d1527;\n"
-                f"  --color-border: #1a2840;\n"
-                f"  --color-text-high: #e6edf3;\n"
-                f"  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;\n"
-                f"}}\n"
-                f"```\n\n"
-                f"### Component Architecture\n"
-                f"- **Card Component:** 1px border with 16px padding and elevation blur.\n"
-                f"- **Telemetry Grid:** Real-time animated CSS transitions for event counters."
+                "# Enterprise UI/UX Design System & Token Catalog\n\n"
+                "```css\n"
+                ":root {\n"
+                "  --color-primary: #00c896;\n"
+                "  --color-bg-canvas: #090d16;\n"
+                "  --color-surface-card: #0d1527;\n"
+                "  --color-border: #1a2840;\n"
+                "  --color-text-high: #e6edf3;\n"
+                "  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;\n"
+                "}\n"
+                "```\n\n"
+                "### Component Architecture\n"
+                "- **Card Component:** 1px border with 16px padding and elevation blur.\n"
+                "- **Telemetry Grid:** Real-time animated CSS transitions for event counters."
             )
 
         # --- Role: Senior Engineer / Implementation ---
         elif "engineer" in sys_lower or "developer" in sys_lower or "architect" in sys_lower:
             content = (
-                f"### Engineering Squad Implementation Report\n"
-                f"1. **Git Repository Status:** Initialized branch `feature/enterprise-saas`.\n"
-                f"2. **Core Modules Synthesized:** Data structures, async state machines, and SQLite vector stores.\n"
-                f"3. **Reflexion Engine Active:** Self-correction loop enabled for automated test repair.\n"
-                f"4. **Build Status:** All unit tests compiled and executing with zero warnings."
+                "### Engineering Squad Implementation Report\n"
+                "1. **Git Repository Status:** Initialized branch `feature/enterprise-saas`.\n"
+                "2. **Core Modules Synthesized:** Data structures, async state machines, and SQLite vector stores.\n"
+                "3. **Reflexion Engine Active:** Self-correction loop enabled for automated test repair.\n"
+                "4. **Build Status:** All unit tests compiled and executing with zero warnings."
             )
 
         # --- Role: QA Critic / Verification ---
         elif "qa" in sys_lower or "critic" in sys_lower or "test" in sys_lower:
             content = (
-                f"### Quality Assurance & Verification Sign-Off Certificate\n"
-                f"**Audit Verdict:** ✅ 100% PASS — PRODUCTION READY\n\n"
-                f"- **Unit Test Gate:** 68/68 test assertions verified green.\n"
-                f"- **Security Gate:** Zero unparameterized SQL queries, zero buffer overflows.\n"
-                f"- **Resilience Gate:** Checked state rollback under simulated network timeouts."
+                "### Quality Assurance & Verification Sign-Off Certificate\n"
+                "**Audit Verdict:** ✅ 100% PASS — PRODUCTION READY\n\n"
+                "- **Unit Test Gate:** 68/68 test assertions verified green.\n"
+                "- **Security Gate:** Zero unparameterized SQL queries, zero buffer overflows.\n"
+                "- **Resilience Gate:** Checked state rollback under simulated network timeouts."
             )
 
         # --- Role: Marketing Lead / GTM ---
         elif "marketing" in sys_lower or "gtm" in sys_lower or "launch" in sys_lower:
             content = (
-                f"# Go-To-Market (GTM) Enterprise Package\n\n"
-                f"## 1. Product Value Proposition\n"
-                f"Empowering modern IT SaaS enterprises with autonomous, self-healing multi-agent squads.\n\n"
-                f"## 2. Launch Strategy\n"
-                f"- Phase 1: Private developer preview with instant Observability Dashboard.\n"
-                f"- Phase 2: Open-source reference implementations and MCP ecosystem connectors."
+                "# Go-To-Market (GTM) Enterprise Package\n\n"
+                "## 1. Product Value Proposition\n"
+                "Empowering modern IT SaaS enterprises with autonomous, self-healing multi-agent squads.\n\n"
+                "## 2. Launch Strategy\n"
+                "- Phase 1: Private developer preview with instant Observability Dashboard.\n"
+                "- Phase 2: Open-source reference implementations and MCP ecosystem connectors."
             )
 
         # --- Role: CIO / Infrastructure ---
         elif "cio" in sys_lower or "infrastructure" in sys_lower:
             content = (
-                f"### CIO Executive Infrastructure Telemetry\n"
-                f"- Machine Health: 64 GB RAM (94% free), 12 CPU cores, 904 GB disk headroom.\n"
-                f"- Tool Fabric: `git 2.53.0` and `uv 0.12.22` fully operational.\n"
-                f"- Security Status: Isolated local runtime with zero unauthorized egress."
+                "### CIO Executive Infrastructure Telemetry\n"
+                "- Machine Health: 64 GB RAM (94% free), 12 CPU cores, 904 GB disk headroom.\n"
+                "- Tool Fabric: `git 2.53.0` and `uv 0.12.22` fully operational.\n"
+                "- Security Status: Isolated local runtime with zero unauthorized egress."
             )
 
         # Default fallback synthesis

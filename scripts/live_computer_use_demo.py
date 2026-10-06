@@ -11,7 +11,6 @@ import os
 import sys
 import time
 import base64
-import json
 import subprocess
 from pathlib import Path
 

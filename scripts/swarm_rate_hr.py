@@ -4,9 +4,8 @@ Publishes typed evaluation messages across the MAS EventBus.
 """
 
 import asyncio
-import json
 from mas.core.event_bus import EventBus
-from mas.core.message import ContentType, Message, MessageMetadata, Role
+from mas.core.message import Message, MessageMetadata, Role
 
 
 SWARM_REVIEWS = [
@@ -165,7 +164,7 @@ async def run_swarm_rating():
 
     print("=================================================================")
     print(f" COMPOSITE SWARM RATING: {composite_score:.2f} / 10.0  ({percentage:.1f}%)")
-    print(f" STATUS: PASSED & RATIFIED BY 10/10 SWARM MEMBERS")
+    print(" STATUS: PASSED & RATIFIED BY 10/10 SWARM MEMBERS")
     print(f" BUS PUBLISHES: {bus.stats['published_count']} messages routed & audited.")
     print("=================================================================")
 

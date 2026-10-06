@@ -8,8 +8,6 @@ Architect: Acinonyx
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import hashlib
 import json
 import os
@@ -17,18 +15,16 @@ import re
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 from PIL import Image
 
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
-from mas.tools.display import VirtualDisplayConfig, VirtualDisplayManager
+from mas.tools.display import VirtualDisplayManager
 from mas.tools.grounding import (
     UIElementMark,
     compress_and_encode_frame,
-    compute_visual_diff,
     overlay_set_of_marks,
     scale_coordinates,
 )

@@ -8,17 +8,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
-from mas.iam import (
-    MultiTenantIAM,
-    Tenant,
-    TenantContext,
-    TenantStatus,
-    Principal,
-    PolicyEffect,
-    PolicyRule,
-    StandardRole,
-    default_iam,
-)
 
 
 INJECTION_PATTERNS = [

@@ -9,9 +9,9 @@ Architect: Acinonyx
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from mas.mcp.protocol import MCPRegistry
-from mas.observability import LOGGER, METRICS
+from mas.observability import METRICS
 from mas.tools.filesystem import _is_path_safe
 
 

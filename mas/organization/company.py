@@ -10,7 +10,7 @@ from mas.core.event_bus import EventBus
 from mas.core.state import StateMachine
 from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
-from mas.organization.department import Department, DepartmentType, Guild, GuildType
+from mas.organization.department import Department, DepartmentType
 from mas.organization.hr import HRAgent
 from mas.organization.roles import (
     ClientManagerAgent,

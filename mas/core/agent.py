@@ -4,7 +4,6 @@ Architect: Acinonyx
 """
 
 from __future__ import annotations
-import asyncio
 import json
 import re
 from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
@@ -15,8 +14,7 @@ from mas.observability import METRICS, LOGGER
 from mas.providers.base import ToolCall
 
 if TYPE_CHECKING:
-    from mas.memory.episodic import EpisodicMemory, Reflection
-    from mas.memory.working import WorkingMemory
+    from mas.memory.episodic import Reflection
 
 
 def _extract_text_tool_calls(content: str, available_tool_names: Set[str]) -> List[ToolCall]:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from mas.providers.base import LLMProvider
 from mas.providers.claude_provider import ClaudeProvider

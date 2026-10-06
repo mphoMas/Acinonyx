@@ -3,7 +3,7 @@ Tests for mas.mcp (JSON-RPC 2.0 protocol and MCP Client/Server).
 """
 
 import unittest
-from mas.mcp.protocol import MCPRegistry, JsonRpcRequest
+from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
 
 
