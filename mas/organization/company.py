@@ -35,6 +35,7 @@ from mas.tools.filesystem import register_filesystem_tools
 from mas.tools.git_tool import register_git_tools
 from mas.tools.package_tool import register_package_tools
 from mas.tools.browser_tool import register_browser_tools
+from mas.tools.computer_use import register_computer_use_tools
 
 
 class ConsultingEnterprise:
@@ -79,6 +80,7 @@ class ConsultingEnterprise:
         register_git_tools(self.mcp_registry)
         register_package_tools(self.mcp_registry)
         register_browser_tools(self.mcp_registry)
+        register_computer_use_tools(self.mcp_registry)
         self._register_default_prompts()
         self.mcp_client = MCPClient(self.mcp_registry)
 
@@ -266,3 +268,73 @@ class AcinonyxEnterprise(ConsultingEnterprise):
     def list_guild_agents(self, guild_type: DepartmentType) -> List[str]:
         """List all active agent names within a specific Capability Guild."""
         return self.departments[guild_type].list_agents()
+
+    def assemble_strike_pod(
+        self,
+        title: str,
+        requirements: str,
+        required_specializations: Optional[List[str]] = None,
+        target_code_file: Optional[str] = None,
+        target_test_file: Optional[str] = None,
+        auto_gate1: bool = True,
+        auto_gate2: bool = True,
+        budget_token_limit: int = 150_000,
+    ) -> Any:
+        """
+        Dynamically assemble an ephemeral cross-functional Liquid Strike Pod from Capability Guilds.
+        The assembled pod operates with research-first gated milestones and auto-disbands upon delivery.
+        """
+        from mas.orchestration.strike_pod import LiquidStrikePod, PodMissionSpec
+
+        all_agents = {
+            "cio": self.cio,
+            "hr_director": self.hr_agent,
+            "client_director": self.client_director,
+            "product_lead": self.product_lead,
+            "design_lead": self.design_lead,
+            "chief_architect": self.chief_architect,
+            "market_researcher": self.market_researcher,
+            "data_engineer": self.data_engineer,
+            "vector_rag_architect": self.vector_rag_architect,
+            "backend_engineer": self.backend_engineer,
+            "frontend_engineer": self.frontend_engineer,
+            "agent_workflow_engineer": self.agent_workflow_engineer,
+            "senior_engineer": self.lead_engineer,
+            "qa_critic": self.qa_critic,
+            "adversarial_red_team": self.adversarial_red_team,
+            "finops_governor": self.finops_governor,
+            "technical_writer": self.technical_writer,
+            "dev_advocate": self.dev_advocate,
+        }
+
+        specs_needed = required_specializations or [
+            "market_researcher",
+            "product_lead",
+            "design_lead",
+            "chief_architect",
+            "backend_engineer",
+            "qa_critic",
+            "adversarial_red_team",
+            "finops_governor",
+            "technical_writer",
+        ]
+
+        pod_agents = {k: all_agents[k] for k in specs_needed if k in all_agents}
+
+        spec = PodMissionSpec(
+            title=title,
+            requirements=requirements,
+            required_specializations=specs_needed,
+            target_code_file=target_code_file,
+            target_test_file=target_test_file,
+            auto_gate1=auto_gate1,
+            auto_gate2=auto_gate2,
+            budget_token_limit=budget_token_limit,
+        )
+
+        return LiquidStrikePod(
+            spec=spec,
+            agents=pod_agents,
+            event_bus=self.event_bus,
+            mcp_client=self.mcp_client,
+        )

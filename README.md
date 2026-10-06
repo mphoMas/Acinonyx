@@ -90,3 +90,15 @@ docker compose up --build
 2. Typed messages + schema validators on SOP stages
 3. Debate round caps + sycophancy scoring
 4. Durable JSONL audit of publishes
+
+---
+
+## Research Directorate & Knowledge Compendiums
+
+Exhaustive theoretical, architectural, and benchmark studies supporting Project ACINONYX:
+
+- [**Research Directorate Master Portal**](research/README.md): Master landing page linking all research divisions.
+- [**Agentic Systems Master Study Compendium**](research/agentic_systems/README.md): Frontier AI models (o1/o3, Sonnet 3.5, DeepSeek-R1), test-time compute, multi-agent topologies (CoALA, ReAct, Swarms, MCP/A2A), hyperscaler stacks, Work-as-a-Service (WaaS) economics, enterprise use cases, and production sandboxing.
+- [**Master AI Encyclopedia (8 Volumes)**](research/ai_encyclopedia/README.md): 70+ year comprehensive history, mathematical foundations, frontier labs, university curricula, and future horizons.
+- [**Google Cloud Agentic Infrastructure**](research/google_cloud_agentic_infra/README.md): Cloud-native agent deployment on Vertex AI Reasoning Engine and Cloud Run.
+

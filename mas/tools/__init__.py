@@ -10,6 +10,10 @@ from mas.tools.filesystem import (
     fs_glob,
     register_filesystem_tools,
 )
+from mas.tools.computer_use import (
+    ComputerUseController,
+    register_computer_use_tools,
+)
 
 __all__ = [
     "run_python_code",
@@ -19,4 +23,6 @@ __all__ = [
     "fs_list_dir",
     "fs_glob",
     "register_filesystem_tools",
+    "ComputerUseController",
+    "register_computer_use_tools",
 ]

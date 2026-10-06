@@ -1,0 +1,64 @@
+# Acinonyx Enterprise Data Contract Specification
+# Conforms to mas.validation.validate_data_contract standard
+
+dataset: core_transactions_mart
+version: 1.0.0
+owner: analytics_engineering_squad
+description: "Core dimensional mart containing verified, deduplicated client financial transactions."
+
+sla:
+  freshness_hours: 1
+  availability: 0.999
+  latency_p95_seconds: 2.5
+
+schema:
+  - name: transaction_id
+    type: STRING
+    nullable: false
+    primary_key: true
+    description: "Unique synthetic surrogate key for the transaction event."
+
+  - name: client_id
+    type: STRING
+    nullable: false
+    cluster_key: true
+    description: "Enterprise client identifier mapped to dim_clients."
+
+  - name: transaction_timestamp
+    type: TIMESTAMP
+    nullable: false
+    partition_key: true
+    description: "UTC timestamp when the transaction occurred in the source gateway."
+
+  - name: amount
+    type: NUMERIC
+    nullable: false
+    description: "Net transaction amount in local currency (positive for debits, negative for credits)."
+
+  - name: currency_code
+    type: STRING
+    nullable: false
+    description: "ISO 4217 three-letter currency code (e.g., ZAR, USD, EUR)."
+
+  - name: status
+    type: STRING
+    nullable: false
+    cluster_key: true
+    enum: ["PENDING", "SETTLED", "REVERSED", "FAILED"]
+    description: "Current settlement state of the transaction."
+
+  - name: ingestion_timestamp
+    type: TIMESTAMP
+    nullable: false
+    description: "UTC timestamp when this record was appended to BigQuery."
+
+quality_checks:
+  - type: uniqueness
+    columns: ["transaction_id"]
+  - type: not_null
+    columns: ["transaction_id", "client_id", "amount", "transaction_timestamp"]
+  - type: accepted_values
+    column: "status"
+    values: ["PENDING", "SETTLED", "REVERSED", "FAILED"]
+  - type: row_count_anomaly
+    threshold_z_score: 3.0

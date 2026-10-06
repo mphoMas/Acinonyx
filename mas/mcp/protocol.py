@@ -146,6 +146,17 @@ class MCPRegistry:
         )
         self.tool_acl.default_allow.add(name)
 
+    def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Any:
+        """Synchronously execute a registered tool handler."""
+        if name not in self.tools:
+            raise KeyError(f"Tool '{name}' not found")
+        args = arguments or {}
+        tool = self.tools[name]
+        if inspect.iscoroutinefunction(tool.handler):
+            import asyncio
+            return asyncio.run(tool.handler(**args))
+        return tool.handler(**args)
+
     def register_resource(
         self,
         uri: str,

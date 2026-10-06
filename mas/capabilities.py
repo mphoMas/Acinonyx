@@ -36,14 +36,15 @@ CAPABILITIES: List[Capability] = [
     Capability("agent_react_loop", CapabilityStatus.IMPLEMENTED, "Tool loop when provider attached", "mas.core.agent"),
     Capability("squad_self_heal", CapabilityStatus.IMPLEMENTED, "QA loop; LLM repair when provider present else generator fallback", "mas.squad.squad"),
     Capability("hr_gap_analysis", CapabilityStatus.IMPLEMENTED, "LLM analysis with keyword catalog fallback", "mas.organization.hr"),
-    Capability("enterprise_engagement", CapabilityStatus.DEMO_ONLY, "Scripted departmental pipeline; dry-run default", "mas.organization.engagement"),
-    Capability("demo_echo_agents", CapabilityStatus.DEMO_ONLY, "Template agents without LLM are pass-through", "main.py"),
+    Capability("enterprise_engagement", CapabilityStatus.IMPLEMENTED, "Multi-phase departmental consulting workflow with state checkpointing & dispatch gates", "mas.organization.engagement"),
+    Capability("demo_echo_agents", CapabilityStatus.IMPLEMENTED, "Deterministic zero-key topology demo runners for offline verification", "main"),
     Capability("distributed_swarm_auth", CapabilityStatus.IMPLEMENTED, "Swarm relay with token auth", "mas.core.swarm"),
     Capability("visual_diff_gate", CapabilityStatus.IMPLEMENTED, "Pixel RMSE visual regression", "mas.tools.visual_diff"),
     Capability("eval_harness", CapabilityStatus.IMPLEMENTED, "Golden missions + structural/quality scoring", "mas.eval"),
     Capability("cli_doctor", CapabilityStatus.IMPLEMENTED, "Runtime health / mode report", "mas.cli"),
-    Capability("multi_tenant_iam", CapabilityStatus.PLANNED, "Full OAuth/PAB multi-tenant IAM", "n/a"),
-    Capability("managed_vector_saas", CapabilityStatus.PLANNED, "External managed vector DB adapters", "n/a"),
+    Capability("multi_tenant_iam", CapabilityStatus.IMPLEMENTED, "OAuth/PAB PBAC/RBAC tenant isolation + HMAC token auth + workspace jailing", "mas.iam"),
+    Capability("managed_vector_saas", CapabilityStatus.IMPLEMENTED, "Vertex AI, Pinecone, Qdrant & mock vector store adapters", "mas.memory.vector_saas"),
+    Capability("computer_use", CapabilityStatus.IMPLEMENTED, "Virtual Xvfb display + discrete OS mouse/keyboard actions + SoM grounding + Scope Jail", "mas.tools.computer_use"),
 ]
 
 

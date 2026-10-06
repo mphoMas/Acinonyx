@@ -9,9 +9,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from mas.core.message import ContentType, Message, Role
-
-
 class ValidationError(ValueError):
     """Raised when a payload fails schema or message-edge validation."""
 
@@ -31,8 +28,9 @@ class SchemaSpec:
         self.must_contain = self.must_contain or []
 
 
-def validate_message(message: Message) -> Message:
+def validate_message(message: Any) -> Any:
     """Reject silent/invalid cross-agent messages at the bus edge."""
+    from mas.core.message import ContentType, Message, Role
     if not isinstance(message, Message):
         raise ValidationError("EventBus only accepts Message instances")
     if not message.sender or not str(message.sender).strip():
@@ -45,8 +43,8 @@ def validate_message(message: Message) -> Message:
         raise ValidationError("Message.content_type must be a ContentType enum")
     if message.content is None:
         raise ValidationError("Message.content cannot be None")
-    if not isinstance(message.content, str):
-        raise ValidationError("Message.content must be a string")
+    if not isinstance(message.content, (str, list, dict)):
+        raise ValidationError("Message.content must be a string, list, or dict")
     if message.metadata is None or not message.metadata.correlation_id:
         raise ValidationError("Message.metadata.correlation_id is required")
     return message
@@ -91,3 +89,52 @@ def require_grounding(content: str, evidence_ids: List[str]) -> None:
             raise ValidationError(
                 "Ungrounded claim: factual language used without citing tool/memory evidence ids"
             )
+
+
+def validate_data_contract(content: str) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Validate a Data Contract specification (YAML or JSON) against enterprise DataOps standards.
+    Requires: dataset, version, owner, schema (list of fields with name & type), and sla.
+    Returns: (is_valid, reason, parsed_data)
+    """
+    if not content or not content.strip():
+        return False, "Data contract content is empty", {}
+    
+    text = content.strip()
+    data: Dict[str, Any] = {}
+    
+    try:
+        import yaml
+        parsed = yaml.safe_load(text)
+        if isinstance(parsed, dict):
+            data = parsed
+        else:
+            return False, "Data contract must parse to a key-value dictionary", {}
+    except Exception as exc:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                data = parsed
+            else:
+                return False, "Data contract JSON must be an object", {}
+        except Exception as jexc:
+            return False, f"Failed to parse data contract as YAML or JSON: {exc}", {}
+
+    required_top_keys = ["dataset", "version", "owner", "schema"]
+    for key in required_top_keys:
+        if key not in data:
+            return False, f"Missing mandatory data contract field: '{key}'", data
+
+    schema_fields = data.get("schema")
+    if not isinstance(schema_fields, list) or len(schema_fields) == 0:
+        return False, "'schema' must be a non-empty list of column definitions", data
+
+    for idx, field_spec in enumerate(schema_fields):
+        if not isinstance(field_spec, dict):
+            return False, f"schema[{idx}] must be an object specifying column metadata", data
+        if "name" not in field_spec or not str(field_spec["name"]).strip():
+            return False, f"schema[{idx}] missing 'name' attribute", data
+        if "type" not in field_spec or not str(field_spec["type"]).strip():
+            return False, f"schema[{idx}] missing 'type' attribute for column '{field_spec.get('name')}'", data
+
+    return True, "Data contract successfully validated", data

@@ -9,7 +9,7 @@ import json
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
-from mas.core.message import Message, TokenUsage
+from mas.core.message import ContentType, Message, TokenUsage
 from mas.providers.base import LLMProvider, ProviderResponse, ToolCall
 
 
@@ -62,9 +62,19 @@ class OpenAICompatibleProvider(LLMProvider):
         # Convert MAS messages to OpenAI chat format
         api_messages = []
         for m in messages:
+            content_payload: Any = m.content
+            if isinstance(m.content, list):
+                content_payload = m.content
+            elif getattr(m, "content_type", None) == ContentType.IMAGE and isinstance(m.content, str):
+                url = m.content
+                if not (url.startswith("http://") or url.startswith("https://") or url.startswith("data:image")):
+                    url = f"data:image/webp;base64,{m.content}"
+                content_payload = [
+                    {"type": "image_url", "image_url": {"url": url}}
+                ]
             api_messages.append({
                 "role": m.role.value if m.role.value in ("system", "user", "assistant") else "assistant",
-                "content": m.content,
+                "content": content_payload,
             })
 
         payload: Dict[str, Any] = {

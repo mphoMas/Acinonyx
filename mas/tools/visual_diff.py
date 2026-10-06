@@ -87,8 +87,8 @@ def compute_visual_diff(
 
     # Compute channel-by-channel absolute difference
     diff = ImageChops.difference(img_base, img_curr)
-    diff_data = diff.getdata()
-    base_data = img_base.getdata()
+    diff_data = diff.get_flattened_data() if hasattr(diff, "get_flattened_data") else diff.getdata()
+    base_data = img_base.get_flattened_data() if hasattr(img_base, "get_flattened_data") else img_base.getdata()
 
     total_pixels = max_w * max_h
     differing_pixels = 0

@@ -5,7 +5,7 @@
 
 Welcome to the **Acinonyx Master AI Encyclopedia**, an exhaustive, multi-volume digital compendium and living knowledge base documenting the history, theoretical architectures, builders, scientific papers, university curricula, product ecosystems, enterprise economics, and frontier future of Artificial Intelligence.
 
-This compendium synthesizes over seven decades of computer science, cognitive psychology, and thermodynamic silicon engineering. It builds upon foundational multi-agent research located in [`../multi_agent_systems/`](file:///home/acinonyx/Desktop/MAS/research/multi_agent_systems/) and enterprise cloud architecture blueprints in [`../google_cloud_agentic_infra/`](file:///home/acinonyx/Desktop/MAS/research/google_cloud_agentic_infra/).
+This compendium synthesizes over seven decades of computer science, cognitive psychology, and thermodynamic silicon engineering. It works in lockstep with the specialized deep dive [**Agentic Systems Master Study Compendium**](file:///home/acinonyx/Desktop/MAS/research/agentic_systems/README.md), foundational multi-agent research in [`../multi_agent_systems/`](file:///home/acinonyx/Desktop/MAS/research/multi_agent_systems/), and enterprise cloud architecture blueprints in [`../google_cloud_agentic_infra/`](file:///home/acinonyx/Desktop/MAS/research/google_cloud_agentic_infra/).
 
 ---
 

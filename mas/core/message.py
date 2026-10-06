@@ -29,6 +29,8 @@ class ContentType(str, Enum):
     TOOL_RESULT = "tool_result"
     REFLECTION = "reflection"
     ARTIFACT = "artifact"
+    IMAGE = "image"
+    MULTIMODAL = "multimodal"
 
 
 @dataclass(frozen=True)
@@ -57,15 +59,32 @@ class Message:
     sender: str = "system"
     recipient: str = "broadcast"
     role: Role = Role.ASSISTANT
-    content: str = ""
+    content: Any = ""
     content_type: ContentType = ContentType.TEXT
     metadata: MessageMetadata = field(default_factory=MessageMetadata)
     token_usage: Optional[TokenUsage] = None
 
+    @property
+    def text_content(self) -> str:
+        """Extract plain text representation even if content is multimodal blocks."""
+        if isinstance(self.content, str):
+            return self.content
+        if isinstance(self.content, list):
+            texts = []
+            for block in self.content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                elif isinstance(block, str):
+                    texts.append(block)
+            return " ".join(texts)
+        if isinstance(self.content, dict):
+            return json.dumps(self.content)
+        return str(self.content)
+
     def create_reply(
         self,
         sender: str,
-        content: str,
+        content: Any = "",
         role: Role = Role.ASSISTANT,
         content_type: ContentType = ContentType.TEXT,
         token_usage: Optional[TokenUsage] = None,
