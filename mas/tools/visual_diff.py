@@ -15,8 +15,9 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional, Tuple
 
 # Ensure local packages are available for PIL and Playwright
-PKG_DIR = "/home/acinonyx/Desktop/MAS/bin/packages"
-BROWSER_DIR = "/home/acinonyx/Desktop/MAS/bin/browsers"
+_REPO_ROOT = os.environ.get("MAS_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PKG_DIR = os.path.join(_REPO_ROOT, "bin", "packages")
+BROWSER_DIR = os.path.join(_REPO_ROOT, "bin", "browsers")
 if PKG_DIR not in sys.path:
     sys.path.insert(0, PKG_DIR)
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = BROWSER_DIR
@@ -96,7 +97,6 @@ def compute_visual_diff(
 
     # Build highlighted output mask:
     # Dimmed grayscale baseline with bright magenta highlights (#FF0055) on changed pixels
-    grayscale_base = ImageEnhance.Brightness(img_base.convert("L").convert("RGBA")).enhance(0.45)
     highlight_pixels = []
 
     for idx, (r_diff, g_diff, b_diff, a_diff) in enumerate(diff_data):

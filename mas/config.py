@@ -37,13 +37,17 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+# Repository root, overridable via MAS_WORKSPACE (keeps the package portable across hosts / CI).
+REPO_ROOT = Path(os.environ.get("MAS_WORKSPACE") or Path(__file__).resolve().parents[1])
+
+
 @dataclass
 class RuntimeConfig:
     """Single source of truth for MAS runtime behaviour."""
 
-    workspace_root: Path = field(default_factory=lambda: Path("/home/acinonyx/Desktop/MAS"))
+    workspace_root: Path = field(default_factory=lambda: REPO_ROOT)
     audit_log_path: Path = field(
-        default_factory=lambda: Path("/home/acinonyx/Desktop/MAS/workspace/audit/events.jsonl")
+        default_factory=lambda: REPO_ROOT / "workspace" / "audit" / "events.jsonl"
     )
     require_llm: bool = False
     allow_mock_provider: bool = True
@@ -62,7 +66,7 @@ class RuntimeConfig:
 
     @classmethod
     def from_env(cls, workspace_root: Optional[str | Path] = None) -> "RuntimeConfig":
-        root = Path(workspace_root or os.environ.get("MAS_WORKSPACE", "/home/acinonyx/Desktop/MAS"))
+        root = Path(workspace_root or os.environ.get("MAS_WORKSPACE", str(REPO_ROOT)))
         audit = Path(os.environ.get("MAS_AUDIT_LOG", str(root / "workspace" / "audit" / "events.jsonl")))
         roots_raw = os.environ.get("MAS_ALLOWED_ROOTS", "")
         roots = [r.strip() for r in roots_raw.split(":") if r.strip()] or [

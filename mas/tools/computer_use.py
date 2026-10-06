@@ -16,9 +16,11 @@ import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from PIL import Image
 
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
 from mas.tools.display import VirtualDisplayManager
@@ -31,6 +33,11 @@ from mas.tools.grounding import (
 
 
 # Security Scope Jail: Prohibited keystroke combinations and commands
+DEFAULT_AUDIT_LOG_PATH = os.environ.get(
+    "MAS_COMPUTER_USE_AUDIT_LOG",
+    str(Path(__file__).resolve().parents[2] / "workspace" / "computer_use_audit.jsonl"),
+)
+
 DENIED_KEY_CHORDS = {
     "ctrl+alt+del",
     "ctrl+alt+delete",
@@ -121,7 +128,7 @@ class ComputerUseController:
     def __init__(
         self,
         display_manager: Optional[VirtualDisplayManager] = None,
-        audit_log_path: str = "/home/acinonyx/Desktop/MAS/workspace/computer_use_audit.jsonl",
+        audit_log_path: str = DEFAULT_AUDIT_LOG_PATH,
     ) -> None:
         self.display_manager = display_manager or VirtualDisplayManager()
         self.audit_log_path = audit_log_path
@@ -189,7 +196,7 @@ class ComputerUseController:
         if not self.display_manager.is_mock:
             try:
                 import sys
-                pkg_dir = "/home/acinonyx/Desktop/MAS/bin/packages"
+                pkg_dir = f"{REPO_ROOT}/bin/packages"
                 if pkg_dir not in sys.path:
                     sys.path.insert(0, pkg_dir)
                 import mss

@@ -149,7 +149,6 @@ def detect_ui_elements(
     candidates: List[Tuple[int, int, int, int]] = []
     step = 16
     min_box_w, min_box_h = 30, 18
-    max_box_w, max_box_h = int(sw * 0.85), int(sh * 0.4)
 
     # 1. Grid-based high-variance rectangular region search
     for y in range(0, sh - min_box_h, step):

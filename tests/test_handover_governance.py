@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from mas.config import REPO_ROOT
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.engagement import ConsultingEngagement
 from mas.providers.gateway import TokenBudgetGovernor
@@ -50,7 +51,7 @@ class TestProjectRootJailing(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_jail, ignore_errors=True)
         # Restore standard roots
-        set_allowed_roots(["/home/acinonyx/Desktop/MAS", "/srv/mas-projects", "/tmp"])
+        set_allowed_roots([str(REPO_ROOT), "/srv/mas-projects", "/tmp"])
 
     async def test_write_inside_jail_succeeds(self):
         target = os.path.join(self.temp_jail, "sub", "test.py")

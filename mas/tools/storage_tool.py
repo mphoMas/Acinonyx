@@ -12,6 +12,7 @@ import shutil
 import subprocess
 from typing import Any, Dict, Optional
 
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import METRICS
 
@@ -20,7 +21,7 @@ def _find_gcloud_or_gsutil() -> Optional[str]:
     found = shutil.which("gcloud")
     if found:
         return found
-    candidate = "/home/acinonyx/Desktop/MAS/gcloud auth application-default login/google-cloud-sdk/bin/gcloud"
+    candidate = f"{REPO_ROOT}/gcloud auth application-default login/google-cloud-sdk/bin/gcloud"
     if os.path.exists(candidate) and os.access(candidate, os.X_OK):
         return candidate
     return None

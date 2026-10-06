@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -17,8 +18,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 
-DEFAULT_DB_PATH = Path("/home/acinonyx/Desktop/MAS/about_me/comms_vault.db")
-DEFAULT_BRAIN_DIR = Path("/home/acinonyx/.gemini/antigravity/brain")
+DEFAULT_DB_PATH = Path(
+    os.environ.get("MAS_COMMS_VAULT_DB", Path(__file__).resolve().parents[2] / "about_me" / "comms_vault.db")
+)
+DEFAULT_BRAIN_DIR = Path(os.environ.get("MAS_BRAIN_DIR", "/home/acinonyx/.gemini/antigravity/brain"))
 
 STOPWORDS = {
     'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren\'t',

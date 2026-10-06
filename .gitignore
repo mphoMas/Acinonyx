@@ -22,3 +22,10 @@ node_modules/
 # Vendored Google Cloud SDK (accidental local install dir)
 gcloud auth application-default login/
 
+
+# Local tooling
+.venv/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/

@@ -11,10 +11,11 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
 
-HITL_LOG_PATH = "/home/acinonyx/Desktop/MAS/workspace/hitl_inbox.jsonl"
+HITL_LOG_PATH = f"{REPO_ROOT}/workspace/hitl_inbox.jsonl"
 
 
 class HumanClarificationManager:

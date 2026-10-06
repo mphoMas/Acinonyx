@@ -18,6 +18,7 @@ import subprocess
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 
+from mas.config import REPO_ROOT
 from mas.core.agent import BaseAgent
 from mas.core.message import Role
 from mas.mcp.transport import MCPClient
@@ -372,7 +373,7 @@ class CIOAgent(BaseAgent):
         binaries: Dict[str, str] = {}
         probe_env = {
             **os.environ,
-            "PATH": f"/home/acinonyx/Desktop/MAS/bin:{os.environ.get('PATH', '')}",
+            "PATH": f"{REPO_ROOT}/bin:{os.environ.get('PATH', '')}",
         }
         for binary in self.BINARIES_TO_CHECK:
             try:
@@ -561,7 +562,7 @@ class CIOAgent(BaseAgent):
 
     async def run_infrastructure_audit(
         self,
-        workspace_root: str = "/home/acinonyx/Desktop/MAS",
+        workspace_root: str = str(REPO_ROOT),
     ) -> InfrastructureAuditReport:
         """
         Execute a full infrastructure audit. Returns a structured report.

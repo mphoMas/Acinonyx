@@ -18,10 +18,10 @@ pkg_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "bin", "
 if pkg_dir not in sys.path:
     sys.path.insert(0, pkg_dir)
 
-from PIL import Image, ImageDraw
-from mas.mcp.protocol import MCPRegistry
-from mas.tools.browser_tool import register_browser_tools
-from mas.tools.visual_diff import compute_visual_diff
+from PIL import Image, ImageDraw  # noqa: E402
+from mas.mcp.protocol import MCPRegistry  # noqa: E402
+from mas.tools.browser_tool import register_browser_tools  # noqa: E402
+from mas.tools.visual_diff import compute_visual_diff  # noqa: E402
 
 
 class TestVisualRegressionDiffing(unittest.TestCase):

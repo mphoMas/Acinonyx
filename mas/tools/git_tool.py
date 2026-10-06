@@ -10,15 +10,16 @@ from __future__ import annotations
 import os
 import subprocess
 from typing import Any, Dict, List, Optional
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 
 
-GIT_BIN = "/home/acinonyx/Desktop/MAS/bin/git" if os.path.exists("/home/acinonyx/Desktop/MAS/bin/git") else "git"
+GIT_BIN = f"{REPO_ROOT}/bin/git" if os.path.exists(f"{REPO_ROOT}/bin/git") else "git"
 GIT_ENV = {
     **os.environ,
-    "PATH": f"/home/acinonyx/Desktop/MAS/bin:{os.environ.get('PATH', '')}",
-    "GIT_EXEC_PATH": "/home/acinonyx/Desktop/MAS/bin/lib/git-core",
-    "GIT_TEMPLATE_DIR": "/home/acinonyx/Desktop/MAS/bin/share/git-core/templates",
+    "PATH": f"{REPO_ROOT}/bin:{os.environ.get('PATH', '')}",
+    "GIT_EXEC_PATH": f"{REPO_ROOT}/bin/lib/git-core",
+    "GIT_TEMPLATE_DIR": f"{REPO_ROOT}/bin/share/git-core/templates",
 }
 
 

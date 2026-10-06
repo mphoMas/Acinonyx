@@ -8,17 +8,18 @@ from __future__ import annotations
 import os
 import subprocess
 from typing import Any, Dict, List, Optional
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 
 
-UV_BIN = "/home/acinonyx/Desktop/MAS/bin/uv" if os.path.exists("/home/acinonyx/Desktop/MAS/bin/uv") else "uv"
+UV_BIN = f"{REPO_ROOT}/bin/uv" if os.path.exists(f"{REPO_ROOT}/bin/uv") else "uv"
 
 
 def _run_uv(args: List[str], cwd: Optional[str] = None) -> tuple[int, str, str]:
     try:
         proc = subprocess.run(
             [UV_BIN] + args,
-            cwd=cwd or "/home/acinonyx/Desktop/MAS",
+            cwd=cwd or f"{REPO_ROOT}",
             capture_output=True,
             text=True,
             timeout=120,

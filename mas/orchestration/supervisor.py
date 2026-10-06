@@ -112,7 +112,6 @@ class SupervisorAgent(BaseAgent):
             if not ready_tasks:
                 pending = [t for t in self.subtasks.values() if t.status == TaskStatus.PENDING]
                 running = [t for t in self.subtasks.values() if t.status == TaskStatus.RUNNING]
-                failed = [t for t in self.subtasks.values() if t.status == TaskStatus.FAILED]
                 if not pending and not running:
                     break
                 if pending and not ready_tasks:
@@ -195,7 +194,7 @@ class SupervisorAgent(BaseAgent):
         """End-to-end plan, execute, and aggregate a macro mission."""
         self.subtasks.clear()
         self.plan_subtasks(goal, task_specs)
-        results = await self.execute_subtasks()
+        await self.execute_subtasks()
 
         summary_lines = [f"=== MISSION SUMMARY: {goal} ==="]
         for task_id, task in self.subtasks.items():

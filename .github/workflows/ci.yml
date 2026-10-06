@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install system deps (virtual display + input)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xdotool
+      - name: Install package
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check mas tests
+      - name: Test with coverage
+        run: pytest --cov=mas --cov-report=term-missing --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t mas-core:ci .
+      - name: Verify container runs as non-root
+        run: test "$(docker run --rm --entrypoint id mas-core:ci -u)" != "0"

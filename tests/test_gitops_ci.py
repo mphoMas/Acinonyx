@@ -84,8 +84,6 @@ class TestGitOpsTooling(unittest.TestCase):
         async def capture_event(msg: Message):
             events.append(msg)
 
-        import asyncio
-        loop = asyncio.new_event_loop()
         bus.subscribe("gitops-listener", capture_event, topic="gitops.ci.result")
 
         # Execute

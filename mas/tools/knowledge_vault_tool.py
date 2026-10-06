@@ -12,10 +12,11 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import METRICS
 
-RESEARCH_ROOT = "/home/acinonyx/Desktop/MAS/research"
+RESEARCH_ROOT = f"{REPO_ROOT}/research"
 
 
 @dataclass

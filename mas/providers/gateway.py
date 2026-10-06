@@ -232,7 +232,6 @@ class ModelGatewayRequestHandler(SimpleHTTPRequestHandler):
         domain-specific deliverables and tool invocations based on agent context.
         """
         messages = payload.get("messages", [])
-        tools = payload.get("tools", [])
         model = payload.get("model", self.default_model)
 
         # Extract system prompt and last user prompt
@@ -245,7 +244,6 @@ class ModelGatewayRequestHandler(SimpleHTTPRequestHandler):
                 user_prompt = m.get("content", "")
 
         sys_lower = system_prompt.lower()
-        user_lower = user_prompt.lower()
 
         content = ""
         tool_calls = []

@@ -1,0 +1,15 @@
+.git
+.venv
+node_modules
+gcloud auth application-default login
+workspace
+research
+study
+about_me
+RunQL
+portal
+*.pdf
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.coverage

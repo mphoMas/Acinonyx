@@ -8,10 +8,12 @@ import glob
 import os
 from typing import Any, List
 
+from mas.config import REPO_ROOT
+
 
 # Global jail boundaries for autonomous agent filesystem operations
 ALLOWED_PROJECT_ROOTS: List[str] = [
-    "/home/acinonyx/Desktop/MAS",
+    str(REPO_ROOT),
     "/srv/mas-projects",
     "/tmp",
 ]

@@ -5,6 +5,7 @@ Architect: Acinonyx
 
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
+from mas.config import REPO_ROOT
 from mas.core.agent import BaseAgent
 from mas.core.event_bus import EventBus
 from mas.core.state import StateMachine
@@ -70,7 +71,7 @@ class ConsultingEnterprise:
         )
 
         projects = allowed_projects or [
-            "/home/acinonyx/Desktop/MAS/workspace/projects",
+            str(REPO_ROOT / "workspace" / "projects"),
             "/srv/mas-projects/acceptance",
         ]
 

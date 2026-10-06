@@ -4,6 +4,7 @@ Data Contract Validation, GCS Storage, and Dynamic Multi-Agent Delegation tools.
 """
 
 import unittest
+from pathlib import Path
 from mas.capabilities import capability_matrix
 from mas.mcp.protocol import MCPRegistry
 from mas.tools.bigquery_tool import (
@@ -53,7 +54,7 @@ class TestBigQueryFinOpsTools(unittest.TestCase):
 
 class TestDataContractValidation(unittest.TestCase):
     def setUp(self):
-        self.contract_path = "/home/acinonyx/Desktop/MAS/templates/data-contract.template.yml"
+        self.contract_path = str(Path(__file__).resolve().parents[1] / "templates" / "data-contract.template.yml")
 
     def test_contract_syntax_verification(self):
         res = data_contract_validate_tool(self.contract_path)

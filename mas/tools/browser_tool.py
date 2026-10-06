@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 
 
@@ -167,7 +168,7 @@ async def web_search_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
 
 async def browser_screenshot_tool(
     url: str,
-    output_path: str = "/home/acinonyx/Desktop/MAS/workspace/screenshot.png",
+    output_path: str = f"{REPO_ROOT}/workspace/screenshot.png",
     viewport_width: int = 1280,
     viewport_height: int = 800,
 ) -> Dict[str, Any]:
@@ -176,8 +177,8 @@ async def browser_screenshot_tool(
     import sys
 
     # Inject local packages and browser paths
-    pkg_dir = "/home/acinonyx/Desktop/MAS/bin/packages"
-    browser_dir = "/home/acinonyx/Desktop/MAS/bin/browsers"
+    pkg_dir = f"{REPO_ROOT}/bin/packages"
+    browser_dir = f"{REPO_ROOT}/bin/browsers"
     if pkg_dir not in sys.path:
         sys.path.insert(0, pkg_dir)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_dir
@@ -216,8 +217,8 @@ async def browser_navigate_tool(url: str) -> Dict[str, Any]:
     import os
     import sys
 
-    pkg_dir = "/home/acinonyx/Desktop/MAS/bin/packages"
-    browser_dir = "/home/acinonyx/Desktop/MAS/bin/browsers"
+    pkg_dir = f"{REPO_ROOT}/bin/packages"
+    browser_dir = f"{REPO_ROOT}/bin/browsers"
     if pkg_dir not in sys.path:
         sys.path.insert(0, pkg_dir)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_dir
@@ -286,7 +287,7 @@ def register_browser_tools(registry: MCPRegistry) -> None:
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "Web URL to capture"},
-                "output_path": {"type": "string", "default": "/home/acinonyx/Desktop/MAS/workspace/screenshot.png"},
+                "output_path": {"type": "string", "default": f"{REPO_ROOT}/workspace/screenshot.png"},
             },
             "required": ["url"],
         },

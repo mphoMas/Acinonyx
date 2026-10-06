@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 from typing import Any, Dict, Optional
+from mas.config import REPO_ROOT
 from mas.mcp.protocol import MCPRegistry
 from mas.observability import LOGGER, METRICS
 
@@ -26,7 +27,7 @@ def _find_bq_binary() -> Optional[str]:
     found = shutil.which("bq")
     if found:
         return found
-    candidate = "/home/acinonyx/Desktop/MAS/gcloud auth application-default login/google-cloud-sdk/bin/bq"
+    candidate = f"{REPO_ROOT}/gcloud auth application-default login/google-cloud-sdk/bin/bq"
     if os.path.exists(candidate) and os.access(candidate, os.X_OK):
         return candidate
     return None
