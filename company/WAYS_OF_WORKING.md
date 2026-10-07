@@ -64,7 +64,7 @@ graph LR
 ```
 
 ### Phase 1: Intake & The Scope Jail
-- Handled by `client_director` using [`templates/rfp-intake.template.md`](templates/rfp-intake.template.md).
+- Handled by `client_director` using [`templates/rfp-intake.template.md`](../templates/rfp-intake.template.md).
 - Define the business problem, target KPIs, and the **Scope Jail** (a non-negotiable list of excluded items).
 - Work commences only with an approved Client Engagement Brief and signed Statement of Work (SOW).
 
@@ -72,8 +72,8 @@ graph LR
 - Handled by `chief_architect` and `data_engineer`.
 - **Zero code is written without a contract:**
   - REST/gRPC interfaces: OpenAPI 3.1 or Protobuf.
-  - Data pipelines: Machine-readable Data Contracts ([`templates/data-contract.template.yml`](templates/data-contract.template.yml)) validated via `mas.validation.validate_data_contract()`.
-  - Architecture decisions: Documented in [`templates/adr.template.md`](templates/adr.template.md) under `/docs/adr/`.
+  - Data pipelines: Machine-readable Data Contracts ([`templates/data-contract.template.yml`](../templates/data-contract.template.yml)) validated via `mas.validation.validate_data_contract()`.
+  - Architecture decisions: Documented in [`templates/adr.template.md`](../templates/adr.template.md) under `/docs/adr/`.
 
 ### Phase 3: Dynamic Strike Pod Assembly
 - Summoned via `enterprise.assemble_strike_pod(title, requirements, required_specializations)`.

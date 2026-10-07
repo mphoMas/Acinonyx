@@ -14,7 +14,12 @@ workspace/audit/
 workspace/scratch/
 workspace/*.png
 workspace/*.jsonl
-about_me/*.log
+company/founder/*.log
+workspace/data/*.log
+workspace/data/*.db
+# Preserve the database snapshot already versioned before the folder migration.
+!workspace/data/comms_vault.db
+workspace/data/*.db-*
 
 # Node dependencies
 node_modules/
@@ -28,6 +33,8 @@ gcloud auth application-default login/
 coverage.xml
 htmlcov/
 .ruff_cache/
+build/
+*.egg-info/
 
 # Vendored local binaries
 bin/

@@ -1,9 +1,28 @@
 # Project ACINONYX: MAS-Core
 
 **Multi-Agent Operating Runtime** built from first principles in Python.  
-Version **0.2.0** — production packaging ready; enterprise engagement demos remain **staged** unless live dispatch is armed.
+Version **0.2.0** — development prototype; enterprise engagement demos remain **staged** unless live dispatch is armed. See the [independent architecture review](docs/reviews/ARCHITECT_REVIEW.md) for verified limitations and production blockers.
 
 See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for an honest implemented / demo-only / planned matrix.
+
+## Repository map
+
+| Folder | What belongs here |
+|---|---|
+| [`company/`](company/README.md) | Company mandate, ways of working, and founder material |
+| [`mas/`](mas/) | Python agent runtime and its tools |
+| [`tests/`](tests/) | Runtime unit and integration tests |
+| [`docs/`](docs/README.md) | Architecture, independent reviews, workflow documentation, and demo evidence |
+| [`research/`](research/README.md) | Research library and reference papers |
+| [`portal/`](portal/README.md) | Active research portal HTML, CSS, JavaScript, and catalog data |
+| [`scripts/`](scripts/README.md) | Operational utilities, catalog tooling, and demo runners |
+| [`templates/`](templates/) | Reusable document, data-contract, and web templates |
+| [`study/`](study/README.md) | Learning plans, labs, and certification resources |
+| [`RunQL/`](docs/data/README_RUNQL.md) | SQL workspace managed by RunQL |
+| [`workspace/`](workspace/README.md) | Local runtime data, experiments, project work, and evidence staging |
+| [`archives/`](archives/README.md) | Preserved portal snapshot and exported ZIP bundles |
+
+Start with the [documentation index](docs/README.md). The [structure guide](docs/REPOSITORY_STRUCTURE.md) explains where to put new files and lists moved paths. Runtime commands continue to run from the repository root.
 
 ---
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-about_me/comms_tracker.py: Developer CLI to inspect personal communication vault,
+scripts/comms_tracker.py: Developer CLI to inspect personal communication vault,
 linguistic patterns, understanding milestones, and engagement stats.
 
 Usage:
-    python3 about_me/comms_tracker.py sync
-    python3 about_me/comms_tracker.py profile
-    python3 about_me/comms_tracker.py activity
-    python3 about_me/comms_tracker.py search "search query"
-    python3 about_me/comms_tracker.py query "SELECT * FROM v_top_vocabulary LIMIT 10;"
+    python3 scripts/comms_tracker.py sync
+    python3 scripts/comms_tracker.py profile
+    python3 scripts/comms_tracker.py activity
+    python3 scripts/comms_tracker.py search "search query"
+    python3 scripts/comms_tracker.py query "SELECT * FROM v_top_vocabulary LIMIT 10;"
 """
 
 import sys
@@ -74,7 +74,7 @@ def main():
 
     elif command == "search":
         if len(args) < 2:
-            print("Usage: python3 about_me/comms_tracker.py search <term>")
+            print("Usage: python3 scripts/comms_tracker.py search <term>")
             return
         query = args[1]
         matches = vault.search_comms(query, limit=5)
@@ -86,7 +86,7 @@ def main():
 
     elif command == "query":
         if len(args) < 2:
-            print("Usage: python3 about_me/comms_tracker.py query \"SELECT ...\"")
+            print("Usage: python3 scripts/comms_tracker.py query \"SELECT ...\"")
             return
         sql = args[1]
         with vault.get_connection() as conn:

@@ -6,6 +6,8 @@ Storage mode: **workspace-local**
 
 Storage root: `./RunQL`
 
+Paths in this guide are relative to the repository root, not this document's directory. RunQL's storage location and the workflow in root `AGENTS.md` are unchanged.
+
 ## Setup
 
 Recommended `.gitignore` entry:

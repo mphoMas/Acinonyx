@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 
 DEFAULT_DB_PATH = Path(
-    os.environ.get("MAS_COMMS_VAULT_DB", Path(__file__).resolve().parents[2] / "about_me" / "comms_vault.db")
+    os.environ.get("MAS_COMMS_VAULT_DB", Path(__file__).resolve().parents[2] / "workspace" / "data" / "comms_vault.db")
 )
 DEFAULT_BRAIN_DIR = Path(os.environ.get("MAS_BRAIN_DIR", "/home/acinonyx/.gemini/antigravity/brain"))
 

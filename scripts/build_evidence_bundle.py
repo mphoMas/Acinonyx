@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGING = ROOT / "workspace" / "evidence_bundle_staging"
-ZIP_PATH_WORKSPACE = ROOT / "evidence_bundle_pilot_brief_b.zip"
+ZIP_PATH_WORKSPACE = ROOT / "archives" / "evidence" / "evidence_bundle_pilot_brief_b.zip"
 ZIP_PATH_ARTIFACTS = Path("/home/acinonyx/.gemini/antigravity-ide/brain/6597937e-65c8-4233-866e-20f29231993b/evidence_bundle_pilot_brief_b.zip")
 
 def main():

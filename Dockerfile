@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
     && chmod -R a+rX /ms-playwright
 
 COPY mas/ mas/
-COPY main.py pyproject.toml README.md MANDATE.md ./
+COPY main.py pyproject.toml README.md ./
+COPY company/MANDATE.md company/MANDATE.md
 COPY docs/ docs/
 
 # Run as an unprivileged user

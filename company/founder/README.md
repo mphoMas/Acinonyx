@@ -6,7 +6,7 @@
 > LinkedIn: [linkedin.com/in/mpho-mashile-04ab896a](https://www.linkedin.com/in/mpho-mashile-04ab896a/)  
 > Certifications: [credly.com/users/mpho-mashile](https://www.credly.com/users/mpho-mashile)  
 
-**Attached Document:** [mpho_mashile_cv.pdf](file:///home/acinonyx/Desktop/MAS/about_me/mpho_mashile_cv.pdf)
+**Attached Document:** [mpho_mashile_cv.pdf](mpho_mashile_cv.pdf)
 
 ---
 
@@ -92,11 +92,11 @@ A seasoned Cloud Data Analyst with over a decade of success designing and implem
 
 ## 🗄️ Cognitive Communication Vault & Linguistic Tracker
 
-This folder hosts the local SQL telemetry database that captures all interactions, user vocabulary, comprehension depth, and engagement metrics:
+The runtime workspace stores the local SQL telemetry database that captures all interactions, user vocabulary, comprehension depth, and engagement metrics:
 
-* **Database File:** [`comms_vault.db`](file:///home/acinonyx/Desktop/MAS/about_me/comms_vault.db) (SQLite WAL-mode database with FTS5 search)
-* **CLI Tool:** [`comms_tracker.py`](file:///home/acinonyx/Desktop/MAS/about_me/comms_tracker.py)
-* **Runtime Core:** [`mas.memory.CommsVault`](file:///home/acinonyx/Desktop/MAS/mas/memory/comms_vault.py)
+* **Database File:** [`comms_vault.db`](../../workspace/data/comms_vault.db) (SQLite WAL-mode database with FTS5 search)
+* **CLI Tool:** [`comms_tracker.py`](../../scripts/comms_tracker.py)
+* **Runtime Core:** [`mas.memory.CommsVault`](../../mas/memory/comms_vault.py)
 
 ### Key Schema Tables & Views:
 1. `messages`: Full-fidelity user prompts, clean text, word counts, and estimated tokens.
@@ -109,14 +109,14 @@ This folder hosts the local SQL telemetry database that captures all interaction
 ### Quick Commands:
 ```bash
 # Sync latest chats from Antigravity transcripts
-python3 about_me/comms_tracker.py sync
+python3 scripts/comms_tracker.py sync
 
 # View personal vocabulary and understanding scorecard
-python3 about_me/comms_tracker.py profile
+python3 scripts/comms_tracker.py profile
 
 # View daily engagement activity
-python3 about_me/comms_tracker.py activity
+python3 scripts/comms_tracker.py activity
 
 # Search past discussions
-python3 about_me/comms_tracker.py search "swarm"
+python3 scripts/comms_tracker.py search "swarm"
 ```

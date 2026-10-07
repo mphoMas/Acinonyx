@@ -1,6 +1,6 @@
 # 📚 Google Cloud Certified: Professional Agentic Architect — Master Syllabus
 
-This syllabus directly maps the official Google Cloud Certification Exam Guide (`professional_agentic_architect_exam_guide_english.pdf`) to modular engineering lessons, practical terminal labs, and Google Cloud architectural equivalents.
+This syllabus directly maps the official [Google Cloud Certification Exam Guide](resources/professional_agentic_architect_exam_guide_english.pdf) to modular engineering lessons, practical terminal labs, and Google Cloud architectural equivalents.
 
 ---
 

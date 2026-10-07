@@ -5,7 +5,8 @@ gcloud auth application-default login
 workspace
 research
 study
-about_me
+company/founder
+archives
 RunQL
 portal
 *.pdf
