@@ -1,6 +1,7 @@
 /**
- * portal/js/reader.js: High-Performance Technical Markdown Renderer & TOC Engine.
+ * portal/js/reader.js: High-Performance Technical Markdown Renderer & Reader Engine.
  * Converts markdown, GitHub-style alerts, fenced code, tables & Mermaid diagrams.
+ * Provides reader preferences (font size, reading density, bookmarks, share links).
  * 
  * Architect: frontend_engineer / MAS Swarm
  */
@@ -8,6 +9,95 @@
 class MarkdownReaderEngine {
   constructor() {
     this.mermaidInitialized = false;
+    this.fontSize = localStorage.getItem('acinonyx_font_size') || 'normal';
+    this.density = localStorage.getItem('acinonyx_density') || 'comfortable';
+    this.applyPreferences();
+  }
+
+  applyPreferences() {
+    const root = document.documentElement;
+    if (this.fontSize === 'small') {
+      root.style.setProperty('--reader-font-size', '0.94rem');
+      root.style.setProperty('--reader-line-height', '1.6');
+    } else if (this.fontSize === 'large') {
+      root.style.setProperty('--reader-font-size', '1.14rem');
+      root.style.setProperty('--reader-line-height', '1.85');
+    } else {
+      root.style.setProperty('--reader-font-size', '1.02rem');
+      root.style.setProperty('--reader-line-height', '1.7');
+    }
+
+    if (this.density === 'compact') {
+      root.style.setProperty('--reader-para-spacing', '0.9rem');
+    } else {
+      root.style.setProperty('--reader-para-spacing', '1.4rem');
+    }
+  }
+
+  setFontSize(size) {
+    this.fontSize = size;
+    localStorage.setItem('acinonyx_font_size', size);
+    this.applyPreferences();
+    if (window.toast) window.toast.show(`Font size set to ${size}`, 'info');
+  }
+
+  setDensity(density) {
+    this.density = density;
+    localStorage.setItem('acinonyx_density', density);
+    this.applyPreferences();
+    if (window.toast) window.toast.show(`Reading density: ${density}`, 'info');
+  }
+
+  isBookmarked(docId) {
+    try {
+      const marks = JSON.parse(localStorage.getItem('acinonyx_bookmarks') || '[]');
+      return marks.includes(docId);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  toggleBookmark(docId) {
+    try {
+      let marks = JSON.parse(localStorage.getItem('acinonyx_bookmarks') || '[]');
+      let bookmarked = false;
+      if (marks.includes(docId)) {
+        marks = marks.filter(id => id !== docId);
+        bookmarked = false;
+        if (window.toast) window.toast.show('Removed from favorites', 'info');
+      } else {
+        marks.push(docId);
+        bookmarked = true;
+        if (window.toast) window.toast.show('Saved to favorites ★', 'success');
+      }
+      localStorage.setItem('acinonyx_bookmarks', JSON.stringify(marks));
+
+      // Update UI button state if present
+      const starBtn = document.getElementById(`star-btn-${docId}`);
+      if (starBtn) {
+        starBtn.classList.toggle('active', bookmarked);
+        starBtn.innerHTML = bookmarked ? '★ Saved' : '☆ Save';
+      }
+
+      // Update sidebar star badge
+      const linkEl = document.getElementById(`link-${docId}`);
+      if (linkEl) {
+        let starBadge = linkEl.querySelector('.star-badge');
+        if (bookmarked && !starBadge) {
+          starBadge = document.createElement('span');
+          starBadge.className = 'star-badge';
+          starBadge.innerText = '★';
+          linkEl.prepend(starBadge);
+        } else if (!bookmarked && starBadge) {
+          starBadge.remove();
+        }
+      }
+
+      return bookmarked;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
   }
 
   render(markdownText) {
@@ -76,7 +166,6 @@ class MarkdownReaderEngine {
     md = md.replace(/(?:<li data-t="o">.*<\/li>\n?)+/g, m => `<ol>${m.replace(/ data-t="o"/g, '')}</ol>\n`);
 
     // 8. Inline formatting. Underscore emphasis only applies at word boundaries
-    //    so identifiers like comms_vault.py are left intact.
     md = md.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     md = md.replace(/(^|[\s(>])__([^_\n]+)__(?=[\s).,;:<]|$)/gm, '$1<strong>$2</strong>');
     md = md.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
@@ -196,6 +285,7 @@ window.copyCodeSnippet = function(button) {
       button.innerText = 'Copied!';
       button.style.borderColor = 'var(--accent-emerald)';
       button.style.color = 'var(--accent-emerald)';
+      if (window.toast) window.toast.show('Code snippet copied to clipboard', 'success');
       setTimeout(() => {
         button.innerText = orig;
         button.style.borderColor = '';

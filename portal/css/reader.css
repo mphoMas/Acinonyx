@@ -345,3 +345,124 @@ pre code {
   max-width: 100%;
   height: auto;
 }
+
+/* --------------------------------------------------------------------------
+   Reader Toolbar & Personalization Controls
+   -------------------------------------------------------------------------- */
+.reader-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  margin-top: 14px;
+}
+
+.reader-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.reader-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+}
+
+.reader-action-btn.active {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.reader-action-btn.star-active {
+  background: rgba(255, 183, 0, 0.15);
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.reader-font-btn {
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+}
+
+/* Dynamic Typography Overrides */
+.markdown-body {
+  font-size: var(--reader-font-size, 1.02rem) !important;
+  line-height: var(--reader-line-height, 1.7) !important;
+}
+
+.markdown-body p {
+  margin-bottom: var(--reader-para-spacing, 1.4rem) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Chapter Pagination Footer
+   -------------------------------------------------------------------------- */
+.chapter-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 3.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.page-nav-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  text-decoration: none;
+  max-width: 45%;
+  transition: all var(--transition-fast);
+}
+
+.page-nav-card:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.page-nav-label {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.page-nav-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

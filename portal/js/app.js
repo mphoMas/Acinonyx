@@ -37,6 +37,10 @@ class PortalApp {
     this.setupEventListeners();
     this.setupGlobalShortcuts();
 
+    if (window.copilot) {
+      window.copilot.init();
+    }
+
     window.addEventListener('popstate', () => this.route());
     this.route();
   }
@@ -101,12 +105,16 @@ class PortalApp {
           <div class="volume-chapters">
             ${modNames.map(m => `
               ${m === 'Overview' ? '' : `<div class="module-label">${m}</div>`}
-              ${vol.modules[m].map(d => `
+              ${vol.modules[m].map(d => {
+                const isStarred = this.readerEngine && this.readerEngine.isBookmarked(d.id);
+                return `
                 <a href="#/doc/${d.id}" class="chapter-link" id="link-${d.id}"
                    onclick="event.preventDefault(); app.loadDocument('${d.id}')">
+                  ${isStarred ? '<span class="star-badge">★</span>' : ''}
                   <span class="chapter-name">${d.shortTitle}</span>
                   <span class="chapter-meta">${d.readTimeMin}m</span>
-                </a>`).join('')}
+                </a>`;
+              }).join('')}
             `).join('')}
           </div>
         </div>`;
@@ -331,6 +339,17 @@ class PortalApp {
       `;
     }
 
+    // Update Bookmark Button state
+    const isStarred = this.readerEngine && this.readerEngine.isBookmarked(docId);
+    const starBtn = document.getElementById('star-btn');
+    if (starBtn) {
+      starBtn.classList.toggle('star-active', isStarred);
+      const icon = document.getElementById('star-btn-icon');
+      const txt = document.getElementById('star-btn-text');
+      if (icon) icon.innerText = isStarred ? '★' : '☆';
+      if (txt) txt.innerText = isStarred ? 'Saved' : 'Save';
+    }
+
     // Render Markdown (drop the leading H1: the page header already shows it)
     const bodyEl = document.getElementById('markdown-body');
     if (bodyEl) {
@@ -338,6 +357,29 @@ class PortalApp {
       bodyEl.innerHTML = this.readerEngine.render(src);
       // Run Mermaid
       setTimeout(() => this.readerEngine.initMermaid(), 50);
+    }
+
+    // Render Chapter Pagination Footer
+    const nonIndexDocs = this.catalog.documents.filter(d => d.volumeKey !== 'README.md');
+    const curIdx = nonIndexDocs.findIndex(d => d.id === docId);
+    const prevDoc = curIdx > 0 ? nonIndexDocs[curIdx - 1] : null;
+    const nextDoc = curIdx >= 0 && curIdx < nonIndexDocs.length - 1 ? nonIndexDocs[curIdx + 1] : null;
+    const pagEl = document.getElementById('chapter-pagination');
+    if (pagEl) {
+      pagEl.innerHTML = `
+        ${prevDoc ? `
+          <a href="#/doc/${prevDoc.id}" class="page-nav-card" onclick="event.preventDefault(); app.loadDocument('${prevDoc.id}')">
+            <span class="page-nav-label">← Previous Chapter</span>
+            <span class="page-nav-title">${prevDoc.shortTitle || prevDoc.title}</span>
+          </a>
+        ` : `<div></div>`}
+        ${nextDoc ? `
+          <a href="#/doc/${nextDoc.id}" class="page-nav-card" style="text-align: right; margin-left: auto;" onclick="event.preventDefault(); app.loadDocument('${nextDoc.id}')">
+            <span class="page-nav-label">Next Chapter →</span>
+            <span class="page-nav-title">${nextDoc.shortTitle || nextDoc.title}</span>
+          </a>
+        ` : `<div></div>`}
+      `;
     }
 
     // Render Right-Rail TOC & Document Stats
@@ -489,7 +531,7 @@ class PortalApp {
 
   setSearchFilter(category) {
     this.searchEngine.setFilter(category);
-    ['ALL', 'agentic_systems', 'ai_encyclopedia', 'google_cloud_agentic_infra', 'multi_agent_systems'].forEach(c => {
+    ['ALL', 'FAVORITES', 'agentic_systems', 'ai_encyclopedia', 'google_cloud_agentic_infra', 'multi_agent_systems'].forEach(c => {
       const chip = document.getElementById(`filter-chip-${c}`);
       if (chip) {
         if (c === category) chip.classList.add('active');
@@ -612,18 +654,124 @@ class PortalApp {
     }
   }
 
+  // Reader Interactive Controls
+  toggleStarCurrentDoc() {
+    if (!this.activeDocId) return;
+    const starred = this.readerEngine.toggleBookmark(this.activeDocId);
+    const starBtn = document.getElementById('star-btn');
+    if (starBtn) {
+      starBtn.classList.toggle('star-active', starred);
+      const icon = document.getElementById('star-btn-icon');
+      const txt = document.getElementById('star-btn-text');
+      if (icon) icon.innerText = starred ? '★' : '☆';
+      if (txt) txt.innerText = starred ? 'Saved' : 'Save';
+    }
+  }
+
+  copyShareLink() {
+    if (!this.activeDocId) return;
+    const url = `${window.location.origin}${window.location.pathname}#/doc/${this.activeDocId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      if (window.toast) window.toast.show('Share link copied to clipboard 🔗', 'success');
+    });
+  }
+
+  copyMarkdown() {
+    const doc = this.catalog.documents.find(d => d.id === this.activeDocId);
+    if (!doc) return;
+    navigator.clipboard.writeText(doc.content).then(() => {
+      if (window.toast) window.toast.show('Raw markdown copied to clipboard 📄', 'success');
+    });
+  }
+
+  toggleDensity() {
+    const newMode = this.readerEngine.density === 'comfortable' ? 'compact' : 'comfortable';
+    this.readerEngine.setDensity(newMode);
+  }
+
+  openCopilot() {
+    if (window.copilot) window.copilot.open();
+  }
+
+  closeCopilot() {
+    if (window.copilot) window.copilot.close();
+  }
+
+  openShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) modal.classList.add('active');
+  }
+
+  closeShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  prevChapter() {
+    const docs = this.catalog.documents.filter(d => d.volumeKey !== 'README.md');
+    const idx = docs.findIndex(d => d.id === this.activeDocId);
+    if (idx > 0) this.loadDocument(docs[idx - 1].id);
+  }
+
+  nextChapter() {
+    const docs = this.catalog.documents.filter(d => d.volumeKey !== 'README.md');
+    const idx = docs.findIndex(d => d.id === this.activeDocId);
+    if (idx >= 0 && idx < docs.length - 1) this.loadDocument(docs[idx + 1].id);
+  }
+
   setupGlobalShortcuts() {
     window.addEventListener('keydown', (e) => {
-      // Ctrl+K or / opens search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
+      // Ctrl+K or Cmd+K opens search
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.openSearch();
-      } else if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+        return;
+      }
+
+      // Ctrl+J or Cmd+J opens Copilot
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        this.openSearch();
-      } else if (e.key === 'Escape') {
+        this.openCopilot();
+        return;
+      }
+
+      // Escape closes any open modal or drawer
+      if (e.key === 'Escape') {
         this.closeSearch();
         this.closeAuditModal();
+        this.closeCopilot();
+        this.closeShortcutsModal();
+        return;
+      }
+
+      // Non-input single key shortcuts
+      if (!isInput) {
+        if (e.key === '/') {
+          e.preventDefault();
+          this.openSearch();
+        } else if (e.key === '?') {
+          e.preventDefault();
+          this.openShortcutsModal();
+        } else if (e.key === '[') {
+          e.preventDefault();
+          this.prevChapter();
+        } else if (e.key === ']') {
+          e.preventDefault();
+          this.nextChapter();
+        } else if (e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          this.toggleStarCurrentDoc();
+        } else if (e.key.toLowerCase() === 'h') {
+          this.switchView('home');
+        } else if (e.key.toLowerCase() === 'r') {
+          this.switchView('reader');
+        } else if (e.key.toLowerCase() === 't') {
+          this.switchView('topology');
+        } else if (e.key.toLowerCase() === 'f') {
+          this.switchView('finops');
+        }
       }
     });
   }

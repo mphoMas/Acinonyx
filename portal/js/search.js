@@ -25,9 +25,20 @@ class ResearchSearchEngine {
     const terms = q.split(/\s+/).filter(t => t.length > 0);
     const scoredResults = [];
 
+    let bookmarks = [];
+    if (this.activeFilter === 'FAVORITES') {
+      try {
+        bookmarks = JSON.parse(localStorage.getItem('acinonyx_bookmarks') || '[]');
+      } catch (e) {
+        bookmarks = [];
+      }
+    }
+
     for (const doc of this.documents) {
-      // Filter by volume category if set
-      if (this.activeFilter !== 'ALL' && doc.volumeKey !== this.activeFilter) {
+      // Filter by favorites or volume category if set
+      if (this.activeFilter === 'FAVORITES') {
+        if (!bookmarks.includes(doc.id)) continue;
+      } else if (this.activeFilter !== 'ALL' && doc.volumeKey !== this.activeFilter) {
         continue;
       }
 
@@ -99,6 +110,27 @@ class ResearchSearchEngine {
   }
 
   getDefaultResults(limit = 8) {
+    if (this.activeFilter === 'FAVORITES') {
+      try {
+        const bookmarks = JSON.parse(localStorage.getItem('acinonyx_bookmarks') || '[]');
+        const favDocs = this.documents.filter(d => bookmarks.includes(d.id));
+        if (favDocs.length === 0) {
+          return [{
+            doc: { id: '', title: 'No Starred Chapters Yet', volumeTitle: 'Favorites', volumeColor: 'var(--accent-amber)', tags: [] },
+            score: 1,
+            snippet: 'Click the "☆ Save" button on any chapter or press "B" while reading to bookmark it.'
+          }];
+        }
+        return favDocs.slice(0, limit).map(doc => ({
+          doc,
+          score: 1,
+          snippet: this.cleanSnippet(doc.summary || '')
+        }));
+      } catch (e) {
+        return [];
+      }
+    }
+
     return this.documents.slice(0, limit).map(doc => ({
       doc,
       score: 1,
