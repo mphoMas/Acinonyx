@@ -1,0 +1,293 @@
+{
+  "clean_results": {
+    "timestamp_utc": "2026-10-07T13:41:34.684535+00:00",
+    "browser_version": "154.0.8037.97",
+    "desktop_load_latency_ms": 1222.0,
+    "assertions": {
+      "page_title": "Acinonyx Living AI & Agentic Systems Research Portal",
+      "reader_view_activated": true,
+      "star_btn_present": true,
+      "toast_triggered": true,
+      "toast_messages": [
+        "Saved to favorites \u2605"
+      ],
+      "mobile_toggle_present": true
+    },
+    "console_errors": [],
+    "axe_summary": {
+      "violations_count": 2,
+      "passes_count": 26,
+      "incomplete_count": 2,
+      "inapplicable_count": 33,
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "tags": [
+            "cat.color",
+            "wcag2aa",
+            "wcag143",
+            "TTv5",
+            "TT13.c",
+            "EN-301-549",
+            "EN-9.1.4.3",
+            "ACT"
+          ],
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#64748b",
+                    "bgColor": "#101623",
+                    "contrastRatio": 3.8,
+                    "fontSize": "9.8pt (13.12px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1",
+                    "shadowColor": null
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"search-trigger\" id=\"search-trigger-btn\" onclick=\"app.openSearch()\" role=\"button\" tabindex=\"0\">\n        <span>\ud83d\udd0d Search 82 modules...</span>\n        <span class=\"search-kbd\">Ctrl K</span>\n      </div>",
+                      "target": [
+                        "#search-trigger-btn"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 9.8pt (13.12px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<span>\ud83d\udd0d Search 82 modules...</span>",
+              "target": [
+                "#search-trigger-btn > span:nth-child(1)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 9.8pt (13.12px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#64748b",
+                    "bgColor": "#101623",
+                    "contrastRatio": 3.8,
+                    "fontSize": "8.6pt (11.52px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1",
+                    "shadowColor": null
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"reader-toolbar\" id=\"reader-toolbar\">",
+                      "target": [
+                        "#reader-toolbar"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.6pt (11.52px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<span style=\"font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); margin-right: 2px;\">SIZE:</span>",
+              "target": [
+                ".reader-toolbar-group:nth-child(2) > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.6pt (11.52px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#64748b",
+                    "bgColor": "#101623",
+                    "contrastRatio": 3.8,
+                    "fontSize": "8.6pt (11.52px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1",
+                    "shadowColor": null
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<a href=\"#/doc/agentic_systems_01_frontier_models_and_intelligence_02_reasoning_models_test_time_compute\" class=\"page-nav-card\" style=\"text-align: right; margin-left: auto;\" onclick=\"event.preventDefault(); app.loadDocument('agentic_systems_01_frontier_models_and_intelligence_02_reasoning_models_test_time_compute')\">",
+                      "target": [
+                        ".page-nav-card"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.6pt (11.52px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<span class=\"page-nav-label\">Next Chapter \u2192</span>",
+              "target": [
+                ".page-nav-label"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.6pt (11.52px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#64748b",
+                    "bgColor": "#101623",
+                    "contrastRatio": 3.8,
+                    "fontSize": "8.4pt (11.2px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1",
+                    "shadowColor": null
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"copilot-footer\">",
+                      "target": [
+                        ".copilot-footer"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.4pt (11.2px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<span>Press Enter to send</span>",
+              "target": [
+                ".copilot-footer > div:nth-child(2) > span:nth-child(1)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.4pt (11.2px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#64748b",
+                    "bgColor": "#101623",
+                    "contrastRatio": 3.8,
+                    "fontSize": "8.4pt (11.2px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1",
+                    "shadowColor": null
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"copilot-footer\">",
+                      "target": [
+                        ".copilot-footer"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.4pt (11.2px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<span>Shortcut: Ctrl J</span>",
+              "target": [
+                ".copilot-footer > div:nth-child(2) > span:nth-child(2)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.8 (foreground color: #64748b, background color: #101623, font size: 8.4pt (11.2px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        },
+        {
+          "id": "scrollable-region-focusable",
+          "impact": "serious",
+          "tags": [
+            "cat.keyboard",
+            "wcag2a",
+            "wcag211",
+            "wcag213",
+            "TTv5",
+            "TT4.a",
+            "EN-301-549",
+            "EN-9.2.1.1",
+            "EN-9.2.1.3"
+          ],
+          "description": "Ensure elements that have scrollable content are accessible by keyboard",
+          "help": "Scrollable region must have keyboard access",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable?application=axeAPI",
+          "nodes": [
+            {
+              "any": [
+                {
+                  "id": "focusable-content",
+                  "data": null,
+                  "relatedNodes": [],
+                  "impact": "serious",
+                  "message": "Element should have focusable content"
+                },
+                {
+                  "id": "focusable-element",
+                  "data": null,
+                  "relatedNodes": [],
+                  "impact": "serious",
+                  "message": "Element should be focusable"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<div class=\"table-wrapper\">",
+              "target": [
+                ".table-wrapper"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+            }
+          ]
+        }
+      ]
+    },
+    "evaluation_decision": "RELEASE_BLOCKED",
+    "blocking_finding_ids": [
+      "FIND-A11Y-color-contrast",
+      "FIND-A11Y-scrollable-region-focusable"
+    ],
+    "advisory_count": 0
+  },
+  "defect_results": {
+    "defects_introduced": [
+      "Empty <title> tag (violates WCAG 2.4.2 Page Titled)",
+      "Button #defect-zero-contrast-btn with #ffffff text on #ffffff background (1.00:1 contrast, violates WCAG 1.4.3)",
+      "Image #defect-missing-alt-img lacking alt attribute (violates WCAG 1.1.1 Non-text Content)"
+    ],
+    "violations_count": 2,
+    "violation_ids": [
+      "document-title",
+      "image-alt"
+    ],
+    "evaluation_decision": "RELEASE_BLOCKED",
+    "blocking_finding_ids": [
+      "FIND-A11Y-document-title",
+      "FIND-A11Y-image-alt"
+    ],
+    "reasons": [
+      "[BLOCKING_A11Y] document-title on html: Ensure each HTML document contains a non-empty <title> element",
+      "[BLOCKING_A11Y] image-alt on #defect-missing-alt-img: Ensure <img> elements have alternative text or a role of none or presentation"
+    ]
+  }
+}

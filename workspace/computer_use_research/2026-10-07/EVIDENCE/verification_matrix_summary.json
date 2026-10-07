@@ -1,0 +1,59 @@
+{
+  "timestamp_utc": "2026-10-07T13:52:29Z",
+  "results": {
+    "case_01_baseline_control": {
+      "decision": "RELEASE_PERMITTED",
+      "blocking_count": 0
+    },
+    "case_02_defect_missing_title": {
+      "decision": "RELEASE_BLOCKED",
+      "blocking_findings": [
+        "FIND-A11Y-document-title"
+      ]
+    },
+    "case_03_defect_contrast": {
+      "decision": "RELEASE_BLOCKED",
+      "blocking_findings": [
+        "FIND-A11Y-color-contrast"
+      ]
+    },
+    "case_04_defect_missing_alt": {
+      "decision": "RELEASE_BLOCKED",
+      "blocking_findings": [
+        "FIND-A11Y-image-alt"
+      ]
+    },
+    "case_05_defect_broken_script": {
+      "decision": "RELEASE_BLOCKED",
+      "blocking_findings": [
+        "FIND-FUNC-STAR-ACTION"
+      ]
+    },
+    "case_06_hash_mismatch": {
+      "decision": "RELEASE_BLOCKED",
+      "reasons": [
+        "Audit candidate_hash mismatch: expected '245e3999fa89e1ffebd8ed13126e63df63dc8a9aab500731599de5f822160fc5', got 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'.",
+        "Findings report for 'static_contract' has mismatched run_id: got 'RUN-01-BASELINE'.",
+        "Findings report for 'axe_a11y' has mismatched run_id: got 'RUN-01-BASELINE'.",
+        "Findings report for 'playwright_render' has mismatched run_id: got 'RUN-01-BASELINE'."
+      ]
+    },
+    "case_07_ghost_evidence": {
+      "decision": "RELEASE_BLOCKED",
+      "reasons": [
+        "[BLOCKING_A11Y] rule-bogus on body: Bogus defect with non-existent evidence artifact",
+        "Blocking finding 'FIND-A11Y-BOGUS' references non-existent evidence artifact: '/nonexistent/path/ghost_evidence.json'."
+      ]
+    },
+    "case_08_incomplete_audit": {
+      "decision": "RELEASE_BLOCKED",
+      "reasons": [
+        "Verification audit is marked incomplete (execution_complete must be boolean True).",
+        "Missing mandatory verification suites: ['axe_a11y'].",
+        "Findings report for 'static_contract' has mismatched run_id: got 'RUN-01-BASELINE'.",
+        "Findings report for 'axe_a11y' has mismatched run_id: got 'RUN-01-BASELINE'.",
+        "Findings report for 'playwright_render' has mismatched run_id: got 'RUN-01-BASELINE'."
+      ]
+    }
+  }
+}

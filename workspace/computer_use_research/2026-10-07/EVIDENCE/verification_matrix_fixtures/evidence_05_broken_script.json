@@ -1,0 +1,10 @@
+{
+  "file_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_05_defect_broken_script.html",
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_05_defect_broken_script.png",
+  "latency_ms": 22.36,
+  "console_errors": [],
+  "functional_ok": false,
+  "functional_error": "Page.wait_for_selector: Timeout 2000ms exceeded.\nCall log:\n  - waiting for locator(\"#toast.toast-visible\") to be visible\n",
+  "axe_violations": [],
+  "axe_passes_count": 14
+}

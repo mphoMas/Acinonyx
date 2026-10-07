@@ -1,0 +1,11 @@
+{
+  "fixture": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/canvas_fixture.html",
+  "click_coordinates": {
+    "x": 170,
+    "y": 120
+  },
+  "resulting_state_text": "Clicks: 1 (Last at: 150,100)",
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/canvas_outcome_verified.png",
+  "status": "OUTCOME-VERIFIED",
+  "conclusion": "Playwright page.mouse handles in-browser canvas coordinates without requiring desktop Xvfb automation."
+}

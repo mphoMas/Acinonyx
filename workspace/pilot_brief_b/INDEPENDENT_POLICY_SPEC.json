@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "document_type": "INDEPENDENT_POLICY_SPECIFICATION",
+  "policy_id": "policy_finops_dashboard_v1",
+  "policy_version": "1.0.0",
+  "author": "Chief Principal Agentic Engineer / Office of Governance",
+  "target_profile": "WCAG_AA",
+  "mandatory_suites": [
+    "fact_verification",
+    "axe_a11y",
+    "playwright_render"
+  ],
+  "max_advisories": 5,
+  "allowed_classifications": [
+    "BLOCKING_FUNCTIONAL",
+    "BLOCKING_A11Y",
+    "ADVISORY_STYLE"
+  ],
+  "enforce_evidence_integrity": true,
+  "rules": {
+    "color_contrast_minimum": 4.5,
+    "target_size_minimum_px": 24.0,
+    "sc_2_5_8_spacing_exception_checked": true,
+    "require_authorized_action_binding": true
+  }
+}

@@ -1,0 +1,46 @@
+=== 1. RELEASE POLICY & BROKEN CANDIDATE TEST SUITE OUTPUT (pytest -v) ===
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.0.3, pluggy-1.6.0 -- /home/acinonyx/anaconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/acinonyx/Desktop/MAS
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collecting ... collected 16 items
+
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_candidate_hash_and_run_id_mismatch PASSED [  6%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_invalid_bounding_box_dimension_blocked PASSED [ 12%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judge_round6_advisories_do_not_block_release PASSED [ 18%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judge_round6_execution_complete_string_false_blocked PASSED [ 25%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judge_round6_missing_findings_field_in_report_blocked PASSED [ 31%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judge_round6_non_hex_candidate_hash_blocked PASSED [ 37%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judge_round6_suite_executions_null_blocked_without_crash PASSED [ 43%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judicial_case_1_empty_required_suites_or_empty_results PASSED [ 50%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judicial_case_2_suite_marked_completed_without_findings_report PASSED [ 56%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_judicial_case_3_same_suite_recorded_as_completed_and_crashed PASSED [ 62%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_rebalance_action_contract_in_pilot_artifacts PASSED [ 68%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_unknown_classification_is_rejected PASSED [ 75%]
+tests/test_release_policy.py::TestReleasePolicyJudicialAudit::test_valid_execution_with_zero_blocking_findings_passes PASSED [ 81%]
+tests/test_deliberately_broken_candidate.py::TestDeliberatelyBrokenCandidate::test_candidate_0_is_blocked_by_dynamic_analysis PASSED [ 87%]
+tests/test_deliberately_broken_candidate.py::TestDeliberatelyBrokenCandidate::test_candidate_1_passes_dynamic_analysis PASSED [ 93%]
+tests/test_deliberately_broken_candidate.py::TestDeliberatelyBrokenCandidate::test_deliberately_broken_candidate_1_is_detected_and_blocked PASSED [100%]
+
+============================== 16 passed in 0.04s ==============================
+
+
+=== 2. DYNAMIC PILOT EXECUTION OUTPUT (python3 workspace/pilot_brief_b/run_pilot.py) ===
+======================================================================
+FINOPS PILOT (BRIEF B) DYNAMIC VERIFICATION COMPLETE
+======================================================================
+Fact Sheet Hash        : f839e8a855f9814975b1cb14515cbee35b08fde6b129a1a04bb6420ed1815ddc
+Candidate 0 Hash       : 3056aa5ee260d9f4cd437aaedf038022f8d2a66510a565d5cba68b6a3d765bf9
+Candidate 1 Hash       : 09e50480ff9fc5d326a4524dc24fe31a0972bdf1c09d3d20528e90721ee258e1
+Broken Candidate Hash  : 027573085cdee29238a09d485caa8c9933be508d3ddcee15e13c9bc913cc1e65
+Candidate 0 Contrast (#5c544d on #141310): 2.5039:1 -> FAIL
+Candidate 1 Contrast (#f5f2eb on #2b2823): 13.1303:1 -> PASS
+Broken C1 Contrast   (#2b2823 on #2b2823): 1.0000:1 -> FAIL
+Candidate 0 Gate Decision : RELEASE_BLOCKED (4 blockers)
+Candidate 1 Gate Decision : RELEASE_PERMITTED (0 blockers, 1 advisories)
+Broken C1 Gate Decision   : RELEASE_BLOCKED (2 blockers -> CONFIRMED BLOCKED)
+Report Output Saved        : /home/acinonyx/Desktop/MAS/workspace/pilot_brief_b/pilot_execution_report.json
+======================================================================
+

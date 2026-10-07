@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "document_type": "FROZEN_PRODUCT_FACT_SHEET",
+  "sheet_id": "fact_sheet_finops",
+  "version": "1.0.1",
+  "frozen_at": "2026-10-07T08:00:00Z",
+  "author": "FinOps Systems Governance / Acinonyx Labs",
+  "domain": "Multi-Tenant Cloud Financial Operations",
+  "claims": [
+    {
+      "claim_id": "CLM-01",
+      "statement": "Total allocated tenant monthly budget cap is $250,000.",
+      "category": "ALLOCATION",
+      "verification_source": "GCP Billing Account Budget API (ID: 01A2B3-4C5D6E)",
+      "confidence": "VERIFIED_TRUTH"
+    },
+    {
+      "claim_id": "CLM-02",
+      "statement": "Current aggregate monthly spend is $184,210 (73.68% of budget).",
+      "category": "BURN_RATE",
+      "verification_source": "BigQuery Billing Export (Dataset: cloud_billing.gcp_billing_export_v1)",
+      "confidence": "VERIFIED_TRUTH"
+    },
+    {
+      "claim_id": "CLM-03",
+      "statement": "Top spending service is BigQuery Storage at $42,100 / month.",
+      "category": "COST_ATTRIBUTION",
+      "verification_source": "Billing SKU aggregation query (SKU: 1729-BQ-STORAGE-PHYSICAL)",
+      "confidence": "VERIFIED_TRUTH"
+    }
+  ],
+  "authorized_actions": [
+    {
+      "action_id": "ACT-REBALANCE-01",
+      "label": "Apply Rebalance",
+      "description": "Trigger automated compute-quota reclamation and storage tier reallocation across low-utilization sandbox tenants.",
+      "target_endpoint": "/api/finops/v1/rebalance",
+      "idempotent": true,
+      "confirmation_required": true,
+      "expected_outcome": "Reclaims $15,000 idle commitments, reducing current aggregate monthly spend from $184,210 to $169,210 (67.68% of budget)."
+    }
+  ]
+}

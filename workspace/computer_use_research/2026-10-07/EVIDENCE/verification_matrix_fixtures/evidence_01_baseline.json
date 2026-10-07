@@ -1,0 +1,10 @@
+{
+  "file_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_01_baseline.html",
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_01_baseline.png",
+  "latency_ms": 18.63,
+  "console_errors": [],
+  "functional_ok": true,
+  "functional_error": null,
+  "axe_violations": [],
+  "axe_passes_count": 17
+}

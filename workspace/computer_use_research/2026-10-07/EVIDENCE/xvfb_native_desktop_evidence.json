@@ -1,0 +1,28 @@
+{
+  "display": ":96",
+  "is_mock": false,
+  "status": {
+    "display": ":96",
+    "is_active": true,
+    "is_mock": false,
+    "width": 1024,
+    "height": 768,
+    "color_depth": 24,
+    "active_processes": 0
+  },
+  "actions": [
+    {
+      "action": "mouse_move",
+      "target": [
+        450,
+        250
+      ]
+    },
+    {
+      "action": "mouse_click",
+      "button": 1
+    }
+  ],
+  "screenshot_bytes": 2448,
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/xvfb_desktop_screenshot.png"
+}

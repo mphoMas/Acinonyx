@@ -1,0 +1,31 @@
+{
+  "timestamp_utc": "2026-10-07T13:55:20Z",
+  "display": ":98",
+  "is_mock": false,
+  "window_id": "4194352",
+  "state_initial": {
+    "counter": 0,
+    "text": ""
+  },
+  "state_after_click": {
+    "action": "button_clicked",
+    "counter": 1,
+    "text_content": "",
+    "entry_current": "",
+    "timestamp": 1791381318.5780818
+  },
+  "state_after_type": {
+    "action": "text_submitted",
+    "counter": 1,
+    "text_content": "Hello MAS",
+    "entry_current": "Hello MAS",
+    "timestamp": 1791381319.9680724
+  },
+  "assertions": {
+    "counter_incremented_to_1": true,
+    "text_content_matches_input": true
+  },
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/native_tkinter_outcome_verified.png",
+  "screenshot_bytes": 16552,
+  "status": "OUTCOME-VERIFIED"
+}

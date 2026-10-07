@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acinonyx Research Portal Verification Baseline</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #0d1117;
+      color: #e6edf3;
+      margin: 0;
+      padding: 24px;
+    }
+    h1 {
+      color: #58a6ff;
+      font-size: 24px;
+    }
+    .action-btn {
+      background-color: #238636;
+      color: #24292e;
+      border: 1px solid #2ea043;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .action-btn:focus {
+      outline: 2px solid #58a6ff;
+      outline-offset: 2px;
+    }
+    #toast {
+      display: none;
+      margin-top: 16px;
+      padding: 12px;
+      background-color: #1f6feb;
+      color: #24292e;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    #toast.toast-visible {
+      display: inline-block;
+    }
+    .status-text {
+      font-size: 14px;
+      color: #8b949e;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Acinonyx Research Portal Verification Baseline</h1>
+    <p>This fixture serves as the passing baseline control for automated verification gates.</p>
+    
+    <button id="star-btn" class="action-btn" aria-label="Bookmark this research document">
+      ★ Bookmark Document
+    </button>
+    <div id="toast" role="status" aria-live="polite">Saved to favorites ★</div>
+    <div id="bookmark-state" class="status-text">UNBOOKMARKED</div>
+    
+    <div style="margin-top: 24px;">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%2358a6ff'/%3E%3C/svg%3E" 
+           alt="Acinonyx Verified Symbol" width="40" height="40">
+    </div>
+  </main>
+
+  <script>
+    const starBtn = document.getElementById('star-btn');
+    const toast = document.getElementById('toast');
+    const stateDisplay = document.getElementById('bookmark-state');
+
+    starBtn.addEventListener('click', () => {
+      toast.classList.add('toast-visible');
+      stateDisplay.textContent = 'BOOKMARKED';
+    });
+  </script>
+</body>
+</html>

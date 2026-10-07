@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Canvas Coordinate Interaction</title></head>
+<body style="background:#111; color:#eee; margin:20px;">
+  <canvas id="draw-canvas" width="400" height="300" style="border:1px solid #555;"></canvas>
+  <div id="canvas-state" style="margin-top:10px;">Clicks: 0</div>
+  <script>
+    const canvas = document.getElementById('draw-canvas');
+    const ctx = canvas.getContext('2d');
+    const state = document.getElementById('canvas-state');
+    let clicks = 0;
+    canvas.addEventListener('click', (e) => {
+      clicks++;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      ctx.fillStyle = '#58a6ff';
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, 2*Math.PI);
+      ctx.fill();
+      state.textContent = 'Clicks: ' + clicks + ' (Last at: ' + Math.round(x) + ',' + Math.round(y) + ')';
+    });
+  </script>
+</body>
+</html>

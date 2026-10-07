@@ -1,0 +1,86 @@
+{
+  "system_profile": {
+    "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+    "python_version": "3.14.6",
+    "timestamp_utc": "2026-10-07T08:14:10.264918+00:00"
+  },
+  "provenance_hashes": {
+    "fact_sheet_finops_v1.0.json": "f839e8a855f9814975b1cb14515cbee35b08fde6b129a1a04bb6420ed1815ddc",
+    "candidate_0.html": "3056aa5ee260d9f4cd437aaedf038022f8d2a66510a565d5cba68b6a3d765bf9",
+    "candidate_1.html": "09e50480ff9fc5d326a4524dc24fe31a0972bdf1c09d3d20528e90721ee258e1",
+    "broken_candidate_1_in_memory": "027573085cdee29238a09d485caa8c9933be508d3ddcee15e13c9bc913cc1e65"
+  },
+  "exact_contrast_measurements": {
+    "candidate_0_btn": {
+      "fg_hex": "#5c544d",
+      "fg_luminance": 0.0915178066418113,
+      "bg_hex": "#141310",
+      "bg_luminance": 0.006518777046585022,
+      "ratio": 2.503907799087137,
+      "formatted_ratio": "2.5039:1",
+      "wcag_aa_threshold": 4.5,
+      "verdict": "FAIL"
+    },
+    "candidate_1_btn": {
+      "fg_hex": "#f5f2eb",
+      "fg_luminance": 0.8891489723835933,
+      "bg_hex": "#2b2823",
+      "bg_luminance": 0.021525241408828322,
+      "ratio": 13.130315310864153,
+      "formatted_ratio": "13.1303:1",
+      "wcag_aa_threshold": 4.5,
+      "verdict": "PASS"
+    },
+    "broken_candidate_1_btn": {
+      "fg_hex": "#2b2823",
+      "fg_luminance": 0.021525241408828322,
+      "bg_hex": "#2b2823",
+      "bg_luminance": 0.021525241408828322,
+      "ratio": 1.0,
+      "formatted_ratio": "1.0000:1",
+      "wcag_aa_threshold": 4.5,
+      "verdict": "FAIL"
+    }
+  },
+  "evaluation_results": {
+    "candidate_0": {
+      "run_id": "run_c0_1791360850",
+      "decision": "RELEASE_BLOCKED",
+      "blocking_finding_count": 4,
+      "blocking_finding_ids": [
+        "FIND-FACT-01",
+        "FIND-FACT-02",
+        "FIND-A11Y-01",
+        "FIND-A11Y-02"
+      ],
+      "reasons": [
+        "[BLOCKING_FUNCTIONAL] authorized-action-contract on #btn-tune: Button lacks data-action-id binding to authorized action ACT-REBALANCE-01.",
+        "[BLOCKING_FUNCTIONAL] authorized-action-contract on #btn-tune: Interactive JavaScript action handler for ACT-REBALANCE-01 is missing from candidate script.",
+        "[BLOCKING_A11Y] color-contrast on #btn-tune: Color #5c544d on background #141310 yields contrast ratio 2.5039:1 (minimum 4.5:1 required by WCAG 2.2 AA SC 1.4.3).",
+        "[BLOCKING_A11Y] target-size-minimum on #btn-tune: Computed target height is 18px with adjacent target spacing 4px, failing SC 2.5.8 spacing exception."
+      ]
+    },
+    "candidate_1": {
+      "run_id": "run_c1_1791360850",
+      "decision": "RELEASE_PERMITTED",
+      "blocking_finding_count": 0,
+      "advisory_count": 1,
+      "reasons": [
+        "All mandatory suites completed and bound; zero blocking defects found."
+      ]
+    },
+    "broken_candidate_1": {
+      "run_id": "run_broken_1791360850",
+      "decision": "RELEASE_BLOCKED",
+      "blocking_finding_count": 2,
+      "blocking_finding_ids": [
+        "FIND-FACT-02",
+        "FIND-A11Y-01"
+      ],
+      "reasons": [
+        "[BLOCKING_FUNCTIONAL] authorized-action-contract on #btn-tune: Interactive JavaScript action handler for ACT-REBALANCE-01 is missing from candidate script.",
+        "[BLOCKING_A11Y] color-contrast on #btn-tune: Color #2b2823 on background #2b2823 yields contrast ratio 1.0000:1 (minimum 4.5:1 required by WCAG 2.2 AA SC 1.4.3)."
+      ]
+    }
+  }
+}

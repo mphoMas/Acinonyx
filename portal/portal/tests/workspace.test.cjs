@@ -1,0 +1,41 @@
+/* Run with: node tests/workspace.test.cjs. No dependencies required. */
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const storage=new Map();
+const nodes=new Map();
+function element(){return {innerHTML:'',value:'',style:{},classList:{add(){},remove(){},toggle(){},contains(){return false;}},addEventListener(){},setAttribute(){},removeAttribute(){},querySelector(){return null;},querySelectorAll(){return [];},focus(){}};}
+const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},querySelector(){return null;},querySelectorAll(){return [];},addEventListener(){},documentElement:{style:{setProperty(){}}},activeElement:element()};
+const context={console,document,innerWidth:1440,localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},window:{addEventListener(){}},location:{hash:'#/home'},history:{pushState(){}},requestAnimationFrame:fn=>fn(),setTimeout,clearTimeout};
+vm.createContext(context);
+function load(f){vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),context,{filename:f});}
+load('js/data/research_catalog.js');load('js/search.js');load('js/reader.js');
+context.window.app={catalog:context.window.RESEARCH_CATALOG,loadDocument(){},switchView(){},init(){},openSearch(){},closeSearch(){},openAuditModal(){},closeAuditModal(){},openShortcutsModal(){},closeShortcutsModal(){},openCopilot(){},closeCopilot(){}};
+load('js/workspace.js');
+const app=context.window.app;app.renderHome();
+const html=nodes.get('view-home').innerHTML;
+assert.equal((html.match(/class="ws-collection"/g)||[]).length,8);
+assert.match(html,/82<\/strong><span>documents/);
+const Engine=context.window.ResearchSearchEngine;
+const search=new Engine(context.window.RESEARCH_CATALOG);
+search.setFilter('google_cloud_agentic_infra');
+assert.ok(search.search('').every(r=>r.doc.volumeKey==='google_cloud_agentic_infra'));
+assert.ok(search.search('cloud').every(r=>r.doc.volumeKey==='google_cloud_agentic_infra'));
+assert.ok(search.search('unfindableqzxw').length===0);
+assert.ok(!search.highlightMatch('<img src=x onerror=alert(1)>','img').includes('<img'));
+assert.match(search.highlightMatch('Cloud architecture','cloud'),/highlight-match/);
+const id=app.catalog.documents[1].id;
+app.loadDocument(id);app.loadDocument(id);app.renderHome();
+assert.equal(JSON.parse(storage.get('acinonyx_recent')).length,1);
+assert.match(nodes.get('view-home').innerHTML,/Continue reading/);
+storage.set('acinonyx_recent','not json');app.renderHome();
+storage.set('acinonyx_recent','{}');app.renderHome();
+storage.set('acinonyx_bookmarks',JSON.stringify([id]));search.setFilter('FAVORITES');
+assert.equal(search.search('')[0].doc.id,id);
+const reader=new context.window.MarkdownReaderEngine();
+assert.match(reader.render('# Heading\n\nSome **bold** text.'),/<strong>bold<\/strong>/);
+const ids=[...fs.readFileSync(path.join(root,'index.html'),'utf8').matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
+assert.equal(ids.length,new Set(ids).size,'HTML IDs must be unique');
+console.log('PASS: home catalogue, collection count, dynamic stats, category filtering, query escaping, recent history, corrupt state recovery, bookmarks, markdown rendering, unique HTML IDs.');

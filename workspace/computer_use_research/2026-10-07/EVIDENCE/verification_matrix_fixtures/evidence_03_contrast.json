@@ -1,0 +1,100 @@
+{
+  "file_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_03_defect_contrast.html",
+  "screenshot_path": "/home/acinonyx/Desktop/MAS/workspace/computer_use_research/2026-10-07/EVIDENCE/verification_matrix_fixtures/candidate_03_defect_contrast.png",
+  "latency_ms": 17.72,
+  "console_errors": [],
+  "functional_ok": true,
+  "functional_error": null,
+  "axe_violations": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "tags": [
+        "cat.color",
+        "wcag2aa",
+        "wcag143",
+        "TTv5",
+        "TT13.c",
+        "EN-301-549",
+        "EN-9.1.4.3",
+        "ACT"
+      ],
+      "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "color-contrast",
+              "data": {
+                "fgColor": "#24292e",
+                "bgColor": "#238636",
+                "contrastRatio": 3.16,
+                "fontSize": "10.5pt (14px)",
+                "fontWeight": "normal",
+                "messageKey": null,
+                "expectedContrastRatio": "4.5:1",
+                "shadowColor": null
+              },
+              "relatedNodes": [
+                {
+                  "html": "<button id=\"star-btn\" class=\"action-btn\" aria-label=\"Bookmark this research document\">\n      \u2605 Bookmark Document\n    </button>",
+                  "target": [
+                    "#star-btn"
+                  ]
+                }
+              ],
+              "impact": "serious",
+              "message": "Element has insufficient color contrast of 3.16 (foreground color: #24292e, background color: #238636, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<button id=\"star-btn\" class=\"action-btn\" aria-label=\"Bookmark this research document\">\n      \u2605 Bookmark Document\n    </button>",
+          "target": [
+            "#star-btn"
+          ],
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.16 (foreground color: #24292e, background color: #238636, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "any": [
+            {
+              "id": "color-contrast",
+              "data": {
+                "fgColor": "#24292e",
+                "bgColor": "#1f6feb",
+                "contrastRatio": 3.16,
+                "fontSize": "12.0pt (16px)",
+                "fontWeight": "normal",
+                "messageKey": null,
+                "expectedContrastRatio": "4.5:1",
+                "shadowColor": null
+              },
+              "relatedNodes": [
+                {
+                  "html": "<div id=\"toast\" role=\"status\" aria-live=\"polite\" class=\"toast-visible\">Saved to favorites \u2605</div>",
+                  "target": [
+                    "#toast"
+                  ]
+                }
+              ],
+              "impact": "serious",
+              "message": "Element has insufficient color contrast of 3.16 (foreground color: #24292e, background color: #1f6feb, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<div id=\"toast\" role=\"status\" aria-live=\"polite\" class=\"toast-visible\">Saved to favorites \u2605</div>",
+          "target": [
+            "#toast"
+          ],
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.16 (foreground color: #24292e, background color: #1f6feb, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+        }
+      ]
+    }
+  ],
+  "axe_passes_count": 17
+}

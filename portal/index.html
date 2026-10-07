@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-archetype="frontier-cybernetic">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,6 +21,7 @@
 </head>
 <body>
 
+<div class="grid-mesh-overlay" aria-hidden="true"></div>
 <a class="skip-link" href="#main-content">Skip to content</a>
 <div class="read-progress" id="read-progress" aria-hidden="true"></div>
 
@@ -31,7 +32,7 @@
   <header class="top-nav" role="banner">
     <div style="display: flex; align-items: center; gap: 16px;">
       <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
-      <div class="brand-section" onclick="app.switchView('reader')" role="button" tabindex="0">
+      <div class="brand-section" onclick="app.switchView('home')" role="button" tabindex="0">
         <div class="brand-logo">🐆</div>
         <div class="brand-text">
           <span class="brand-title">ACINONYX LABS</span>
@@ -53,6 +54,12 @@
 
     <!-- Top Navigation Right Actions -->
     <div class="nav-actions">
+      <!-- Sidebar Drawer Toggle Button -->
+      <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="app.toggleSidebar()" title="Toggle Research Directory">
+        <span>📚</span>
+        <span>Directory</span>
+      </button>
+
       <!-- Research Copilot Trigger (Ctrl+J) -->
       <button class="btn btn-secondary btn-sm" id="copilot-nav-btn" onclick="app.openCopilot()" style="border-color: rgba(0,240,255,0.4); color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
         <span>✨ Copilot</span>

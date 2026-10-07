@@ -1,0 +1,7 @@
+OS: Linux-7.0.0-38-generic-x86_64-with-glibc2.43
+Architecture: x86_64
+Linux Kernel: 7.0.0-38-generic
+Python: 3.14.6 (/home/acinonyx/anaconda3/bin/python3)
+Pytest: 9.0.3
+Playwright (python): 1.63.0
+Browser Engine: Google Chrome (/usr/bin/google-chrome)

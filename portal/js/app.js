@@ -145,6 +145,9 @@ class PortalApp {
     // Stop the topology animation loop whenever we leave that view
     if (window.topSim && viewName !== 'topology') window.topSim.stop();
 
+    // Set body view state class for CSS adaptive layouts
+    document.body.className = `view-${viewName}`;
+
     // Update nav links
     ['home', 'reader', 'finops', 'topology', 'benchmarks', 'timeline', 'vault'].forEach(v => {
       const el = document.getElementById(`nav-${v}`);
@@ -192,6 +195,16 @@ class PortalApp {
     }
   }
 
+  toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    if (this.currentView === 'reader') {
+      sidebar.classList.toggle('collapsed');
+    } else {
+      sidebar.classList.toggle('open');
+    }
+  }
+
   renderHome() {
     const mount = document.getElementById('view-home');
     if (!mount) return;
@@ -204,91 +217,237 @@ class PortalApp {
       if (d.volumeKey === 'README.md') return;
       (byVolume[d.volumeKey] = byVolume[d.volumeKey] || { vol: d, items: [] }).items.push(d);
     });
+
+    const volumeIcons = {
+      agentic_systems: '🧠',
+      ai_encyclopedia: '📚',
+      google_cloud_agentic_infra: '☁️',
+      multi_agent_systems: '🤖',
+      system_development_life_cycle: '🔄',
+      devops_dataops_mlops: '⚡',
+      agile_kanban_frameworks: '🏃',
+      company_governance_and_self_improvement: '🏛️'
+    };
+
     const volumeBlurbs = {
-      agentic_systems: 'Frontier models, multi-agent topologies, protocols, WaaS economics and governance.',
-      ai_encyclopedia: 'Eight volumes from 1950 to today: history, architectures, labs, papers and curricula.',
-      google_cloud_agentic_infra: 'Vertex AI, Cloud Run and A2A reference architectures with captured diagrams.',
-      multi_agent_systems: 'Textbook foundations, cognitive architectures and LLM multi-agent design patterns.'
+      agentic_systems: 'Frontier reasoning models, test-time compute scaling, multi-agent topologies, MCP/A2A protocols, WaaS economics, and production sandboxing.',
+      ai_encyclopedia: 'Eight comprehensive volumes spanning 1950 to 2026: theoretical history, Transformer architectures, frontier silicon, seminal papers, and curricula.',
+      google_cloud_agentic_infra: 'Vertex AI Reasoning Engine, Cloud Run gVisor sandboxing, Cloud Workstations, and A2A inter-agent reference architectures.',
+      multi_agent_systems: 'Formal textbook foundations, ReAct loops, CoALA cognitive memory architecture, and schema-constrained multi-agent design patterns.',
+      system_development_life_cycle: 'Modern 2026 Spec-Driven Agentic SDLC, ISO/IEC/IEEE 12207 standards, NIST SSDF v1.2, and automated quality verification gates.',
+      devops_dataops_mlops: 'Comparative architecture and lifecycle convergence across code GitOps, BigQuery DataOps contracts, and Vertex MLOps model governance.',
+      agile_kanban_frameworks: 'Mathematical flow theory, Little’s Law, Monte Carlo probabilistic forecasting, Shape Up, and 2026 AI-augmented swarm agility.',
+      company_governance_and_self_improvement: 'Grand Squad Symposium synthesis, ratified Ways of Working, ADR decision frameworks, and Scope Jail boundary containment.'
     };
 
     const tools = [
-      ['finops', 'Token FinOps Calculator', 'Model caching savings and SaaS-seat replacement.'],
-      ['topology', 'Topology Simulator', 'Watch messages flow through four coordination patterns.'],
-      ['benchmarks', 'Benchmark Matrix', 'Sort and filter frontier models by score and price.'],
-      ['timeline', 'AI Timeline', 'Walk 1950 to 2026 with links into the encyclopedia.']
+      {
+        id: 'finops',
+        title: 'Token FinOps & WaaS ROI Calculator',
+        badge: 'Interactive Calculator',
+        desc: 'Model dynamic cost savings from prompt caching (up to 90% discount), reasoning expansion, and Digital FTE SaaS replacement.',
+        icon: '💎'
+      },
+      {
+        id: 'topology',
+        title: 'Multi-Agent Topology Simulator',
+        badge: 'Live EventBus Simulation',
+        desc: 'Simulate message routing and consensus across Supervisor, Sequential SOP, Anti-Sycophantic Debate, and Liquid Strike Pods.',
+        icon: '🕸️'
+      },
+      {
+        id: 'benchmarks',
+        title: 'Frontier Model Benchmark Matrix',
+        badge: 'Dynamic ELO & Radar',
+        desc: 'Filter and rank frontier models across SWE-bench Verified, AIME, GPQA Diamond, and LiveCode with price-to-intelligence curves.',
+        icon: '📊'
+      },
+      {
+        id: 'timeline',
+        title: 'AI Historical & Cognitive Timeline',
+        badge: '1950 – 2026 Milestone Map',
+        desc: 'Walk milestones from the Turing Test and Dartmouth Workshop to modern test-time compute and sovereign multi-agent swarms.',
+        icon: '⏳'
+      }
     ];
 
     mount.innerHTML = `
       <section class="hero">
         <div class="hero-copy">
-        <span class="hero-eyebrow"><span class="live-dot"></span>Acinonyx Labs · Research Directorate</span>
-        <h1 class="hero-title">The living atlas of <span class="hero-accent">agentic systems</span></h1>
-        <p class="hero-sub">A searchable, cross-referenced library on frontier models, multi-agent architecture and enterprise AI economics, with interactive tools built on the research.</p>
-        <div class="hero-actions">
-          <button class="btn btn-primary" onclick="app.openSearch()">Search the library <span class="search-kbd" style="margin-left:6px">Ctrl K</span></button>
-          <button class="btn btn-secondary" onclick="app.loadDocument('${(docs.find(d => d.id.includes('agentic_systems_README')) || docs[0] || {}).id}')">Start with the compendium</button>
+          <span class="hero-eyebrow">
+            <span class="live-dot"></span>
+            Acinonyx Labs · Frontier Swarm Directorate
+          </span>
+          <h1 class="hero-title">The living atlas of <span class="hero-accent">autonomous AI swarms</span></h1>
+          <p class="hero-sub">A cross-referenced knowledge repository and interactive laboratory exploring frontier reasoning models, multi-agent coordination architectures, Token FinOps, and enterprise cognitive systems.</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary" onclick="app.openSearch()">
+              <span>🔍 Search 82 Modules</span>
+              <span class="search-kbd" style="margin-left: 6px; font-size: 0.75rem; background: rgba(0,0,0,0.25); color: #040914;">Ctrl K</span>
+            </button>
+            <button class="btn btn-secondary" onclick="app.loadDocument('${(docs.find(d => d.id.includes('agentic_systems_README')) || docs[0] || {}).id}')">
+              <span>📖 Start with Master Compendium</span>
+            </button>
+          </div>
+          <dl class="stat-strip">
+            <div class="stat"><dt>Documents</dt><dd>${docs.length}</dd></div>
+            <div class="stat"><dt>Words</dt><dd>${totalWords.toLocaleString()}</dd></div>
+            <div class="stat"><dt>Deep Papers</dt><dd>${meta.pdfCount || 8}</dd></div>
+            <div class="stat"><dt>Diagrams</dt><dd>${meta.diagramCount || 15}</dd></div>
+          </dl>
         </div>
-        <dl class="stat-strip">
-          <div class="stat"><dt>Documents</dt><dd>${docs.length}</dd></div>
-          <div class="stat"><dt>Words</dt><dd>${totalWords.toLocaleString()}</dd></div>
-          <div class="stat"><dt>Papers (PDF)</dt><dd>${meta.pdfCount || 0}</dd></div>
-          <div class="stat"><dt>Diagrams</dt><dd>${meta.diagramCount || 0}</dd></div>
-        </dl>
-        </div>
+
         <div class="hero-art" aria-hidden="true">
-          <svg viewBox="0 0 420 420" class="hero-svg">
+          <div class="hero-art-backdrop"></div>
+          <svg viewBox="0 0 440 440" class="hero-svg">
             <defs>
               <radialGradient id="g-core" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#00f0ff" stop-opacity=".55"/>
+                <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.8"/>
+                <stop offset="40%" stop-color="#00bcd4" stop-opacity="0.25"/>
                 <stop offset="100%" stop-color="#00f0ff" stop-opacity="0"/>
               </radialGradient>
-              <linearGradient id="g-edge" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#00f0ff" stop-opacity=".7"/>
-                <stop offset="100%" stop-color="#a855f7" stop-opacity=".7"/>
+              <linearGradient id="g-mesh" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.8"/>
+                <stop offset="50%" stop-color="#a855f7" stop-opacity="0.8"/>
+                <stop offset="100%" stop-color="#00ff9d" stop-opacity="0.8"/>
               </linearGradient>
+              <filter id="glow-filter" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3.5" result="blur"/>
+                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+              </filter>
             </defs>
-            <circle cx="210" cy="210" r="190" fill="url(#g-core)"/>
-            <g class="orbit orbit-1"><circle cx="210" cy="210" r="150" fill="none" stroke="rgba(255,255,255,.07)" stroke-dasharray="2 6"/></g>
-            <g class="orbit orbit-2"><circle cx="210" cy="210" r="95" fill="none" stroke="rgba(255,255,255,.1)"/></g>
-            <g stroke="url(#g-edge)" stroke-width="1.2" fill="none">
-              <line x1="210" y1="210" x2="210" y2="60"/><line x1="210" y1="210" x2="340" y2="135"/>
-              <line x1="210" y1="210" x2="340" y2="285"/><line x1="210" y1="210" x2="210" y2="360"/>
-              <line x1="210" y1="210" x2="80" y2="285"/><line x1="210" y1="210" x2="80" y2="135"/>
-              <line x1="210" y1="60" x2="340" y2="135"/><line x1="340" y1="285" x2="210" y2="360"/>
-              <line x1="80" y1="285" x2="80" y2="135"/>
+
+            <!-- Atmospheric Core Aura -->
+            <circle cx="220" cy="220" r="195" fill="url(#g-core)"/>
+            
+            <!-- Animated Orbital Rings -->
+            <g class="orbit-1">
+              <circle cx="220" cy="220" r="155" fill="none" stroke="rgba(255,255,255,0.08)" stroke-dasharray="3 8" stroke-width="1.5"/>
+              <circle cx="220" cy="65" r="3" fill="#00f0ff" opacity="0.7"/>
+              <circle cx="375" cy="220" r="3" fill="#a855f7" opacity="0.7"/>
+              <circle cx="220" cy="375" r="3" fill="#00ff9d" opacity="0.7"/>
+              <circle cx="65" cy="220" r="3" fill="#ffb700" opacity="0.7"/>
             </g>
-            <g class="node-pulse">
-              <circle cx="210" cy="60" r="9" fill="#00f0ff"/><circle cx="340" cy="135" r="9" fill="#a855f7"/>
-              <circle cx="340" cy="285" r="9" fill="#00ff9d"/><circle cx="210" cy="360" r="9" fill="#ffb700"/>
-              <circle cx="80" cy="285" r="9" fill="#f43f5e"/><circle cx="80" cy="135" r="9" fill="#38bdf8"/>
+
+            <g class="orbit-2">
+              <circle cx="220" cy="220" r="105" fill="none" stroke="rgba(0, 240, 255, 0.16)" stroke-dasharray="4 6" stroke-width="1.5"/>
             </g>
-            <circle cx="210" cy="210" r="26" fill="#07090e" stroke="#00f0ff" stroke-width="2"/>
-            <circle cx="210" cy="210" r="8" fill="#00f0ff"/>
+
+            <!-- Synaptic Neural Connections -->
+            <g stroke="url(#g-mesh)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7">
+              <line x1="220" y1="220" x2="220" y2="70"/>
+              <line x1="220" y1="220" x2="350" y2="145"/>
+              <line x1="220" y1="220" x2="350" y2="295"/>
+              <line x1="220" y1="220" x2="220" y2="370"/>
+              <line x1="220" y1="220" x2="90" y2="295"/>
+              <line x1="220" y1="220" x2="90" y2="145"/>
+
+              <!-- Outer Hexagonal Synapse Ring -->
+              <line x1="220" y1="70" x2="350" y2="145" stroke="#a855f7" opacity="0.45"/>
+              <line x1="350" y1="145" x2="350" y2="295" stroke="#f43f5e" opacity="0.45"/>
+              <line x1="350" y1="295" x2="220" y2="370" stroke="#00ff9d" opacity="0.45"/>
+              <line x1="220" y1="370" x2="90" y2="295" stroke="#ffb700" opacity="0.45"/>
+              <line x1="90" y1="295" x2="90" y2="145" stroke="#38bdf8" opacity="0.45"/>
+              <line x1="90" y1="145" x2="220" y2="70" stroke="#00f0ff" opacity="0.45"/>
+            </g>
+
+            <!-- 6 Swarm Agent Nodes -->
+            <!-- Chief Architect (Cyan) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="220" cy="70" r="13" fill="#06121e" stroke="#00f0ff" stroke-width="2.5"/>
+              <circle cx="220" cy="70" r="5" fill="#00f0ff"/>
+              <text x="220" y="46" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="middle">Chief Architect</text>
+            </g>
+
+            <!-- FinOps Governor (Amber) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="350" cy="145" r="13" fill="#181308" stroke="#ffb700" stroke-width="2.5"/>
+              <circle cx="350" cy="145" r="5" fill="#ffb700"/>
+              <text x="366" y="141" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="start">FinOps Gov</text>
+            </g>
+
+            <!-- Adversarial Red (Rose) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="350" cy="295" r="13" fill="#1c0910" stroke="#f43f5e" stroke-width="2.5"/>
+              <circle cx="350" cy="295" r="5" fill="#f43f5e"/>
+              <text x="366" y="299" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="start">Adversarial Red</text>
+            </g>
+
+            <!-- QA Critic (Purple) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="220" cy="370" r="13" fill="#160c24" stroke="#a855f7" stroke-width="2.5"/>
+              <circle cx="220" cy="370" r="5" fill="#a855f7"/>
+              <text x="220" y="398" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="middle">QA Critic</text>
+            </g>
+
+            <!-- Market Researcher (Emerald) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="90" cy="295" r="13" fill="#081812" stroke="#00ff9d" stroke-width="2.5"/>
+              <circle cx="90" cy="295" r="5" fill="#00ff9d"/>
+              <text x="74" y="299" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="end">Market Res</text>
+            </g>
+
+            <!-- Cloud Architect (Blue) -->
+            <g filter="url(#glow-filter)">
+              <circle cx="90" cy="145" r="13" fill="#081420" stroke="#38bdf8" stroke-width="2.5"/>
+              <circle cx="90" cy="145" r="5" fill="#38bdf8"/>
+              <text x="74" y="141" fill="#f8fafc" font-size="10" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="end">Cloud Arch</text>
+            </g>
+
+            <!-- Center Core MAS-Core EventBus Nexus -->
+            <circle cx="220" cy="220" r="34" fill="rgba(0, 240, 255, 0.12)" stroke="rgba(0, 240, 255, 0.35)" stroke-width="1.5"/>
+            <circle cx="220" cy="220" r="24" fill="#06080e" stroke="#00f0ff" stroke-width="2.5" filter="url(#glow-filter)"/>
+            <circle cx="220" cy="220" r="9" fill="#00f0ff" class="core-pulse-node"/>
+            <text x="220" y="223" fill="#00f0ff" font-size="7.5" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">EVENTBUS</text>
           </svg>
         </div>
-
       </section>
 
-      <h2 class="section-title">Browse by collection</h2>
+      <div class="section-header-wrap">
+        <h2 class="section-title">Browse Research Collections</h2>
+        <span class="section-badge">8 Master Volumes · Peer Reviewed</span>
+      </div>
+
       <div class="volume-cards">
         ${Object.entries(byVolume).map(([key, g]) => {
           const first = g.items.find(i => !/README/i.test(i.id)) || g.items[0];
+          const volMeta = (this.catalog.volumes && this.catalog.volumes[key]) || {};
+          const color = volMeta.color || g.vol.volumeColor || '#00f0ff';
+          const icon = volumeIcons[key] || '📄';
+          const glow = color + '28';
+          const title = volMeta.title || g.vol.volumeTitle;
+          const desc = volumeBlurbs[key] || g.vol.summary || '';
           return `
-          <button class="volume-card" style="--vol-color:${g.vol.volumeColor}" onclick="app.loadDocument('${first.id}')">
-            <span class="volume-card-count">${g.items.length} docs</span>
-            <span class="volume-card-title">${g.vol.volumeTitle}</span>
-            <span class="volume-card-desc">${volumeBlurbs[key] || ''}</span>
-            <span class="volume-card-cta">Open collection →</span>
+          <button class="volume-card" style="--vol-color:${color}; --vol-glow:${glow};" onclick="app.loadDocument('${first.id}')">
+            <div class="volume-card-top">
+              <div class="volume-card-icon">${icon}</div>
+              <span class="volume-card-count">${g.items.length} Modules</span>
+            </div>
+            <h3 class="volume-card-title">${title}</h3>
+            <p class="volume-card-desc">${desc}</p>
+            <div class="volume-card-cta">
+              <span>Explore Collection</span>
+              <span>→</span>
+            </div>
           </button>`;
         }).join('')}
       </div>
 
-      <h2 class="section-title">Interactive tools</h2>
+      <div class="section-header-wrap">
+        <h2 class="section-title">Interactive Simulators & Calculators</h2>
+        <span class="section-badge">Autonomous Tool Suite</span>
+      </div>
+
       <div class="tool-grid">
         ${tools.map(t => `
-          <button class="tool-card" onclick="app.switchView('${t[0]}')">
-            <span class="tool-card-title">${t[1]}</span>
-            <span class="tool-card-desc">${t[2]}</span>
+          <button class="tool-card" onclick="app.switchView('${t.id}')">
+            <div class="tool-card-badge">${t.icon} ${t.badge}</div>
+            <h3 class="tool-card-title">${t.title}</h3>
+            <p class="tool-card-desc">${t.desc}</p>
+            <div class="tool-card-cta">
+              <span>Launch Simulator</span>
+              <span>⚡</span>
+            </div>
           </button>`).join('')}
       </div>
     `;

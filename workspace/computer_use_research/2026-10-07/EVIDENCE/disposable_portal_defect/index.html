@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" data-archetype="frontier-cybernetic">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+  <meta name="description" content="Interactive executive research portal and knowledge base covering frontier AI models, test-time compute, multi-agent architectures, Token FinOps, and enterprise cognitive systems.">
+  <meta name="author" content="Acinonyx Labs / MAS Swarm">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐆</text></svg>">
+
+  <!-- Core Design System CSS Modules -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/reader.css">
+  <link rel="stylesheet" href="css/simulators.css">
+  <link rel="stylesheet" href="css/home.css">
+
+  <!-- Mermaid.js for Dynamic Architecture Diagram Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+    <style>
+      #defect-zero-contrast-btn {
+        background-color: #ffffff !important;
+        color: #ffffff !important;
+        border: none !important;
+        padding: 10px 20px;
+        font-size: 16px;
+      }
+    </style>
+    <button id="defect-zero-contrast-btn">Submit Sensitive Action</button>
+    <img src="missing-logo.png" id="defect-missing-alt-img">
+    
+
+<div class="grid-mesh-overlay" aria-hidden="true"></div>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="read-progress" id="read-progress" aria-hidden="true"></div>
+
+<div id="app-container">
+  <!-- ====================================================================
+       Global Navigation Header
+       ==================================================================== -->
+  <header class="top-nav" role="banner">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
+      <div class="brand-section" onclick="app.switchView('home')" role="button" tabindex="0">
+        <div class="brand-logo">🐆</div>
+        <div class="brand-text">
+          <span class="brand-title">ACINONYX LABS</span>
+          <span class="brand-subtitle">Living Agentic Atlas</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation View Switchers -->
+    <nav class="nav-links" role="navigation" aria-label="Main Navigation">
+      <a href="javascript:void(0)" class="nav-link active" id="nav-home" onclick="app.switchView('home')">Home</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-reader" onclick="app.switchView('reader')">Reader</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-finops" onclick="app.switchView('finops')">FinOps</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-topology" onclick="app.switchView('topology')">Topologies</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-benchmarks" onclick="app.switchView('benchmarks')">Benchmarks</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-timeline" onclick="app.switchView('timeline')">Timeline</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-vault" onclick="app.switchView('vault')">Vault</a>
+    </nav>
+
+    <!-- Top Navigation Right Actions -->
+    <div class="nav-actions">
+      <!-- Sidebar Drawer Toggle Button -->
+      <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="app.toggleSidebar()" title="Toggle Research Directory">
+        <span>📚</span>
+        <span>Directory</span>
+      </button>
+
+      <!-- Research Copilot Trigger (Ctrl+J) -->
+      <button class="btn btn-secondary btn-sm" id="copilot-nav-btn" onclick="app.openCopilot()" style="border-color: rgba(0,240,255,0.4); color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
+        <span>✨ Copilot</span>
+        <span class="search-kbd" style="font-size: 0.68rem;">Ctrl J</span>
+      </button>
+
+      <!-- Search Trigger Modal (Ctrl+K) -->
+      <div class="search-trigger" id="search-trigger-btn" onclick="app.openSearch()" role="button" tabindex="0">
+        <span>🔍 Search 82 modules...</span>
+        <span class="search-kbd">Ctrl K</span>
+      </div>
+
+      <!-- Shortcuts HUD Trigger (?) -->
+      <button class="btn btn-secondary btn-sm" onclick="app.openShortcutsModal()" title="Keyboard Shortcuts (?)" style="padding: 6px 10px;">
+        ⌨️
+      </button>
+
+      <!-- Merkle Provenance Badge -->
+      <div class="merkle-badge" id="merkle-audit-btn" onclick="app.openAuditModal()" role="button" tabindex="0" title="Click to view Cryptographic Merkle Provenance Audit">
+        <div class="merkle-pulse"></div>
+        <span>Merkle 9.99/10</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ====================================================================
+       Workspace Container (Tri-Pane Layout)
+       ==================================================================== -->
+  <div class="workspace-container">
+    
+    <!-- Left Navigation Sidebar: Volumes & Chapters -->
+    <aside class="sidebar" id="sidebar" role="complementary" aria-label="Research Volume Hierarchy">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Research Volumes</span>
+        <span class="sidebar-stats">66 Chapters</span>
+      </div>
+      <div class="sidebar-nav" id="sidebar-volumes">
+        <!-- Dynamically rendered by app.js -->
+      </div>
+    </aside>
+
+    <!-- Center Main Content Pane -->
+    <main class="main-content" id="main-content" role="main">
+      <div class="content-wrapper">
+
+        <!-- 0. Landing / Home View -->
+        <div id="view-home"></div>
+
+        <!-- 1. Technical Markdown Reader View -->
+        <article id="view-reader">
+          <header class="reader-header">
+            <nav class="reader-breadcrumbs" id="reader-breadcrumbs" aria-label="Breadcrumb">
+              <!-- Dynamically populated -->
+            </nav>
+            <h1 class="reader-title" id="reader-title">Agentic Systems Compendium</h1>
+            <div class="reader-meta-bar" id="reader-meta-bar">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Interactive Reader Controls Toolbar -->
+            <div class="reader-toolbar" id="reader-toolbar">
+              <div class="reader-toolbar-group">
+                <button class="reader-action-btn" id="star-btn" onclick="app.toggleStarCurrentDoc()" title="Bookmark / Star this document (B)">
+                  <span id="star-btn-icon">☆</span> <span id="star-btn-text">Save</span>
+                </button>
+                <button class="reader-action-btn" onclick="app.copyShareLink()" title="Copy Link to this chapter">
+                  🔗 Share
+                </button>
+                <button class="reader-action-btn" onclick="app.copyMarkdown()" title="Copy raw markdown to clipboard">
+                  📄 Raw MD
+                </button>
+              </div>
+
+              <div class="reader-toolbar-group">
+                <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); margin-right: 2px;">SIZE:</span>
+                <button class="reader-action-btn reader-font-btn" onclick="app.readerEngine.setFontSize('small')">A-</button>
+                <button class="reader-action-btn reader-font-btn" onclick="app.readerEngine.setFontSize('normal')">A</button>
+                <button class="reader-action-btn reader-font-btn" onclick="app.readerEngine.setFontSize('large')">A+</button>
+                <button class="reader-action-btn" onclick="app.toggleDensity()" title="Toggle reading density">
+                  ⚡ Compact
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <div class="markdown-body" id="markdown-body">
+            <!-- Rendered Markdown Body -->
+          </div>
+
+          <!-- Chapter Pagination Footer -->
+          <footer class="chapter-pagination" id="chapter-pagination">
+            <!-- Dynamically populated by app.js -->
+          </footer>
+        </article>
+
+        <!-- 2. Dynamic Interactive Simulators Mount Point -->
+        <section id="sim-mount" class="sim-container" style="display: none;">
+          <!-- Dynamically populated by FinOps, Topology, Benchmark, or Timeline simulators -->
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right Rail: On-Page Table of Contents & Document Stats -->
+    <aside class="right-rail" id="right-rail" role="complementary" aria-label="Document Navigation & Metadata">
+      <div>
+        <h4 class="rail-section-title">On This Page</h4>
+        <ul class="toc-list" id="toc-list">
+          <!-- Dynamically populated from H2/H3 anchors -->
+        </ul>
+      </div>
+
+      <div class="meta-card">
+        <h4 class="rail-section-title">Document Telemetry</h4>
+        <div class="meta-row">
+          <span class="meta-label">Line Count:</span>
+          <span class="meta-val" id="rail-doc-lines">0</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Word Count:</span>
+          <span class="meta-val" id="rail-doc-words">0</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Verification:</span>
+          <span class="meta-val" style="color: var(--accent-emerald);">Ratified ✓</span>
+        </div>
+        <div class="meta-row" style="flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px;">
+          <span class="meta-label">Source Path:</span>
+          <span class="meta-val" id="rail-doc-path" style="font-size: 0.68rem; word-break: break-all; color: var(--text-dim);">research/...</span>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- ====================================================================
+     Interactive Search Modal (Ctrl + K)
+     ==================================================================== -->
+<div class="modal-overlay" id="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-label">
+  <div class="search-dialog">
+    <div class="search-input-wrap">
+      <span class="search-input-icon">🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search across 66 modules, 21,380 lines, models, algorithms..." aria-label="Search Research Repository" autocomplete="off">
+      <span class="search-kbd" onclick="app.closeSearch()" style="cursor: pointer;">ESC</span>
+    </div>
+
+    <!-- Category Filter Chips -->
+    <div class="search-filter-bar">
+      <button class="filter-chip active" id="filter-chip-ALL" onclick="app.setSearchFilter('ALL')">All</button>
+      <button class="filter-chip" id="filter-chip-FAVORITES" onclick="app.setSearchFilter('FAVORITES')">★ Starred</button>
+      <button class="filter-chip" id="filter-chip-agentic_systems" onclick="app.setSearchFilter('agentic_systems')">Agentic Systems</button>
+      <button class="filter-chip" id="filter-chip-ai_encyclopedia" onclick="app.setSearchFilter('ai_encyclopedia')">AI Encyclopedia</button>
+      <button class="filter-chip" id="filter-chip-google_cloud_agentic_infra" onclick="app.setSearchFilter('google_cloud_agentic_infra')">GCP Infra</button>
+      <button class="filter-chip" id="filter-chip-multi_agent_systems" onclick="app.setSearchFilter('multi_agent_systems')">MAS Foundations</button>
+    </div>
+
+    <!-- Dynamic Result Items -->
+    <div class="search-results" id="search-results">
+      <!-- Injected by search.js -->
+    </div>
+
+    <div class="search-footer">
+      <span>Use <kbd class="search-kbd">↑</kbd> <kbd class="search-kbd">↓</kbd> to navigate</span>
+      <span>Press <kbd class="search-kbd">Enter</kbd> to select</span>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================
+     Research Copilot Drawer & Overlay
+     ==================================================================== -->
+<div class="copilot-overlay" id="copilot-overlay" onclick="app.closeCopilot()"></div>
+<div class="copilot-drawer" id="copilot-drawer" role="dialog" aria-modal="true" aria-label="Research Copilot Assistant" aria-hidden="true">
+  <div class="copilot-header">
+    <div class="copilot-brand">
+      <span style="font-size: 1.2rem;">✨</span>
+      <div>
+        <div class="copilot-badge">Acinonyx Copilot</div>
+        <div class="copilot-title">Neural Research Assistant</div>
+      </div>
+    </div>
+    <button class="copilot-close-btn" onclick="app.closeCopilot()" aria-label="Close Copilot">✕</button>
+  </div>
+
+  <div class="copilot-messages" id="copilot-messages">
+    <!-- Populated by copilot.js -->
+  </div>
+
+  <div class="copilot-footer">
+    <div class="copilot-input-wrap">
+      <input type="text" id="copilot-input" class="copilot-input" placeholder="Ask anything about models, CoALA, FinOps, or WaaS..." autocomplete="off">
+      <button class="copilot-send-btn" onclick="copilot.ask(document.getElementById('copilot-input').value)">Ask</button>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">
+      <span>Press Enter to send</span>
+      <span>Shortcut: Ctrl J</span>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================
+     Keyboard Shortcuts Guide Modal (?)
+     ==================================================================== -->
+<div class="modal-overlay" id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-label">
+  <div class="shortcuts-dialog">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 id="shortcuts-modal-label" style="color: #fff; font-family: var(--font-display); font-size: 1.2rem;">Keyboard Shortcuts HUD</h3>
+      <button class="copilot-close-btn" onclick="app.closeShortcutsModal()">✕</button>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-muted);">Speed commands to navigate the Acinonyx Living Atlas:</p>
+    
+    <div class="shortcuts-grid">
+      <div class="shortcut-row">
+        <span class="shortcut-label">Global Search</span>
+        <kbd class="search-kbd">Ctrl K</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Research Copilot</span>
+        <kbd class="search-kbd">Ctrl J</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Next Chapter</span>
+        <kbd class="search-kbd">]</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Previous Chapter</span>
+        <kbd class="search-kbd">[</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Bookmark / Star</span>
+        <kbd class="search-kbd">B</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Home View</span>
+        <kbd class="search-kbd">H</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Reader View</span>
+        <kbd class="search-kbd">R</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Topology Simulator</span>
+        <kbd class="search-kbd">T</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">FinOps Calculator</span>
+        <kbd class="search-kbd">F</kbd>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Toggle Shortcuts HUD</span>
+        <kbd class="search-kbd">?</kbd>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+      <button class="btn btn-primary btn-sm" onclick="app.closeShortcutsModal()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================
+     Cryptographic Merkle Audit & Provenance Modal
+     ==================================================================== -->
+<div class="modal-overlay" id="audit-modal" role="dialog" aria-modal="true" aria-labelledby="audit-modal-label">
+  <div class="audit-dialog">
+    <div class="audit-header">
+      <div style="font-size: 2rem;">🔒</div>
+      <div>
+        <h3 id="audit-modal-label" style="font-family: var(--font-display); font-size: 1.25rem; color: #fff;">Cryptographic Merkle Audit</h3>
+        <p style="font-size: 0.8rem; color: var(--accent-emerald);">Status: All 66 Documents Ratified & Cryptographically Proven</p>
+      </div>
+    </div>
+
+    <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 8px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-cyan); word-break: break-all; margin-bottom: 1rem; border: 1px solid var(--border-subtle);">
+      SHA-256 Merkle Root: 376d5e719641e2fd15b0930348e17bf0c37a5d0ef8b6321ce14f7a7212b4bef8
+    </div>
+
+    <span style="font-size: 0.8rem; font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: 0.05em;">Autonomous Swarm Lead Sign-Offs (Composite: 9.99 / 10.0)</span>
+
+    <div class="audit-lead-list">
+      <div class="audit-lead-item">
+        <span class="lead-name">market_researcher</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">chief_architect</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">data_architect_ai</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">qa_critic</span>
+        <span class="lead-score">9.9/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">cloud_architect</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">adversarial_red</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">finops_governor</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+      <div class="audit-lead-item">
+        <span class="lead-name">cio_auditor</span>
+        <span class="lead-score">10.0/10.0</span>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+      <button class="btn btn-primary btn-sm" onclick="app.closeAuditModal()">Close Audit View</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================
+     Application Logic & Data Bundles
+     ==================================================================== -->
+<script src="js/toast.js"></script>
+<script src="js/data/research_catalog.js"></script>
+<script src="js/search.js"></script>
+<script src="js/reader.js"></script>
+<script src="js/copilot.js"></script>
+<script src="js/simulators/finops_calculator.js"></script>
+<script src="js/simulators/topology_sim.js"></script>
+<script src="js/simulators/benchmark_matrix.js"></script>
+<script src="js/simulators/timeline.js"></script>
+<script src="js/app.js"></script>
+<script>
+  // Reading progress bar
+  window.addEventListener('scroll', function () {
+    var bar = document.getElementById('read-progress');
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    if (bar) bar.style.transform = 'scaleX(' + (h > 0 ? Math.min(1, window.scrollY / h) : 0) + ')';
+  }, { passive: true });
+</script>
+
+</body>
+</html>

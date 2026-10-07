@@ -1,0 +1,112 @@
+/* ==========================================================================
+   ANTI-SLOP AESTHETIC ARCHETYPES
+   Break the Monoculture: 4 Distinct, Production-Grade Design Personalities
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Archetype 1: Swiss / International Grid
+   Stark typography, asymmetric alignment, International Klein Blue accent
+   -------------------------------------------------------------------------- */
+[data-archetype="swiss"] {
+  --color-canvas-base: #f5f5f4;
+  --color-canvas-surface: #ffffff;
+  --color-canvas-elevated: #e7e5e4;
+
+  --color-border-subtle: rgba(0, 0, 0, 0.08);
+  --color-border-medium: rgba(0, 0, 0, 0.18);
+  --color-border-strong: #000000;
+
+  --color-text-primary: #09090b;       /* 17.1:1 Contrast */
+  --color-text-secondary: #3f3f46;     /* 8.9:1 Contrast */
+  --color-text-muted: #71717a;         /* 4.6:1 Contrast (AA Pass) */
+
+  --color-accent-primary: #0038ff;     /* International Klein Blue */
+  --color-accent-secondary: #ff3b30;
+
+  --font-display: 'Space Grotesk', -apple-system, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+}
+
+/* --------------------------------------------------------------------------
+   Archetype 2: Warm Editorial / Broadsheet
+   Rich literary serif display, warm parchment tones, classic literary elegance
+   -------------------------------------------------------------------------- */
+[data-archetype="editorial"] {
+  --color-canvas-base: #fbf9f4;
+  --color-canvas-surface: #f4efe4;
+  --color-canvas-elevated: #eae2d1;
+
+  --color-border-subtle: rgba(44, 39, 34, 0.1);
+  --color-border-medium: rgba(44, 39, 34, 0.22);
+  --color-border-strong: #2c2722;
+
+  --color-text-primary: #1c1917;       /* 16.5:1 Contrast */
+  --color-text-secondary: #44403c;     /* 9.1:1 Contrast */
+  --color-text-muted: #78716c;         /* 4.8:1 Contrast */
+
+  --color-accent-primary: #881337;     /* Deep Burgundy */
+  --color-accent-secondary: #047857;   /* Forest Green */
+
+  --font-display: 'Newsreader', 'Playfair Display', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Archetype 3: Technical Cockpit / Observability
+   Dense data, high information density, amber/green telemetry LEDs
+   -------------------------------------------------------------------------- */
+[data-archetype="cockpit"] {
+  --color-canvas-base: #0b0f14;
+  --color-canvas-surface: #111720;
+  --color-canvas-elevated: #182230;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-medium: rgba(255, 255, 255, 0.16);
+  --color-border-strong: #38bdf8;
+
+  --color-text-primary: #f0f6fc;       /* 16.8:1 Contrast */
+  --color-text-secondary: #8b949e;     /* 6.7:1 Contrast */
+  --color-text-muted: #6e7681;         /* 4.7:1 Contrast */
+
+  --color-accent-primary: #ffb700;     /* Telemetry Amber */
+  --color-accent-secondary: #00ff9d;   /* Telemetry Emerald */
+
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'JetBrains Mono', monospace;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Archetype 4: Deep Cybernetic / Frontier Research
+   Cosmic midnight canvas, luminous cyan accents, tactile frosted glass
+   -------------------------------------------------------------------------- */
+[data-archetype="cybernetic"] {
+  --color-canvas-base: #06080e;
+  --color-canvas-surface: rgba(14, 20, 34, 0.75);
+  --color-canvas-elevated: rgba(20, 30, 50, 0.85);
+
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-medium: rgba(0, 240, 255, 0.25);
+  --color-border-strong: #00f0ff;
+
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  --color-accent-primary: #00f0ff;
+  --color-accent-secondary: #a855f7;
+
+  --font-display: 'Outfit', -apple-system, sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 18px;
+}

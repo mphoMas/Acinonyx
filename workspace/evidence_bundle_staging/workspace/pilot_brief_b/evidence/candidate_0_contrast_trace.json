@@ -1,0 +1,12 @@
+{
+  "trace_id": "TRACE-CONTRAST-C0-01",
+  "target_selector": "#btn-tune",
+  "element_foreground_hex": "#5c544d",
+  "element_foreground_luminance": 0.0915178066,
+  "parent_card_background_hex": "#141310",
+  "parent_card_background_luminance": 0.0065187770,
+  "effective_contrast_ratio": 2.5039077991,
+  "wcag_2_2_aa_minimum_ratio": 4.5,
+  "verdict": "FAIL",
+  "remediation": "Increase foreground luminance to at least #a89f91 or use dark background container #2b2823 with #f5f2eb."
+}

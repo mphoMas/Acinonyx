@@ -1,0 +1,23 @@
+{
+  "trace_id": "TRACE-TARGET-SIZE-C0-01",
+  "target_selector": "#btn-tune",
+  "target_bounding_box": {
+    "x": 320.0,
+    "y": 140.0,
+    "width": 84.0,
+    "height": 18.0
+  },
+  "adjacent_target_selector": "#link-docs",
+  "adjacent_target_bounding_box": {
+    "x": 408.0,
+    "y": 140.0,
+    "width": 64.0,
+    "height": 18.0
+  },
+  "inter_target_spacing_px": 4.0,
+  "sc_2_5_8_minimum_size_px": 24.0,
+  "sc_2_5_8_spacing_circle_diameter_px": 24.0,
+  "spacing_exception_applies": false,
+  "verdict": "FAIL",
+  "remediation": "Increase button height to >= 24px and increase margin to adjacent interactive targets to >= 12px."
+}
