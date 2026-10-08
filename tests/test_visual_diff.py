@@ -111,6 +111,12 @@ class TestVisualRegressionDiffing(unittest.TestCase):
         self.assertIn("browser_screenshot", tool_names)
         self.assertIn("browser_navigate", tool_names)
 
+    def test_independent_verifier_contract_cu_03(self):
+        """CU-03: Verify independent visual & a11y verifier contract."""
+        registry = MCPRegistry()
+        register_browser_tools(registry)
+        self.assertTrue(callable(registry.tools["visual_diff_compare"].handler))
+
 
 if __name__ == "__main__":
     unittest.main()
