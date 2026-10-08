@@ -137,7 +137,7 @@ def validate_commit_scope(issue: Issue, commit_sha: str, workspace_root: Optiona
             for forbidden in issue.forbidden_paths:
                 if fnmatch.fnmatch(file_path, forbidden) or file_path.startswith(forbidden.rstrip("*")):
                     raise ScopeJailViolationError(
-                        f"Scope jail violation in {issue.key}: commit {commit_sha} modified "
+                        f"Scope jail violation in {issue.key}: commit {commit_sha} violates scope jail, modified "
                         f"forbidden file '{file_path}' (matching forbidden rule '{forbidden}')."
                     )
 
