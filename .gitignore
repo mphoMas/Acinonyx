@@ -20,6 +20,7 @@ workspace/data/*.db
 # Preserve the database snapshot already versioned before the folder migration.
 !workspace/data/comms_vault.db
 workspace/data/*.db-*
+mas_pm.db*
 
 # Node dependencies
 node_modules/

@@ -92,6 +92,27 @@ class TestDashboardServer(unittest.TestCase):
             self.assertEqual(art_data["client_name"], "Stripe Gateway Client")
             self.assertTrue(len(art_data["prd"]) > 0)
 
+    def test_api_pm_board(self):
+        from mas.pm.tools import pm_create_project, pm_create_issue
+        pkey = f"DP{int(time.time()*1000) % 100000}"
+        pm_create_project(key=pkey, name="Dashboard Project")
+        pm_create_issue(project_key=pkey, title="Board Test Issue")
+
+        url = f"http://127.0.0.1:{self.port}/api/pm/board/{pkey}"
+        with self.opener.open(url, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data["project_key"], pkey)
+            self.assertIn("columns", data)
+            self.assertEqual(data["columns"]["BACKLOG"]["count"], 1)
+
+        issues_url = f"http://127.0.0.1:{self.port}/api/pm/issues/{pkey}"
+        with self.opener.open(issues_url, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            issues = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(len(issues), 1)
+            self.assertEqual(issues[0]["title"], "Board Test Issue")
+
 
 class TestDashboardSecurity(unittest.TestCase):
     """SEC-04: Test bearer token authorization and CORS policy enforcement."""

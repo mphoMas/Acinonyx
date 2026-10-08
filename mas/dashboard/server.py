@@ -184,6 +184,24 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "mode": "Live Model Gateway (OpenAI Compatible)",
             })
 
+        elif path.startswith("/api/pm/board/"):
+            project_key = path.replace("/api/pm/board/", "").strip()
+            from mas.pm.tools import pm_get_board_state
+            try:
+                board = pm_get_board_state(project_key)
+                self._send_json(board)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=404)
+
+        elif path.startswith("/api/pm/issues/"):
+            project_key = path.replace("/api/pm/issues/", "").strip()
+            from mas.pm.tools import pm_list_issues
+            try:
+                issues = pm_list_issues(project_key)
+                self._send_json(issues)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=404)
+
         else:
             self.send_error(404, "Endpoint not found")
 

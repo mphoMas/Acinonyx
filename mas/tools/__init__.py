@@ -49,6 +49,7 @@ from mas.tools.pii_tool import (
     pii_deanonymize_text_tool,
     register_pii_tools,
 )
+from mas.pm.tools import register_pm_tools
 
 __all__ = [
     "run_python_code",
@@ -79,4 +80,5 @@ __all__ = [
     "pii_anonymize_text_tool",
     "pii_deanonymize_text_tool",
     "register_pii_tools",
+    "register_pm_tools",
 ]

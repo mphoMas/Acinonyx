@@ -42,6 +42,9 @@ DEFAULT_SAFE_TOOLS = {
     "git_status",
     "git_diff",
     "git_log",
+    "pm_get_board_state",
+    "pm_get_issue",
+    "pm_list_issues",
 }
 
 
