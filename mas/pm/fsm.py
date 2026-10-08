@@ -15,6 +15,7 @@ from mas.pm.guards import (
     check_circuit_breaker,
     validate_appetite,
     validate_critic_verdicts,
+    validate_dependencies,
     validate_evidence,
     validate_scope_jail,
     validate_wip_limit,
@@ -121,6 +122,7 @@ class FSMEngine:
                     validate_scope_jail(issue)
 
                 elif current == IssueState.STAGED and target_state == IssueState.IN_PROGRESS:
+                    validate_dependencies(self.db, issue, conn=conn)
                     check_circuit_breaker(issue)
                     validate_wip_limit(self.db, issue.project_id, target_state.value, issue.assignee_principal, conn=conn)
 
@@ -134,6 +136,7 @@ class FSMEngine:
                     validate_wip_limit(self.db, issue.project_id, target_state.value, conn=conn)
 
                 elif current == IssueState.JUDICIAL_REVIEW and target_state == IssueState.DONE:
+                    validate_dependencies(self.db, issue, conn=conn)
                     assert_separation_of_builder_and_judge(issue, caller_principal)
                     validate_critic_verdicts(self.db, issue, stage5_critics)
 

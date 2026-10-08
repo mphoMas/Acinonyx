@@ -63,6 +63,16 @@ class CircuitBreakerTrippedError(PMGuardError):
     pass
 
 
+class DependencyUnresolvedError(PMGuardError):
+    """Raised when transitioning or claiming an issue whose prerequisite dependencies are not DONE."""
+    pass
+
+
+class AssignmentAuthorizationError(PMGuardError):
+    """Raised when an agent attempts an unauthorized task reassignment."""
+    pass
+
+
 # Default Column WIP Limits (governed by Little's Law)
 COLUMN_WIP_LIMITS = {
     IssueState.IN_PROGRESS.value: 4,
@@ -348,3 +358,57 @@ def check_circuit_breaker(issue: Issue) -> None:
             f"Circuit breaker tripped on {issue.key}: Token expenditure ({issue.tokens_spent}) "
             f"exceeded appetite quota ({issue.appetite_tokens})."
         )
+
+
+def validate_dependencies(
+    db: PMDatabase,
+    issue: Issue,
+    conn: Optional[sqlite3.Connection] = None,
+) -> None:
+    """
+    PM-07: Validates that all prerequisite tasks in pm_dependencies have reached DONE state.
+    Fails closed if any blocker dependency is unresolved.
+    """
+    unresolved = db.get_unresolved_dependencies(issue.id, conn=conn)
+    if unresolved:
+        blockers = ", ".join(f"{u.key} ({u.current_state.value})" for u in unresolved)
+        raise DependencyUnresolvedError(
+            f"Cannot start or transition issue {issue.key}: blocked by unresolved dependencies: {blockers}."
+        )
+
+
+def validate_assignment_authorization(
+    issue: Issue,
+    assignee_principal: str,
+    caller_principal: str,
+) -> None:
+    """
+    PM-07: Enforces authorization rules for issue assignment and reassignment.
+    - If unassigned, any authenticated agent can claim for itself, or authorized coordinators can assign.
+    - If already assigned, reassignment requires:
+      - The caller is an authorized coordinator ('chief_architect', 'backend_engineer', 'platform_sre', 'admin', 'agent_workflow_engineer'), OR
+      - The caller is the current assignee releasing or reassigning the task.
+    """
+    AUTHORIZED_MANAGERS = {
+        "chief_architect",
+        "backend_engineer",
+        "platform_sre",
+        "admin",
+        "agent_workflow_engineer",
+    }
+    if not issue.assignee_principal:
+        if caller_principal != assignee_principal and caller_principal not in AUTHORIZED_MANAGERS:
+            raise AssignmentAuthorizationError(
+                f"Agent '{caller_principal}' cannot assign task {issue.key} to '{assignee_principal}' "
+                f"without coordinator authorization."
+            )
+        return
+
+    if issue.assignee_principal != assignee_principal:
+        if caller_principal != issue.assignee_principal and caller_principal not in AUTHORIZED_MANAGERS:
+            raise AssignmentAuthorizationError(
+                f"Unauthorized reassignment: agent '{caller_principal}' cannot reassign {issue.key} "
+                f"from '{issue.assignee_principal}' to '{assignee_principal}'. "
+                f"Only the current assignee or an authorized coordinator may reassign."
+            )
+

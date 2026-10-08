@@ -97,7 +97,27 @@ def sync(*, dry_run=False, db=None, reconcile_assignees=True):
             db=database,
         )
         created.append(f"{task['id']} -> {result['issue_key']}")
-    res = {"created": created, "skipped": skipped, "total": len(data["tasks"])}
+
+    # PM-07: Sync dependency graph edges into pm_dependencies
+    deps_synced = 0
+    if not dry_run:
+        all_issues = database.list_issues(project_id=project.id)
+        current_map = {}
+        for issue in all_issues:
+            for task in data["tasks"]:
+                if f"[ALLOCATION_ID:{task['id']}]" in issue.description or issue.title.casefold() == task["title"].casefold():
+                    current_map[task["id"]] = issue
+                    break
+        for task in data["tasks"]:
+            blocked_issue = current_map.get(task["id"])
+            if blocked_issue:
+                for dep_id in task.get("dependencies", []):
+                    blocker_issue = current_map.get(dep_id)
+                    if blocker_issue:
+                        database.add_dependency(blocker_issue.id, blocked_issue.id)
+                        deps_synced += 1
+
+    res = {"created": created, "skipped": skipped, "total": len(data["tasks"]), "dependencies_synced": deps_synced}
     if reconciled:
         res["reconciled"] = reconciled
     return res

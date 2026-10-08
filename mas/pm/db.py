@@ -559,6 +559,80 @@ class PMDatabase:
             seq = int(row["last_sequence"]) if row else 1
             return f"{pkey}-{seq}"
 
+    # --- Dependency Operations (PM-07) ---
+
+    def add_dependency(
+        self,
+        blocker_id_or_key: str,
+        blocked_id_or_key: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
+        """
+        PM-07: Registers a directed dependency edge.
+        The blocked issue cannot enter active execution until blocker issue is in DONE state.
+        """
+        def _execute(c: sqlite3.Connection) -> None:
+            cur1 = c.execute("SELECT id FROM pm_issues WHERE id = ? OR key = ?", (blocker_id_or_key, blocker_id_or_key.upper()))
+            row1 = cur1.fetchone()
+            if not row1:
+                raise ValueError(f"Blocker issue '{blocker_id_or_key}' not found.")
+            blocker_id = row1["id"]
+
+            cur2 = c.execute("SELECT id FROM pm_issues WHERE id = ? OR key = ?", (blocked_id_or_key, blocked_id_or_key.upper()))
+            row2 = cur2.fetchone()
+            if not row2:
+                raise ValueError(f"Blocked issue '{blocked_id_or_key}' not found.")
+            blocked_id = row2["id"]
+
+            if blocker_id == blocked_id:
+                raise ValueError("An issue cannot depend on itself.")
+
+            c.execute(
+                """
+                INSERT INTO pm_dependencies (blocker_id, blocked_id)
+                VALUES (?, ?)
+                ON CONFLICT(blocker_id, blocked_id) DO NOTHING;
+                """,
+                (blocker_id, blocked_id),
+            )
+
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
+
+    def get_dependencies(
+        self,
+        issue_id_or_key: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> List[Issue]:
+        """PM-07: Returns all blocker issues that this issue depends on."""
+        query = """
+            SELECT b.* FROM pm_issues b
+            JOIN pm_dependencies d ON b.id = d.blocker_id
+            JOIN pm_issues i ON d.blocked_id = i.id
+            WHERE i.id = ? OR i.key = ?
+            ORDER BY b.key ASC
+        """
+        def _execute(c: sqlite3.Connection) -> List[Issue]:
+            cur = c.execute(query, (issue_id_or_key, issue_id_or_key.upper()))
+            return [self._row_to_issue(r) for r in cur.fetchall()]
+
+        if conn is not None:
+            return _execute(conn)
+        conn = self._get_connection()
+        return _execute(conn)
+
+    def get_unresolved_dependencies(
+        self,
+        issue_id_or_key: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> List[Issue]:
+        """PM-07: Returns all blocker issues that are not yet in DONE state."""
+        deps = self.get_dependencies(issue_id_or_key, conn=conn)
+        return [d for d in deps if d.current_state != IssueState.DONE]
+
     # --- Evidence Operations ---
 
     def attach_evidence(self, evidence: EvidenceLink) -> EvidenceLink:

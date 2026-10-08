@@ -9,6 +9,11 @@ from typing import Any, Dict, List, Optional
 
 from mas.pm.db import DEFAULT_DB_PATH, PMDatabase
 from mas.pm.fsm import FSMEngine
+from mas.pm.guards import (
+    WIPLimitExceededError,
+    validate_assignment_authorization,
+    validate_dependencies,
+)
 from mas.pm.metrics import FlowMetricsEngine
 from mas.pm.models import (
     CriticVerdict,
@@ -117,18 +122,101 @@ def pm_create_issue(
 def pm_assign_issue(
     issue_key: str,
     assignee_principal: str,
+    caller_principal: Optional[str] = None,
     db: Optional[PMDatabase] = None,
 ) -> Dict[str, Any]:
-    """Assigns an issue to a specific agent principal."""
+    """Assigns or reassigns an issue with authenticated authorization enforcement."""
     database = db or get_pm_db()
     issue = database.get_issue(issue_key)
     if not issue:
         raise ValueError(f"Issue '{issue_key}' not found.")
+
+    from mas.security import ExecutionContext
+    effective_caller = ExecutionContext.resolve_authenticated_principal(caller_principal)
+    validate_assignment_authorization(issue, assignee_principal, effective_caller)
+
     database.update_issue_assignee(issue.id, assignee_principal)
     return {
         "status": "ASSIGNED",
         "issue_key": issue.key,
         "assignee_principal": assignee_principal,
+        "authorized_by": effective_caller,
+    }
+
+
+def pm_claim_task(
+    issue_key: str,
+    agent_principal: str,
+    caller_principal: Optional[str] = None,
+    db: Optional[PMDatabase] = None,
+) -> Dict[str, Any]:
+    """
+    PM-07 / PM-08: Atomically claims an available task for an agent principal.
+    Enforces:
+    - Caller authentication and assignment authorization
+    - Dependency graph resolution (all blocker tasks must be in DONE state)
+    - Agent concurrency limits (WIP capacity)
+    - Safe transition to IN_PROGRESS
+    """
+    database = db or get_pm_db()
+    issue = database.get_issue(issue_key)
+    if not issue:
+        raise ValueError(f"Issue '{issue_key}' not found.")
+
+    from mas.security import ExecutionContext
+    effective_caller = ExecutionContext.resolve_authenticated_principal(caller_principal)
+    validate_assignment_authorization(issue, agent_principal, effective_caller)
+
+    # Validate prerequisite dependencies
+    validate_dependencies(database, issue)
+
+    with database.atomic_transaction() as conn:
+        active_count = database.count_agent_active_issues(agent_principal, conn=conn)
+        from mas.pm.guards import MAX_AGENT_CONCURRENT_TASKS
+        if active_count >= MAX_AGENT_CONCURRENT_TASKS and issue.assignee_principal != agent_principal:
+            raise WIPLimitExceededError(
+                f"Agent '{agent_principal}' already has {active_count} active task(s). "
+                f"Maximum allowed is {MAX_AGENT_CONCURRENT_TASKS}."
+            )
+
+        database.update_issue_assignee(issue.id, agent_principal, conn=conn)
+
+    # Transition issue to IN_PROGRESS if not already there
+    if issue.current_state != IssueState.IN_PROGRESS:
+        fsm = FSMEngine(database)
+        with ExecutionContext.scope(effective_caller):
+            if issue.current_state == IssueState.BACKLOG:
+                fsm.transition(issue.id, IssueState.REFINED, caller_principal=effective_caller)
+            if issue.current_state in (IssueState.BACKLOG, IssueState.REFINED):
+                fsm.transition(issue.id, IssueState.STAGED, caller_principal=effective_caller)
+            issue = fsm.transition(
+                issue.id,
+                IssueState.IN_PROGRESS,
+                caller_principal=effective_caller,
+                reason=f"Claimed by {agent_principal}",
+            )
+
+    return {
+        "status": "CLAIMED",
+        "issue_key": issue.key,
+        "assignee_principal": agent_principal,
+        "current_state": issue.current_state.value,
+        "claimed_by": effective_caller,
+    }
+
+
+def pm_add_dependency(
+    blocker_key: str,
+    blocked_key: str,
+    db: Optional[PMDatabase] = None,
+) -> Dict[str, Any]:
+    """PM-07: Registers a blocker -> blocked dependency edge in the PM graph."""
+    database = db or get_pm_db()
+    database.add_dependency(blocker_key, blocked_key)
+    return {
+        "status": "DEPENDENCY_ADDED",
+        "blocker": blocker_key,
+        "blocked": blocked_key,
     }
 
 
