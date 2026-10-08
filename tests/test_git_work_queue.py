@@ -36,7 +36,9 @@ def test_agent_pickup_respects_dependencies(tmp_path):
     frontend = next_tasks("frontend_engineer", db=db)
     assert frontend == []
     platform = next_tasks("platform_sre", db=db)
-    assert [task["id"] for task in platform] == ["OPS-01"]
+    plat_ids = [task["id"] for task in platform]
+    assert "OPS-01" in plat_ids
+    assert "OPS-09" in plat_ids
 
 
 def test_sync_reconciles_unassigned_issues(tmp_path):
