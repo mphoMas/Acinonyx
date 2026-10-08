@@ -108,12 +108,11 @@ class ExecutionContext:
     @staticmethod
     def resolve_authenticated_principal(claimed_principal: Optional[str] = None) -> str:
         """
-        PM-SEC-001: Derives authenticated principal and prohibits caller-supplied identity impersonation.
+        PM-SEC-001 & SEC-05: Derives authenticated principal and prohibits caller-supplied identity impersonation.
+        Fails closed: Unverified callers (when no authenticated context exists) are strictly rejected.
         """
         current = ExecutionContext.get_current_principal()
         if not current:
-            if claimed_principal:
-                return claimed_principal
             raise PermissionError("Unauthenticated operation: Execution context lacks a verified principal.")
         if claimed_principal and claimed_principal != current:
             raise PermissionError(
@@ -122,9 +121,15 @@ class ExecutionContext:
         return current
 
 
-def validate_reviewer_authorization(issue_key: str, author_principal: str, reviewer_principal: str) -> None:
+def validate_reviewer_authorization(
+    issue_key: str,
+    author_principal: str,
+    reviewer_principal: str,
+    authenticated_principal: Optional[str] = None,
+) -> None:
     """
-    SEC-02: Enforces reviewer authorization and separation of builder from reviewer.
+    SEC-02 & SEC-05: Enforces reviewer authorization, separation of builder from reviewer,
+    and verified reviewer identity.
     """
     if not reviewer_principal or not reviewer_principal.strip():
         raise PermissionError(f"Reviewer authorization failed for {issue_key}: missing reviewer principal.")
@@ -132,4 +137,63 @@ def validate_reviewer_authorization(issue_key: str, author_principal: str, revie
         raise PermissionError(
             f"Separation of duties violation for {issue_key}: author '{author_principal}' cannot review their own work."
         )
+    if authenticated_principal and authenticated_principal != reviewer_principal:
+        raise PermissionError(
+            f"UnauthorizedReviewerError: Authenticated principal '{authenticated_principal}' is not authorized to act as reviewer '{reviewer_principal}' for {issue_key}."
+        )
+
+
+DEFAULT_VERDICT_SECRET = "acinonyx_verdict_signing_secret_v1_2026"
+
+
+def sign_verdict_payload(
+    issue_id: str,
+    reviewer_principal: str,
+    verdict_value: str,
+    rework_cycle: int,
+    commit_sha: Optional[str] = None,
+    findings: Optional[Dict[str, Any]] = None,
+    secret_key: Optional[str] = None,
+) -> str:
+    """
+    GOV-02: Cryptographically signs a reviewer decision record with HMAC-SHA256.
+    """
+    import hashlib
+    import hmac
+    import json
+    import os
+
+    findings_json = json.dumps(findings or {}, sort_keys=True)
+    payload = f"{issue_id}:{reviewer_principal}:{verdict_value}:{rework_cycle}:{commit_sha or ''}:{findings_json}"
+    key = (secret_key or os.getenv("MAS_VERDICT_SECRET") or DEFAULT_VERDICT_SECRET).encode("utf-8")
+    return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_verdict_signature(
+    issue_id: str,
+    reviewer_principal: str,
+    verdict_value: str,
+    rework_cycle: int,
+    signature: str,
+    commit_sha: Optional[str] = None,
+    findings: Optional[Dict[str, Any]] = None,
+    secret_key: Optional[str] = None,
+) -> bool:
+    """
+    GOV-02: Verifies that a reviewer verdict decision record has not been forged or tampered with.
+    """
+    import hmac
+
+    if not signature or not signature.strip():
+        return False
+    expected = sign_verdict_payload(
+        issue_id=issue_id,
+        reviewer_principal=reviewer_principal,
+        verdict_value=verdict_value,
+        rework_cycle=rework_cycle,
+        commit_sha=commit_sha,
+        findings=findings,
+        secret_key=secret_key,
+    )
+    return hmac.compare_digest(expected, signature.strip())
 

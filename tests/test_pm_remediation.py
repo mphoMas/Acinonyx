@@ -122,31 +122,32 @@ def test_pm_sec_002_evidence_fail_closed(temp_pm_db, tmp_path):
         )
     )
 
-    with pytest.raises(UnverifiedWorkError) as exc_git:
-        fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-    assert "Git commit verification failed" in str(exc_git.value)
+    with ExecutionContext.scope("coder"):
+        with pytest.raises(UnverifiedWorkError) as exc_git:
+            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
+        assert "Git commit verification failed" in str(exc_git.value)
 
-    # 2. Fix git commit with real commit, but use non-existent log file
-    real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-    conn = temp_pm_db._get_connection()
-    with conn:
-        conn.execute("UPDATE pm_evidence_links SET content_hash = ?, uri = ? WHERE id = 'ev-git-fake'", (real_sha, f"git:commit:{real_sha}"))
-        conn.execute("UPDATE pm_evidence_links SET uri = 'file:///nonexistent/path/fake.log' WHERE id = 'ev-test-ok'")
-    conn.close()
+        # 2. Fix git commit with real commit, but use non-existent log file
+        real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+        conn = temp_pm_db._get_connection()
+        with conn:
+            conn.execute("UPDATE pm_evidence_links SET content_hash = ?, uri = ? WHERE id = 'ev-git-fake'", (real_sha, f"git:commit:{real_sha}"))
+            conn.execute("UPDATE pm_evidence_links SET uri = 'file:///nonexistent/path/fake.log' WHERE id = 'ev-test-ok'")
+        conn.close()
 
-    with pytest.raises(UnverifiedWorkError) as exc_missing_log:
-        fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-    assert "does not exist on disk" in str(exc_missing_log.value)
+        with pytest.raises(UnverifiedWorkError) as exc_missing_log:
+            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
+        assert "does not exist on disk" in str(exc_missing_log.value)
 
-    # 3. Test run exit code != 0 fails closed
-    conn = temp_pm_db._get_connection()
-    with conn:
-        conn.execute("UPDATE pm_evidence_links SET uri = ?, payload = ? WHERE id = 'ev-test-ok'", (f"file://{log_file}", '{"exit_code": 1}'))
-    conn.close()
+        # 3. Test run exit code != 0 fails closed
+        conn = temp_pm_db._get_connection()
+        with conn:
+            conn.execute("UPDATE pm_evidence_links SET uri = ?, payload = ? WHERE id = 'ev-test-ok'", (f"file://{log_file}", '{"exit_code": 1}'))
+        conn.close()
 
-    with pytest.raises(UnverifiedWorkError) as exc_fail_code:
-        fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-    assert "test run evidence indicates failure" in str(exc_fail_code.value)
+        with pytest.raises(UnverifiedWorkError) as exc_fail_code:
+            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
+        assert "test run evidence indicates failure" in str(exc_fail_code.value)
 
 
 def test_pm_sec_003_scope_jail_git_changeset(temp_pm_db, tmp_path):
@@ -193,8 +194,9 @@ def test_pm_sec_003_scope_jail_git_changeset(temp_pm_db, tmp_path):
 
     fsm = FSMEngine(temp_pm_db)
     # HEAD modified files outside mas/isolated_sandbox/* (e.g. mas/pm/db.py)
-    with pytest.raises(ScopeJailViolationError) as exc_scope:
-        fsm.transition("SCP-1", IssueState.VERIFICATION, caller_principal="coder")
+    with ExecutionContext.scope("coder"):
+        with pytest.raises(ScopeJailViolationError) as exc_scope:
+            fsm.transition("SCP-1", IssueState.VERIFICATION, caller_principal="coder")
     assert "violates scope jail" in str(exc_scope.value) or "modified out-of-scope file" in str(exc_scope.value)
 
 
@@ -225,7 +227,8 @@ def test_pm_con_001_atomic_wip_concurrency(temp_pm_db):
 
     def attempt_transition(key: str, worker: str):
         try:
-            fsm.transition(key, IssueState.IN_PROGRESS, caller_principal=worker)
+            with ExecutionContext.scope(worker):
+                fsm.transition(key, IssueState.IN_PROGRESS, caller_principal=worker)
             successes.append(key)
         except WIPLimitExceededError:
             rejections.append(key)
@@ -283,37 +286,42 @@ def test_pm_gov_001_stale_verdict_invalidation_on_rework(temp_pm_db, tmp_path):
     fsm = FSMEngine(temp_pm_db)
 
     # Cycle 0: Add PASS verdicts
-    temp_pm_db.record_verdict(
-        CriticVerdict(
-            id="v-qa-1",
-            issue_id=issue.id,
-            reviewer_principal="qa_critic",
-            verdict=CriticVerdictType.PASS,
-            rework_cycle=0,
+    with ExecutionContext.scope("qa_critic"):
+        temp_pm_db.record_verdict(
+            CriticVerdict(
+                id="v-qa-1",
+                issue_id=issue.id,
+                reviewer_principal="qa_critic",
+                verdict=CriticVerdictType.PASS,
+                rework_cycle=0,
+            )
         )
-    )
-    temp_pm_db.record_verdict(
-        CriticVerdict(
-            id="v-sec-1",
-            issue_id=issue.id,
-            reviewer_principal="adversarial_red_team",
-            verdict=CriticVerdictType.PASS,
-            rework_cycle=0,
+    with ExecutionContext.scope("adversarial_red_team"):
+        temp_pm_db.record_verdict(
+            CriticVerdict(
+                id="v-sec-1",
+                issue_id=issue.id,
+                reviewer_principal="adversarial_red_team",
+                verdict=CriticVerdictType.PASS,
+                rework_cycle=0,
+            )
         )
-    )
 
     # Successfully transition to JUDICIAL_REVIEW
-    step = fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
+    with ExecutionContext.scope("qa_critic"):
+        step = fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
     assert step.current_state == IssueState.JUDICIAL_REVIEW
 
     # Chief architect rejects to REJECTED_REWORK
-    fsm.transition("GOV-1", IssueState.REJECTED_REWORK, caller_principal="chief_architect", reason="Defect in edge case")
+    with ExecutionContext.scope("chief_architect"):
+        fsm.transition("GOV-1", IssueState.REJECTED_REWORK, caller_principal="chief_architect", reason="Defect in edge case")
     reworked = temp_pm_db.get_issue("GOV-1")
     assert reworked.current_state == IssueState.REJECTED_REWORK
     assert reworked.rework_cycle == 1
 
     # Move back to IN_PROGRESS then VERIFICATION
-    fsm.transition("GOV-1", IssueState.IN_PROGRESS, caller_principal="coder")
+    with ExecutionContext.scope("coder"):
+        fsm.transition("GOV-1", IssueState.IN_PROGRESS, caller_principal="coder")
 
     real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     log_file = tmp_path / "valid.log"
@@ -340,35 +348,40 @@ def test_pm_gov_001_stale_verdict_invalidation_on_rework(temp_pm_db, tmp_path):
         )
     )
 
-    fsm.transition("GOV-1", IssueState.VERIFICATION, caller_principal="coder")
+    with ExecutionContext.scope("coder"):
+        fsm.transition("GOV-1", IssueState.VERIFICATION, caller_principal="coder")
 
     # Attempting to transition to JUDICIAL_REVIEW must fail because cycle 0 verdicts are stale!
-    with pytest.raises(UnverifiedWorkError) as exc_stale:
-        fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
+    with ExecutionContext.scope("qa_critic"):
+        with pytest.raises(UnverifiedWorkError) as exc_stale:
+            fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
     assert "missing required PASS verdicts for rework cycle 1" in str(exc_stale.value)
 
     # Cast fresh Cycle 1 verdicts
-    temp_pm_db.record_verdict(
-        CriticVerdict(
-            id="v-qa-2",
-            issue_id=issue.id,
-            reviewer_principal="qa_critic",
-            verdict=CriticVerdictType.PASS,
-            rework_cycle=1,
+    with ExecutionContext.scope("qa_critic"):
+        temp_pm_db.record_verdict(
+            CriticVerdict(
+                id="v-qa-2",
+                issue_id=issue.id,
+                reviewer_principal="qa_critic",
+                verdict=CriticVerdictType.PASS,
+                rework_cycle=1,
+            )
         )
-    )
-    temp_pm_db.record_verdict(
-        CriticVerdict(
-            id="v-sec-2",
-            issue_id=issue.id,
-            reviewer_principal="adversarial_red_team",
-            verdict=CriticVerdictType.PASS,
-            rework_cycle=1,
+    with ExecutionContext.scope("adversarial_red_team"):
+        temp_pm_db.record_verdict(
+            CriticVerdict(
+                id="v-sec-2",
+                issue_id=issue.id,
+                reviewer_principal="adversarial_red_team",
+                verdict=CriticVerdictType.PASS,
+                rework_cycle=1,
+            )
         )
-    )
 
     # Now transition succeeds!
-    step_fresh = fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
+    with ExecutionContext.scope("qa_critic"):
+        step_fresh = fsm.transition("GOV-1", IssueState.JUDICIAL_REVIEW, caller_principal="qa_critic")
     assert step_fresh.current_state == IssueState.JUDICIAL_REVIEW
 
 

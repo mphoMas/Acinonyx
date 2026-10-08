@@ -37,6 +37,31 @@ from mas.pm.models import (
 )
 from mas.pm.tools import register_pm_tools
 from mas.mcp.protocol import MCPRegistry
+from mas.security import ExecutionContext
+
+
+@pytest.fixture(autouse=True)
+def auto_authenticate_legacy_pm_engine(monkeypatch):
+    """Ensures legacy direct transition and verdict calls in test_pm_engine.py run with caller principal scope."""
+    orig_transition = FSMEngine.transition
+
+    def patched_transition(self, issue_id_or_key, target_state, caller_principal=None, *args, **kwargs):
+        if caller_principal and ExecutionContext.get_current_principal() is None:
+            with ExecutionContext.scope(caller_principal):
+                return orig_transition(self, issue_id_or_key, target_state, caller_principal, *args, **kwargs)
+        return orig_transition(self, issue_id_or_key, target_state, caller_principal, *args, **kwargs)
+
+    monkeypatch.setattr(FSMEngine, "transition", patched_transition)
+
+    orig_record_verdict = PMDatabase.record_verdict
+
+    def patched_record_verdict(self, verdict, enforce_auth=True, *args, **kwargs):
+        if ExecutionContext.get_current_principal() is None:
+            with ExecutionContext.scope(verdict.reviewer_principal):
+                return orig_record_verdict(self, verdict, enforce_auth=enforce_auth, *args, **kwargs)
+        return orig_record_verdict(self, verdict, enforce_auth=enforce_auth, *args, **kwargs)
+
+    monkeypatch.setattr(PMDatabase, "record_verdict", patched_record_verdict)
 
 
 @pytest.fixture

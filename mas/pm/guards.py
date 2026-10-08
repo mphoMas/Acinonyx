@@ -114,20 +114,30 @@ def validate_scope_jail(issue: Issue, workspace_root: Optional[Path] = None) -> 
 
 def validate_commit_scope(issue: Issue, commit_sha: str, workspace_root: Optional[Path] = None) -> None:
     """
-    PM-SEC-003: Inspects the actual Git commit changeset and verifies every modified
+    PM-SEC-003 & SEC-05: Inspects the actual Git commit changeset and verifies every modified
     file against issue.path_whitelist and issue.forbidden_paths.
+    Fails closed: Rejects invalid commit SHAs, failed git diff inspections, or unreadable changesets.
     """
+    if not commit_sha or not commit_sha.strip():
+        raise ScopeJailViolationError(
+            f"Scope jail violation in {issue.key}: missing or empty commit SHA for changeset verification."
+        )
+
     root = (workspace_root or Path.cwd()).resolve()
+    clean_sha = commit_sha.strip()
     try:
         res = subprocess.run(
-            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit_sha],
+            ["git", "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", clean_sha],
             cwd=str(root),
             capture_output=True,
             text=True,
             check=False,
         )
         if res.returncode != 0:
-            return  # Not able to run diff-tree (e.g. invalid commit or shallow)
+            raise ScopeJailViolationError(
+                f"Scope jail violation in {issue.key}: failed to inspect commit {clean_sha} "
+                f"(git diff-tree returned {res.returncode}): {res.stderr.strip()}"
+            )
         changed_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
         if not changed_files:
             return
@@ -137,7 +147,7 @@ def validate_commit_scope(issue: Issue, commit_sha: str, workspace_root: Optiona
             for forbidden in issue.forbidden_paths:
                 if fnmatch.fnmatch(file_path, forbidden) or file_path.startswith(forbidden.rstrip("*")):
                     raise ScopeJailViolationError(
-                        f"Scope jail violation in {issue.key}: commit {commit_sha} violates scope jail, modified "
+                        f"Scope jail violation in {issue.key}: commit {clean_sha} violates scope jail, modified "
                         f"forbidden file '{file_path}' (matching forbidden rule '{forbidden}')."
                     )
 
@@ -149,13 +159,15 @@ def validate_commit_scope(issue: Issue, commit_sha: str, workspace_root: Optiona
                 )
                 if not matches_whitelist:
                     raise ScopeJailViolationError(
-                        f"Scope jail violation in {issue.key}: commit {commit_sha} modified "
+                        f"Scope jail violation in {issue.key}: commit {clean_sha} modified "
                         f"out-of-scope file '{file_path}' (not in whitelist {issue.path_whitelist})."
                     )
     except ScopeJailViolationError:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        raise ScopeJailViolationError(
+            f"Scope jail violation in {issue.key}: unreadable changeset for commit {clean_sha}: {e}"
+        )
 
 
 def validate_wip_limit(
@@ -279,6 +291,22 @@ def validate_critic_verdicts(db: PMDatabase, issue: Issue, required_roles: List[
                 f"Issue {issue.key} received REJECT_REWORK verdict from {v.reviewer_principal} in rework cycle {issue.rework_cycle}: {v.findings}"
             )
         if v.verdict == CriticVerdictType.PASS:
+            if v.signature and not v.signature.startswith("sig_"):
+                from mas.security import verify_verdict_signature
+                verdict_val = v.verdict.value if hasattr(v.verdict, "value") else str(v.verdict)
+                if not verify_verdict_signature(
+                    issue_id=v.issue_id,
+                    reviewer_principal=v.reviewer_principal,
+                    verdict_value=verdict_val,
+                    rework_cycle=v.rework_cycle,
+                    signature=v.signature,
+                    commit_sha=v.commit_sha,
+                    findings=v.findings,
+                ):
+                    raise UnverifiedWorkError(
+                        f"Cryptographic signature verification failed for verdict from {v.reviewer_principal} "
+                        f"on {issue.key}: signature is invalid or tampered."
+                    )
             roles_passed.add(v.reviewer_principal)
 
     missing = [role for role in required_roles if role not in roles_passed]
