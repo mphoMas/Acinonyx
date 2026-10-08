@@ -13,3 +13,15 @@ Run commands from the repository root. These scripts have different purposes and
 | HR evaluations | `swarm_rate_hr.py`, `swarm_rate_hr_v2.py` |
 
 Existing workstation-specific paths and simulated verification behavior are documented in the [architecture review](../docs/reviews/ARCHITECT_REVIEW.md). This folder reorganization does not fix those defects. `build_evidence_bundle.py` now writes the repository export under `archives/evidence/`; its existing external artifact-copy destination is unchanged.
+
+## Canonical Acinonyx MAS-PM backlog
+
+The Git-tracked master allocation lives in [`seed_acinonyx_backlog.py`](seed_acinonyx_backlog.py). After pulling the branch, run these commands **from the repository root**, in the same working directory and environment as the dashboard:
+
+```bash
+PYTHONPATH=. python3 scripts/seed_acinonyx_backlog.py --dry-run
+PYTHONPATH=. python3 scripts/seed_acinonyx_backlog.py --apply
+python3 main.py --mode dashboard --port 8080
+```
+
+Then open `http://127.0.0.1:8080/portal/scrum.html`. The importer creates missing issues only, leaves existing issues unchanged, and does not transition issues or trigger agent execution. It records proposed owners and dependency references in descriptions; it does not assign actual agent principals or create relational dependency edges. Git stores the reproducible backlog definition, **not** the local `mas_pm.db` contents. Review the dry-run output before applying.
