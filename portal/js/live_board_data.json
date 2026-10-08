@@ -3,7 +3,7 @@
   "columns": {
     "BACKLOG": {
       "name": "BACKLOG",
-      "count": 29,
+      "count": 35,
       "wip_limit": null,
       "is_saturated": false
     },
@@ -961,6 +961,207 @@
         ],
         "created_at": "2026-10-08T13:27:31.218694+00:00",
         "updated_at": "2026-10-08T13:27:31.218694+00:00"
+      },
+      {
+        "id": "92dba4ea-ce32-431c-95ec-f49232b2eeed",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-56",
+        "title": "Eliminate spoofable execution principals and require trusted reviewer authentication",
+        "description": "[ALLOCATION_ID:SEC-09]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): None\nAcceptance: Bind principal identity to verified agent/session credentials at a trusted ingress; application scripts and tool callers cannot self-assert or switch to privileged reviewer identities; Remove or tightly restrict unauthenticated principal setters and arbitrary ExecutionContext.scope elevation in production code; prove impersonation attempts fail closed; Test direct database calls, FSM transitions, service endpoints, and adversarial reviewer identity spoofing; preserve valid isolated test harness capabilities; Provide threat model, implementation commit, reproducible test evidence, and independently authenticated review\nScope: mas/security.py, mas/pm/, mas/mcp/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/security.py",
+          "mas/pm/",
+          "mas/mcp/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.111990+00:00",
+        "updated_at": "2026-10-08T15:09:21.111990+00:00"
+      },
+      {
+        "id": "dd79a10d-4394-4717-b08c-5efd9915f1cb",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-57",
+        "title": "Remove scripted PASS approvals and enforce independently sourced verdicts",
+        "description": "[ALLOCATION_ID:GOV-06]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): SEC-09, GOV-02\nAcceptance: Remove production execution paths that fabricate PASS verdicts or enter arbitrary reviewer/chief_architect contexts to advance tickets; Disallow enforce_auth=False and unsigned or sig_-prefixed legacy approvals in production authorization and transition gates; retain historical evidence as unverified rather than silently deleting; Require independently authenticated reviewer decisions tied to specific reviewed commit, evidence digest, reviewer identity, and current rework cycle; Add adversarial tests for direct DB bypass, legacy signatures, scripted approvals, and unauthorized DONE transitions; Do not re-certify historical DONE tickets automatically; produce reconciliation report and independent review evidence\nScope: mas/pm/, mas/security.py, scripts/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "scripts/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.117948+00:00",
+        "updated_at": "2026-10-08T15:09:21.117948+00:00"
+      },
+      {
+        "id": "35b97740-3c98-4be4-bdd2-eee9d5dea23e",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-58",
+        "title": "Harden verdict signing keys and fail-closed Git changeset scope verification",
+        "description": "[ALLOCATION_ID:SEC-10]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): SEC-05\nAcceptance: Remove hard-coded default verdict signing key; require secret from protected configuration or dedicated signing service, with explicit missing-key failure; Ensure signing/verifying keys cannot be overridden by untrusted callers; document rotation and provenance; Reject empty or unverifiable changesets when a code-change commit is mandatory; reject broad wildcard scope bypasses and validate all changed files against forbidden paths; Test malformed SHAs, empty commits, merge commits, root commits, symlink/path traversal, and restricted path globs as applicable; Provide independent security review and reproducible test artifacts\nScope: mas/security.py, mas/pm/guards.py, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/security.py",
+          "mas/pm/guards.py",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.123925+00:00",
+        "updated_at": "2026-10-08T15:09:21.123925+00:00"
+      },
+      {
+        "id": "3286f5ef-b0ba-49cd-ba5f-65d227444ae8",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-59",
+        "title": "Stabilize Ruff lint and reproducible GitHub Actions CI",
+        "description": "[ALLOCATION_ID:OPS-09]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): None\nAcceptance: Fix Ruff violations using the exact pinned configuration and Python version used in GitHub Actions; do not disable rules or globally suppress findings to achieve green CI; Use safe autofixes selectively and manually review security-sensitive exception handling, async I/O, subprocess handling and permission checks; Run targeted security and PM tests plus full regression suite; record exact commands, dependency lock/version, exit codes and logs; GitHub Actions produces reproducible lint and test artifacts tied to immutable commit SHA; report actual pass/fail status and remaining exceptions; Obtain independent QA review of CI workflow and artifacts\nScope: mas/, tests/, scripts/, .github/, pyproject.toml, ruff.toml, requirements*.txt, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "tests/",
+          "scripts/",
+          ".github/",
+          "pyproject.toml",
+          "ruff.toml",
+          "requirements*.txt",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.157086+00:00",
+        "updated_at": "2026-10-08T15:09:21.157086+00:00"
+      },
+      {
+        "id": "47998b59-becf-46d9-9f58-8be112802472",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-60",
+        "title": "Phase 3 autonomous ticket execution integration and audited end-to-end pickup",
+        "description": "[ALLOCATION_ID:PM-14]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: security_sre\nDependencies (allocation IDs): PM-07, PM-08, PM-11, PM-12, GOV-06, SEC-10, OPS-09\nAcceptance: Demonstrate dependency-gated, authorized assignment and atomic agent claim with lease/heartbeat and crash recovery; Demonstrate Git-to-board reconciliation and automatic pickup of eligible tickets without changing historical DONE records; Enforce independently authenticated review, evidence provenance and verified token budgets during execution; Provide repeatable integration tests for concurrency, duplicate delivery, interrupted workers, unauthorized claims and failed CI; Attach end-to-end trace, commit SHA, logs and independent review; do not mark DONE from orchestration scripts\nScope: mas/pm/, mas/, scripts/, tests/, .github/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/",
+          "scripts/",
+          "tests/",
+          ".github/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.243540+00:00",
+        "updated_at": "2026-10-08T15:09:21.243540+00:00"
+      },
+      {
+        "id": "9470a45e-faf3-4154-9d22-3bd79e3c8f23",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-61",
+        "title": "Phase 4 Scrum board rollout and historical DONE ticket metadata verification",
+        "description": "[ALLOCATION_ID:UI-07]\nSource: work_queue/tasks.json\nAssigned builder: frontend_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): PM-13, PM-14\nAcceptance: Verify category, current assignee, assigned-by and append-only assignment history on live board for BACKLOG, active and DONE tickets; Display actual per-agent/per-model token usage and cost with provenance; unavailable historical values must be shown as unknown, never zero; Run idempotent dry-run and backfill reconciliation against historical DONE tickets without rewriting completion dates, evidence, approvals or status; Validate accessible responsive card/detail UI, authorization boundaries and automated API/UI regression tests; Provide screenshots, test evidence, migration report and independent QA acceptance\nScope: mas/dashboard/, mas/pm/, portal/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": null,
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/dashboard/",
+          "mas/pm/",
+          "portal/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T15:09:21.249143+00:00",
+        "updated_at": "2026-10-08T15:09:21.249143+00:00"
       }
     ],
     "REFINED": [],
