@@ -21,6 +21,7 @@ workspace/data/*.db
 !workspace/data/comms_vault.db
 workspace/data/*.db-*
 mas_pm.db*
+logs/
 
 # Node dependencies
 node_modules/

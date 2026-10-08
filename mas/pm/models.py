@@ -29,6 +29,19 @@ class IssueType(str, Enum):
     DEFECT = "DEFECT"
 
 
+class PriorityLevel(str, Enum):
+    CRITICAL = "CRITICAL"
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class SprintState(str, Enum):
+    FUTURE = "FUTURE"
+    ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
+
+
 class CriticVerdictType(str, Enum):
     PASS = "PASS"
     REJECT_REWORK = "REJECT_REWORK"
@@ -67,6 +80,19 @@ class ShapedTask(BaseModel):
     no_gos: List[str] = Field(default_factory=list)
 
 
+class Sprint(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str
+    project_id: str
+    name: str
+    goal: str = ""
+    state: SprintState = SprintState.FUTURE
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    created_at: str = ""
+
+
 class Issue(BaseModel):
     model_config = ConfigDict(frozen=False)
 
@@ -77,12 +103,16 @@ class Issue(BaseModel):
     description: str = ""
     issue_type: IssueType = IssueType.TASK
     current_state: IssueState = IssueState.BACKLOG
+    priority: PriorityLevel = PriorityLevel.MEDIUM
+    sprint_id: Optional[str] = None
     parent_id: Optional[str] = None
     assignee_principal: Optional[str] = None
     appetite_tokens: int = 50_000
     appetite_timeout_s: int = 1800
     tokens_spent: int = 0
     reflexion_attempts: int = 0
+    rework_cycle: int = 0
+    blocker_reason: Optional[str] = None
     path_whitelist: List[str] = Field(default_factory=list)
     forbidden_paths: List[str] = Field(default_factory=list)
     created_at: str = ""
@@ -116,6 +146,8 @@ class CriticVerdict(BaseModel):
     verdict: CriticVerdictType
     findings: Dict[str, Any] = Field(default_factory=dict)
     signature: str = ""
+    rework_cycle: int = 0
+    commit_sha: Optional[str] = None
     timestamp: str = ""
 
 
@@ -133,6 +165,8 @@ class BoardState(BaseModel):
     flow_health: str
     wip_saturation_pct: float
     issues_by_column: Dict[str, List[Issue]] = Field(default_factory=dict)
+    sprints: List[Sprint] = Field(default_factory=list)
+    active_sprint_id: Optional[str] = None
 
 
 class CFDSnapshot(BaseModel):

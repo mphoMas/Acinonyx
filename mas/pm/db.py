@@ -21,7 +21,10 @@ from mas.pm.models import (
     Issue,
     IssueState,
     IssueType,
+    PriorityLevel,
     Project,
+    Sprint,
+    SprintState,
 )
 
 DEFAULT_DB_PATH = Path("mas_pm.db")
@@ -173,10 +176,60 @@ class PMDatabase:
                 );
                 """)
 
+                # PM-DATA-001: Transactional Sequence Table
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_project_sequences (
+                    project_key TEXT PRIMARY KEY,
+                    last_sequence INTEGER NOT NULL DEFAULT 0
+                );
+                """)
+
+                # Hybrid Scrum: Sprints Table
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_sprints (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    goal TEXT,
+                    state TEXT NOT NULL CHECK(state IN ('FUTURE', 'ACTIVE', 'CLOSED')),
+                    start_date TIMESTAMP,
+                    end_date TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(project_id) REFERENCES pm_projects(id) ON DELETE CASCADE
+                );
+                """)
+
+                # Migrations for existing tables
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN priority TEXT DEFAULT 'MEDIUM';")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN sprint_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN rework_cycle INTEGER DEFAULT 0;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN blocker_reason TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_critic_verdicts ADD COLUMN rework_cycle INTEGER DEFAULT 0;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_critic_verdicts ADD COLUMN commit_sha TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+
                 # Indices
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_state ON pm_issues(current_state);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_project ON pm_issues(project_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_assignee ON pm_issues(assignee_principal);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_sprint ON pm_issues(sprint_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_transitions_issue ON pm_transitions(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_evidence_issue ON pm_evidence_links(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_verdicts_issue ON pm_critic_verdicts(issue_id);")
@@ -243,10 +296,10 @@ class PMDatabase:
                     """
                     INSERT INTO pm_issues (
                         id, project_id, key, title, description, issue_type, current_state,
-                        parent_id, assignee_principal, appetite_tokens, appetite_timeout_s,
-                        tokens_spent, reflexion_attempts, path_whitelist, forbidden_paths,
+                        priority, sprint_id, parent_id, assignee_principal, appetite_tokens, appetite_timeout_s,
+                        tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         issue.id,
@@ -256,12 +309,16 @@ class PMDatabase:
                         issue.description,
                         issue.issue_type.value if hasattr(issue.issue_type, "value") else str(issue.issue_type),
                         issue.current_state.value if hasattr(issue.current_state, "value") else str(issue.current_state),
+                        issue.priority.value if hasattr(issue.priority, "value") else str(issue.priority),
+                        issue.sprint_id,
                         issue.parent_id,
                         issue.assignee_principal,
                         issue.appetite_tokens,
                         issue.appetite_timeout_s,
                         issue.tokens_spent,
                         issue.reflexion_attempts,
+                        issue.rework_cycle,
+                        issue.blocker_reason,
                         json.dumps(issue.path_whitelist),
                         json.dumps(issue.forbidden_paths),
                         now,
@@ -305,29 +362,31 @@ class PMDatabase:
         finally:
             conn.close()
 
-    def count_issues_in_state(self, project_id: str, state: str) -> int:
-        conn = self._get_connection()
+    def count_issues_in_state(self, project_id: str, state: str, conn: Optional[sqlite3.Connection] = None) -> int:
+        c = conn or self._get_connection()
         try:
-            cur = conn.execute(
+            cur = c.execute(
                 "SELECT COUNT(*) as cnt FROM pm_issues WHERE project_id = ? AND current_state = ?",
                 (project_id, state),
             )
             row = cur.fetchone()
             return int(row["cnt"]) if row else 0
         finally:
-            conn.close()
+            if conn is None:
+                c.close()
 
-    def count_agent_active_issues(self, assignee_principal: str) -> int:
-        conn = self._get_connection()
+    def count_agent_active_issues(self, assignee_principal: str, conn: Optional[sqlite3.Connection] = None) -> int:
+        c = conn or self._get_connection()
         try:
-            cur = conn.execute(
+            cur = c.execute(
                 "SELECT COUNT(*) as cnt FROM pm_issues WHERE assignee_principal = ? AND current_state = 'IN_PROGRESS'",
                 (assignee_principal,),
             )
             row = cur.fetchone()
             return int(row["cnt"]) if row else 0
         finally:
-            conn.close()
+            if conn is None:
+                c.close()
 
     def update_issue_state(
         self,
@@ -336,28 +395,37 @@ class PMDatabase:
         triggered_by: str,
         reason: str = "",
         increment_reflexion: bool = False,
+        increment_rework_cycle: bool = False,
+        blocker_reason: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
-        """Atomic state update with transition audit log."""
-        with self.atomic_transaction() as conn:
-            cur = conn.execute("SELECT current_state, reflexion_attempts FROM pm_issues WHERE id = ?", (issue_id,))
+        """Atomic state update with transition audit log and rework cycle tracking."""
+        def _execute_update(c: sqlite3.Connection) -> None:
+            cur = c.execute(
+                "SELECT current_state, reflexion_attempts, rework_cycle FROM pm_issues WHERE id = ?",
+                (issue_id,),
+            )
             row = cur.fetchone()
             if not row:
                 raise ValueError(f"Issue {issue_id} not found")
             old_state = row["current_state"]
             reflexion = row["reflexion_attempts"]
+            rework = row["rework_cycle"] if "rework_cycle" in row.keys() else 0
             if increment_reflexion:
                 reflexion += 1
+            if increment_rework_cycle:
+                rework += 1
 
             now = datetime.now(timezone.utc).isoformat()
-            conn.execute(
+            c.execute(
                 """
                 UPDATE pm_issues
-                SET current_state = ?, reflexion_attempts = ?, updated_at = ?
+                SET current_state = ?, reflexion_attempts = ?, rework_cycle = ?, blocker_reason = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (new_state, reflexion, now, issue_id),
+                (new_state, reflexion, rework, blocker_reason, now, issue_id),
             )
-            conn.execute(
+            c.execute(
                 """
                 INSERT INTO pm_transitions (issue_id, from_state, to_state, triggered_by, reason, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -365,19 +433,38 @@ class PMDatabase:
                 (issue_id, old_state, new_state, triggered_by, reason, now),
             )
 
+        if conn is not None:
+            _execute_update(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute_update(c)
+
     def next_issue_key(self, project_key: str) -> str:
-        """Computes the next incremental issue key for a project (e.g. CORE-1, CORE-2)."""
-        conn = self._get_connection()
-        try:
+        """
+        PM-DATA-001: Computes the next incremental sequence issue key using atomic transaction.
+        """
+        pkey = project_key.upper()
+        with self.atomic_transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO pm_project_sequences (project_key, last_sequence)
+                VALUES (?, 0)
+                ON CONFLICT(project_key) DO NOTHING;
+                """,
+                (pkey,),
+            )
             cur = conn.execute(
-                "SELECT COUNT(*) as cnt FROM pm_issues WHERE key LIKE ?",
-                (f"{project_key.upper()}-%",),
+                """
+                UPDATE pm_project_sequences
+                SET last_sequence = last_sequence + 1
+                WHERE project_key = ?
+                RETURNING last_sequence;
+                """,
+                (pkey,),
             )
             row = cur.fetchone()
-            count = int(row["cnt"]) if row else 0
-            return f"{project_key.upper()}-{count + 1}"
-        finally:
-            conn.close()
+            seq = int(row["last_sequence"]) if row else 1
+            return f"{pkey}-{seq}"
 
     # --- Evidence Operations ---
 
@@ -434,11 +521,18 @@ class PMDatabase:
         conn = self._get_connection()
         try:
             now = datetime.now(timezone.utc).isoformat()
+            if verdict.rework_cycle == 0:
+                cur = conn.execute("SELECT rework_cycle FROM pm_issues WHERE id = ?", (verdict.issue_id,))
+                row = cur.fetchone()
+                if row and "rework_cycle" in row.keys() and row["rework_cycle"] is not None:
+                    verdict.rework_cycle = int(row["rework_cycle"])
+
             with conn:
                 conn.execute(
                     """
-                    INSERT INTO pm_critic_verdicts (id, issue_id, reviewer_principal, verdict, findings, signature, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO pm_critic_verdicts (
+                        id, issue_id, reviewer_principal, verdict, findings, signature, rework_cycle, commit_sha, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         verdict.id,
@@ -447,6 +541,8 @@ class PMDatabase:
                         verdict.verdict.value if hasattr(verdict.verdict, "value") else str(verdict.verdict),
                         json.dumps(verdict.findings),
                         verdict.signature,
+                        verdict.rework_cycle,
+                        verdict.commit_sha,
                         now,
                     ),
                 )
@@ -455,10 +551,19 @@ class PMDatabase:
         finally:
             conn.close()
 
-    def get_verdicts(self, issue_id: str) -> List[CriticVerdict]:
+    def get_verdicts(self, issue_id: str, rework_cycle: Optional[int] = None) -> List[CriticVerdict]:
         conn = self._get_connection()
         try:
-            cur = conn.execute("SELECT * FROM pm_critic_verdicts WHERE issue_id = ? ORDER BY timestamp ASC", (issue_id,))
+            if rework_cycle is not None:
+                cur = conn.execute(
+                    "SELECT * FROM pm_critic_verdicts WHERE issue_id = ? AND rework_cycle = ? ORDER BY timestamp ASC",
+                    (issue_id, rework_cycle),
+                )
+            else:
+                cur = conn.execute(
+                    "SELECT * FROM pm_critic_verdicts WHERE issue_id = ? ORDER BY timestamp ASC",
+                    (issue_id,),
+                )
             results = []
             for r in cur.fetchall():
                 findings = json.loads(r["findings"]) if r["findings"] else {}
@@ -470,10 +575,105 @@ class PMDatabase:
                         verdict=CriticVerdictType(r["verdict"]),
                         findings=findings,
                         signature=r["signature"],
+                        rework_cycle=int(r["rework_cycle"]) if ("rework_cycle" in r.keys() and r["rework_cycle"] is not None) else 0,
+                        commit_sha=r["commit_sha"] if "commit_sha" in r.keys() else None,
                         timestamp=str(r["timestamp"]),
                     )
                 )
             return results
+        finally:
+            conn.close()
+
+    # --- Sprint Operations (Scrum Layer) ---
+
+    def create_sprint(self, sprint: Sprint) -> Sprint:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO pm_sprints (id, project_id, name, goal, state, start_date, end_date, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        sprint.id,
+                        sprint.project_id,
+                        sprint.name,
+                        sprint.goal,
+                        sprint.state.value if hasattr(sprint.state, "value") else str(sprint.state),
+                        sprint.start_date,
+                        sprint.end_date,
+                        now,
+                    ),
+                )
+            sprint.created_at = now
+            return sprint
+        finally:
+            conn.close()
+
+    def get_sprint(self, sprint_id: str) -> Optional[Sprint]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_sprints WHERE id = ?", (sprint_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return Sprint(
+                id=row["id"],
+                project_id=row["project_id"],
+                name=row["name"],
+                goal=row["goal"] or "",
+                state=SprintState(row["state"]),
+                start_date=row["start_date"],
+                end_date=row["end_date"],
+                created_at=str(row["created_at"]),
+            )
+        finally:
+            conn.close()
+
+    def list_sprints(self, project_id: str) -> List[Sprint]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_sprints WHERE project_id = ? ORDER BY created_at ASC", (project_id,))
+            results = []
+            for row in cur.fetchall():
+                results.append(
+                    Sprint(
+                        id=row["id"],
+                        project_id=row["project_id"],
+                        name=row["name"],
+                        goal=row["goal"] or "",
+                        state=SprintState(row["state"]),
+                        start_date=row["start_date"],
+                        end_date=row["end_date"],
+                        created_at=str(row["created_at"]),
+                    )
+                )
+            return results
+        finally:
+            conn.close()
+
+    def update_sprint_state(self, sprint_id: str, state: SprintState) -> None:
+        conn = self._get_connection()
+        try:
+            with conn:
+                conn.execute(
+                    "UPDATE pm_sprints SET state = ? WHERE id = ?",
+                    (state.value if hasattr(state, "value") else str(state), sprint_id),
+                )
+        finally:
+            conn.close()
+
+    def assign_issue_to_sprint(self, issue_id: str, sprint_id: Optional[str]) -> None:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    "UPDATE pm_issues SET sprint_id = ?, updated_at = ? WHERE id = ?",
+                    (sprint_id, now, issue_id),
+                )
         finally:
             conn.close()
 
@@ -488,12 +688,16 @@ class PMDatabase:
             description=row["description"] or "",
             issue_type=IssueType(row["issue_type"]),
             current_state=IssueState(row["current_state"]),
+            priority=PriorityLevel(row["priority"]) if ("priority" in row.keys() and row["priority"]) else PriorityLevel.MEDIUM,
+            sprint_id=row["sprint_id"] if "sprint_id" in row.keys() else None,
             parent_id=row["parent_id"],
             assignee_principal=row["assignee_principal"],
             appetite_tokens=row["appetite_tokens"],
             appetite_timeout_s=row["appetite_timeout_s"],
             tokens_spent=row["tokens_spent"],
             reflexion_attempts=row["reflexion_attempts"],
+            rework_cycle=int(row["rework_cycle"]) if ("rework_cycle" in row.keys() and row["rework_cycle"] is not None) else 0,
+            blocker_reason=row["blocker_reason"] if "blocker_reason" in row.keys() else None,
             path_whitelist=path_whitelist,
             forbidden_paths=forbidden_paths,
             created_at=str(row["created_at"]),

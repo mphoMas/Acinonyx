@@ -78,7 +78,7 @@ def test_project_and_issue_crud(temp_pm_db):
     assert fetched.path_whitelist == ["mas/tools/*"]
 
 
-def test_full_happy_path_fsm_lifecycle(temp_pm_db):
+def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
     proj = temp_pm_db.create_project(
         Project(id="p1", key="CORE", name="Core")
     )
@@ -92,7 +92,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db):
             assignee_principal="senior_engineer",
             appetite_tokens=40000,
             appetite_timeout_s=1200,
-            path_whitelist=["mas/tools/*"],
+            path_whitelist=["*"],
         )
     )
 
@@ -111,13 +111,19 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db):
     assert step3.current_state == IssueState.IN_PROGRESS
 
     # Attach empirical evidence
+    import subprocess
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+    log_file = tmp_path / "test_run.log"
+    log_file.write_text("Tests passed: 12 passed, 0 failed.")
+    log_hash = hashlib.sha256(log_file.read_bytes()).hexdigest()
+
     temp_pm_db.attach_evidence(
         EvidenceLink(
             id="ev-git",
             issue_id=issue.id,
             evidence_type=EvidenceType.GIT_COMMIT,
-            content_hash="a1b2c3d4e5f6",
-            uri="git:commit:a1b2c3d4e5f6",
+            content_hash=head_sha,
+            uri=f"git:commit:{head_sha}",
         )
     )
     temp_pm_db.attach_evidence(
@@ -125,8 +131,8 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db):
             id="ev-test",
             issue_id=issue.id,
             evidence_type=EvidenceType.TEST_RUN_LOG,
-            content_hash="testpasshash123",
-            uri="logs/test_run.log",
+            content_hash=log_hash,
+            uri=f"file://{log_file}",
             payload={"exit_code": 0, "passed": 12, "failed": 0},
         )
     )
@@ -338,14 +344,16 @@ def test_evidence_integrity_sha256_verification(temp_pm_db, tmp_path):
     test_log.write_text("All 10 tests passed successfully.")
     correct_hash = hashlib.sha256(test_log.read_bytes()).hexdigest()
 
-    # Add git commit evidence
+    # Add valid git commit evidence
+    import subprocess
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     temp_pm_db.attach_evidence(
         EvidenceLink(
             id="ev-git",
             issue_id=issue.id,
             evidence_type=EvidenceType.GIT_COMMIT,
-            content_hash="commit123",
-            uri="git:commit:123",
+            content_hash=head_sha,
+            uri=f"git:commit:{head_sha}",
         )
     )
 

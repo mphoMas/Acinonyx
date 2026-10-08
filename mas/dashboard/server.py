@@ -184,6 +184,15 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "mode": "Live Model Gateway (OpenAI Compatible)",
             })
 
+        elif path.startswith("/api/pm/projects"):
+            from mas.pm.tools import get_pm_db
+            try:
+                db = get_pm_db()
+                projects = db.list_projects()
+                self._send_json({"projects": [p.model_dump() for p in projects]})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+
         elif path.startswith("/api/pm/board/"):
             project_key = path.replace("/api/pm/board/", "").strip()
             from mas.pm.tools import pm_get_board_state
@@ -201,6 +210,80 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(issues)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=404)
+
+        elif path.startswith("/api/pm/sprints/"):
+            project_key = path.replace("/api/pm/sprints/", "").strip()
+            from mas.pm.tools import get_pm_db
+            try:
+                db = get_pm_db()
+                proj = db.get_project_by_key(project_key)
+                if not proj:
+                    self._send_json({"error": f"Project '{project_key}' not found"}, status=404)
+                else:
+                    sprints = db.list_sprints(proj.id)
+                    self._send_json({"sprints": [s.model_dump() for s in sprints]})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+
+        elif path == "/api/pm/advisor/summary":
+            from mas.pm.tools import get_pm_db, pm_get_board_state
+            try:
+                db = get_pm_db()
+                projects = db.list_projects()
+                summary_data = []
+                for p in projects:
+                    board = pm_get_board_state(p.key)
+                    summary_data.append({
+                        "project_key": p.key,
+                        "project_name": p.name,
+                        "flow_health": board.get("flow_health"),
+                        "total_active_wip": board.get("total_active_wip"),
+                        "wip_saturation_pct": board.get("wip_saturation_pct"),
+                        "active_sprint_id": board.get("active_sprint_id"),
+                        "columns": {k: v.get("count") for k, v in board.get("columns", {}).items()},
+                    })
+                self._send_json({"projects": summary_data})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+
+        # Static Portal Serving (/portal or /portal/*)
+        elif path == "/portal" or path.startswith("/portal/"):
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            portal_dir = os.path.join(repo_root, "portal")
+            subpath = path[len("/portal"):].lstrip("/")
+            if not subpath or subpath == "index.html":
+                target_file = os.path.join(portal_dir, "index.html")
+            else:
+                target_file = os.path.join(portal_dir, subpath)
+
+            target_file = os.path.abspath(target_file)
+            if not target_file.startswith(portal_dir) or not os.path.exists(target_file) or os.path.isdir(target_file):
+                self.send_error(404, "Portal resource not found")
+                return
+
+            ext = os.path.splitext(target_file)[1].lower()
+            mime_types = {
+                ".html": "text/html; charset=utf-8",
+                ".css": "text/css; charset=utf-8",
+                ".js": "application/javascript; charset=utf-8",
+                ".json": "application/json; charset=utf-8",
+                ".svg": "image/svg+xml",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".ico": "image/x-icon",
+            }
+            content_type = mime_types.get(ext, "application/octet-stream")
+            with open(target_file, "rb") as f:
+                content = f.read()
+
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self._apply_cors_headers()
+            self.end_headers()
+            self.wfile.write(content)
+            return
 
         else:
             self.send_error(404, "Endpoint not found")
@@ -239,7 +322,6 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 loop.close()
 
         elif path == "/api/cio-audit/refresh":
-            # Force a fresh infrastructure audit (clears cache)
             DashboardRequestHandler.cio_audit_report = None
             cio = self.enterprise.cio
             loop = asyncio.new_event_loop()
@@ -266,8 +348,146 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "live_dispatch_enabled": self.enterprise.is_live_dispatch_enabled(),
             })
 
-        else:
-            self.send_error(404, "Endpoint not found")
+        # --- PM Board Endpoints ---
+
+        elif path == "/api/pm/transition":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            issue_key = payload.get("issue_key")
+            target_state = payload.get("target_state")
+            caller_principal = payload.get("caller_principal", "founder_lead")
+            reason = payload.get("reason", "")
+
+            if not issue_key or not target_state:
+                self._send_json({"error": "Missing issue_key or target_state"}, status=400)
+                return
+
+            from mas.pm.tools import pm_transition_issue
+            try:
+                result = pm_transition_issue(
+                    issue_key=issue_key,
+                    target_state=target_state,
+                    caller_principal=caller_principal,
+                    reason=reason,
+                )
+                self._send_json({"success": True, "result": result})
+            except Exception as e:
+                self._send_json({
+                    "success": False,
+                    "error": e.__class__.__name__,
+                    "message": str(e),
+                    "issue_key": issue_key,
+                    "target_state": target_state,
+                }, status=400)
+
+        elif path == "/api/pm/issues/create":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            project_key = payload.get("project_key", "MAS")
+            title = payload.get("title", "")
+            description = payload.get("description", "")
+            issue_type = payload.get("issue_type", "TASK")
+            priority = payload.get("priority", "MEDIUM")
+            sprint_id = payload.get("sprint_id")
+            assignee_principal = payload.get("assignee_principal")
+            appetite_tokens = int(payload.get("appetite_tokens", 50000))
+            path_whitelist = payload.get("path_whitelist", ["*"])
+
+            if not title:
+                self._send_json({"error": "Issue title is required"}, status=400)
+                return
+
+            from mas.pm.tools import pm_create_issue
+            try:
+                result = pm_create_issue(
+                    project_key=project_key,
+                    title=title,
+                    description=description,
+                    issue_type=issue_type,
+                    priority=priority,
+                    sprint_id=sprint_id,
+                    assignee_principal=assignee_principal,
+                    appetite_tokens=appetite_tokens,
+                    path_whitelist=path_whitelist,
+                )
+                self._send_json({"success": True, "result": result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+
+        elif path == "/api/pm/sprints/create":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            import uuid
+            from mas.pm.models import Sprint, SprintState
+            from mas.pm.tools import get_pm_db
+
+            project_key = payload.get("project_key", "MAS")
+            name = payload.get("name")
+            goal = payload.get("goal", "")
+            state = payload.get("state", "FUTURE")
+
+            if not name:
+                self._send_json({"error": "Sprint name is required"}, status=400)
+                return
+
+            db = get_pm_db()
+            proj = db.get_project_by_key(project_key)
+            if not proj:
+                self._send_json({"error": f"Project '{project_key}' not found"}, status=404)
+                return
+
+            sprint = Sprint(
+                id=str(uuid.uuid4()),
+                project_id=proj.id,
+                name=name,
+                goal=goal,
+                state=SprintState(state),
+                start_date=payload.get("start_date"),
+                end_date=payload.get("end_date"),
+            )
+            saved = db.create_sprint(sprint)
+            self._send_json({"success": True, "sprint": saved.model_dump()})
+
+        elif path == "/api/pm/sprints/state":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            sprint_id = payload.get("sprint_id")
+            state = payload.get("state")
+            if not sprint_id or not state:
+                self._send_json({"error": "Missing sprint_id or state"}, status=400)
+                return
+
+            from mas.pm.models import SprintState
+            from mas.pm.tools import get_pm_db
+            db = get_pm_db()
+            db.update_sprint_state(sprint_id, SprintState(state))
+            self._send_json({"success": True, "sprint_id": sprint_id, "state": state})
+
+        elif path == "/api/pm/issues/assign_sprint":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            issue_key_or_id = payload.get("issue_key") or payload.get("issue_id")
+            sprint_id = payload.get("sprint_id")
+
+            from mas.pm.tools import get_pm_db
+            db = get_pm_db()
+            issue = db.get_issue(issue_key_or_id)
+            if not issue:
+                self._send_json({"error": f"Issue '{issue_key_or_id}' not found"}, status=404)
+                return
+
+            db.assign_issue_to_sprint(issue.id, sprint_id)
+            self._send_json({"success": True, "issue_key": issue.key, "sprint_id": sprint_id})
 
 
 class DashboardServer:

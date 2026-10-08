@@ -82,6 +82,77 @@ class TestPortalWebUI(unittest.TestCase):
 
             browser.close()
 
+    def test_portal_board_flow(self):
+        with sync_playwright() as p:
+            import shutil
+            chrome_path = shutil.which("google-chrome")
+            launch_args = {"headless": True}
+            if chrome_path:
+                launch_args["executable_path"] = chrome_path
+            elif (REPO_ROOT / "bin/browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell").exists():
+                launch_args["executable_path"] = str(REPO_ROOT / "bin/browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell")
+
+            browser = p.chromium.launch(**launch_args)
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            page = context.new_page()
+
+            console_errors = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+
+            # 1. Load portal and navigate to Board
+            page.goto(self.portal_url)
+            page.wait_for_selector("#app-container")
+            page.click("#nav-board")
+            page.wait_for_selector("#view-board:visible")
+
+            # 2. Verify 7 Columns exist
+            columns = ["backlog", "refined", "staged", "in_progress", "verification", "judicial_review", "done"]
+            for col in columns:
+                page.wait_for_selector(f"#column-{col}")
+
+            # 3. Verify Telemetry HUD badges
+            page.wait_for_selector("#board-flow-health")
+            page.wait_for_selector("#board-wip-saturation")
+
+            # 4. Verify Cards rendered and clicking opens slide-over drawer
+            page.wait_for_selector(".kanban-card")
+            first_card = page.locator(".kanban-card").first
+            card_key = first_card.locator(".card-key").inner_text()
+            first_card.click()
+
+            page.wait_for_selector("#board-detail-drawer.drawer-open")
+            drawer_key = page.inner_text("#drawer-issue-key")
+            self.assertEqual(card_key, drawer_key)
+
+            # Close drawer
+            page.click("#drawer-close-btn")
+            page.wait_for_function("!document.getElementById('board-detail-drawer').classList.contains('drawer-open')")
+
+            # 5. Open New Issue Modal
+            page.click("#board-new-issue-btn")
+            page.wait_for_selector("#modal-new-issue:visible")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.getElementById('modal-new-issue').style.display === 'none'")
+
+            # 6. Test Guard Rejection Modal presentation
+            page.evaluate("""() => {
+                window.boardView.showRejectionModal({
+                    error: 'WIPLimitExceededError',
+                    targetState: 'IN_PROGRESS',
+                    message: "Column WIP limit exceeded for state 'IN_PROGRESS' [Current: 4, Limit: 4]. Flow throttled per Little's Law."
+                });
+            }""")
+            page.wait_for_selector("#rejection-modal-backdrop.modal-open")
+            self.assertIn("WIPLimitExceededError", page.inner_text("#rejection-modal-title"))
+            page.click("#rejection-modal-close-btn")
+            page.wait_for_function("!document.getElementById('rejection-modal-backdrop').classList.contains('modal-open')")
+
+            # 7. Zero fatal console errors
+            fatal_errors = [e for e in console_errors if "Failed to load resource" not in e and "Backend board API unreachable" not in e]
+            self.assertEqual(fatal_errors, [])
+
+            browser.close()
+
 
 if __name__ == "__main__":
     unittest.main()

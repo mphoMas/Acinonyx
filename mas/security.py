@@ -5,6 +5,8 @@ mas.security: Tool ACLs, prompt-injection filters, and agent identity helpers.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
@@ -78,3 +80,44 @@ def filter_user_text(text: str) -> str:
         if pat.search(text or ""):
             raise PermissionError("Blocked prompt-injection pattern in input text")
     return text
+
+
+_current_principal: ContextVar[Optional[str]] = ContextVar("current_principal", default=None)
+
+
+class ExecutionContext:
+    """Thread-safe and task-safe execution context tracking authenticated principal."""
+
+    @staticmethod
+    def get_current_principal() -> Optional[str]:
+        return _current_principal.get()
+
+    @staticmethod
+    def set_current_principal(principal: Optional[str]) -> None:
+        _current_principal.set(principal)
+
+    @classmethod
+    @contextmanager
+    def scope(cls, principal: str):
+        token = _current_principal.set(principal)
+        try:
+            yield
+        finally:
+            _current_principal.reset(token)
+
+    @staticmethod
+    def resolve_authenticated_principal(claimed_principal: Optional[str] = None) -> str:
+        """
+        PM-SEC-001: Derives authenticated principal and prohibits caller-supplied identity impersonation.
+        """
+        current = ExecutionContext.get_current_principal()
+        if not current:
+            if claimed_principal:
+                return claimed_principal
+            raise PermissionError("Unauthenticated operation: Execution context lacks a verified principal.")
+        if claimed_principal and claimed_principal != current:
+            raise PermissionError(
+                f"ImpersonationAttemptError: Authenticated principal '{current}' cannot claim identity '{claimed_principal}'"
+            )
+        return current
+

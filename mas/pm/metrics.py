@@ -15,6 +15,7 @@ from mas.pm.models import (
     ColumnInfo,
     Issue,
     IssueState,
+    SprintState,
 )
 
 
@@ -66,6 +67,10 @@ class FlowMetricsEngine:
         else:
             flow_health = "OPTIMAL"
 
+        sprints = self.db.list_sprints(project.id)
+        active_sprint = next((s for s in sprints if s.state == SprintState.ACTIVE), None)
+        active_sprint_id = active_sprint.id if active_sprint else None
+
         return BoardState(
             project_key=project.key,
             columns=columns,
@@ -73,6 +78,8 @@ class FlowMetricsEngine:
             flow_health=flow_health,
             wip_saturation_pct=saturation_pct,
             issues_by_column=issues_by_column,
+            sprints=sprints,
+            active_sprint_id=active_sprint_id,
         )
 
     def capture_cfd_snapshot(self, project_id: str) -> CFDSnapshot:

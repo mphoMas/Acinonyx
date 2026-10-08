@@ -51,7 +51,7 @@ class PortalApp {
   route() {
     const parts = (location.hash || '#/home').replace(/^#\/?/, '').split('/');
     const kind = parts[0];
-    const views = ['home', 'reader', 'finops', 'topology', 'benchmarks', 'timeline', 'vault'];
+    const views = ['home', 'board', 'reader', 'finops', 'topology', 'benchmarks', 'timeline', 'vault'];
     if (kind === 'doc' && parts[1]) {
       this.loadDocument(decodeURIComponent(parts.slice(1).join('/')), { noPush: true });
     } else if (views.includes(kind)) {
@@ -149,7 +149,7 @@ class PortalApp {
     document.body.className = `view-${viewName}`;
 
     // Update nav links
-    ['home', 'reader', 'finops', 'topology', 'benchmarks', 'timeline', 'vault'].forEach(v => {
+    ['home', 'board', 'reader', 'finops', 'topology', 'benchmarks', 'timeline', 'vault'].forEach(v => {
       const el = document.getElementById(`nav-${v}`);
       if (el) {
         el.classList.toggle('active', v === viewName);
@@ -162,20 +162,32 @@ class PortalApp {
     const readerView = document.getElementById('view-reader');
     const simMount = document.getElementById('sim-mount');
     const rightRail = document.getElementById('right-rail');
+    const boardView = document.getElementById('view-board');
 
     if (homeView) homeView.style.display = viewName === 'home' ? 'block' : 'none';
+    if (boardView) boardView.style.display = viewName === 'board' ? 'flex' : 'none';
 
     if (viewName === 'home') {
       if (readerView) readerView.style.display = 'none';
       if (simMount) simMount.style.display = 'none';
       if (rightRail) rightRail.style.display = 'none';
+      if (boardView) boardView.style.display = 'none';
+      window.scrollTo(0, 0);
+    } else if (viewName === 'board') {
+      if (readerView) readerView.style.display = 'none';
+      if (simMount) simMount.style.display = 'none';
+      if (rightRail) rightRail.style.display = 'none';
+      if (homeView) homeView.style.display = 'none';
+      if (window.boardView) window.boardView.init();
       window.scrollTo(0, 0);
     } else if (viewName === 'reader') {
+      if (boardView) boardView.style.display = 'none';
       if (readerView) readerView.style.display = 'block';
       if (simMount) simMount.style.display = 'none';
       if (rightRail) rightRail.style.display = 'flex';
       window.scrollTo(0, 0);
     } else {
+      if (boardView) boardView.style.display = 'none';
       if (readerView) readerView.style.display = 'none';
       if (simMount) simMount.style.display = 'block';
       if (rightRail) rightRail.style.display = 'none';
@@ -924,6 +936,8 @@ class PortalApp {
           this.toggleStarCurrentDoc();
         } else if (e.key.toLowerCase() === 'h') {
           this.switchView('home');
+        } else if (e.key.toLowerCase() === 'p') {
+          this.switchView('board');
         } else if (e.key.toLowerCase() === 'r') {
           this.switchView('reader');
         } else if (e.key.toLowerCase() === 't') {

@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/reader.css">
   <link rel="stylesheet" href="css/simulators.css">
   <link rel="stylesheet" href="css/home.css">
+  <link rel="stylesheet" href="css/board.css">
 
   <!-- Mermaid.js for Dynamic Architecture Diagram Rendering -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -44,6 +45,7 @@
     <!-- Navigation View Switchers -->
     <nav class="nav-links" role="navigation" aria-label="Main Navigation">
       <a href="javascript:void(0)" class="nav-link active" id="nav-home" onclick="app.switchView('home')">Home</a>
+      <a href="javascript:void(0)" class="nav-link" id="nav-board" onclick="app.switchView('board')">Board</a>
       <a href="javascript:void(0)" class="nav-link" id="nav-reader" onclick="app.switchView('reader')">Reader</a>
       <a href="javascript:void(0)" class="nav-link" id="nav-finops" onclick="app.switchView('finops')">FinOps</a>
       <a href="javascript:void(0)" class="nav-link" id="nav-topology" onclick="app.switchView('topology')">Topologies</a>
@@ -158,6 +160,179 @@
         <!-- 2. Dynamic Interactive Simulators Mount Point -->
         <section id="sim-mount" class="sim-container" style="display: none;">
           <!-- Dynamically populated by FinOps, Topology, Benchmark, or Timeline simulators -->
+        </section>
+
+        <!-- 3. MAS Native Project Management Board View -->
+        <section id="view-board" class="board-view-container" style="display: none;" role="region" aria-label="MAS Native Project Management Board">
+          <!-- Top Cockpit Bar -->
+          <div class="board-cockpit-bar">
+            <div class="board-cockpit-left">
+              <div class="board-project-pill">
+                <span>📁</span>
+                <select id="board-project-select" class="board-select" aria-label="Project Scope">
+                  <option value="MAS" selected>MAS (Multi-Agent Swarm)</option>
+                  <option value="CORE">CORE (Acinonyx Core)</option>
+                  <option value="SEC">SEC (Security Hardening)</option>
+                </select>
+              </div>
+
+              <select id="board-sprint-select" class="board-select" aria-label="Sprint Filter">
+                <option value="ALL">All Sprints</option>
+                <option value="ACTIVE">Active Sprint Only</option>
+                <option value="BACKLOG">Backlog (No Sprint)</option>
+              </select>
+
+              <select id="board-priority-filter" class="board-select" aria-label="Priority Filter">
+                <option value="ALL">All Priorities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+
+              <input type="text" id="board-search-input" class="board-search-input" placeholder="Search issues, keys, assignees..." aria-label="Filter board issues">
+            </div>
+
+            <div class="board-cockpit-right">
+              <div id="board-flow-health" class="flow-health-badge health-optimal" title="Queue Health Invariant (Little's Law)">
+                OPTIMAL
+              </div>
+
+              <div class="wip-gauge-meter" title="Active WIP Saturation relative to Little's Law capacity">
+                <div class="wip-bar-track">
+                  <div id="board-wip-bar-fill" class="wip-bar-fill" style="width: 37%;"></div>
+                </div>
+                <span id="board-wip-saturation">37.5% WIP Saturation</span>
+              </div>
+
+              <button class="board-btn-primary" id="board-new-issue-btn" title="Create New Issue in Backlog">
+                ➕ New Issue
+              </button>
+
+              <button class="btn btn-secondary btn-sm" id="board-refresh-btn" title="Refresh Board Telemetry">
+                🔄
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Sprint Banner -->
+          <div class="sprint-active-banner" id="board-active-sprint-banner" style="display: none;"></div>
+
+          <!-- 7-Column Kanban Grid -->
+          <div class="kanban-grid-wrapper">
+            <div class="kanban-columns-row">
+              <!-- Column 1: Backlog -->
+              <div class="kanban-column" id="column-backlog">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">📥</span>
+                    <span class="column-title">Backlog</span>
+                  </div>
+                  <span class="column-wip-badge">0</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 2: Refined -->
+              <div class="kanban-column" id="column-refined">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">🔍</span>
+                    <span class="column-title">Refined</span>
+                  </div>
+                  <span class="column-wip-badge">0</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 3: Staged -->
+              <div class="kanban-column" id="column-staged">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">🎯</span>
+                    <span class="column-title">Staged</span>
+                  </div>
+                  <span class="column-wip-badge">0</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 4: In Progress (WIP Limit: 4) -->
+              <div class="kanban-column" id="column-in_progress">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">⚡</span>
+                    <span class="column-title">In Progress</span>
+                  </div>
+                  <span class="column-wip-badge wip-active">0 / 4</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 5: Verification (WIP Limit: 2) -->
+              <div class="kanban-column" id="column-verification">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">🧪</span>
+                    <span class="column-title">Verification</span>
+                  </div>
+                  <span class="column-wip-badge wip-active">0 / 2</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 6: Judicial Review (WIP Limit: 2) -->
+              <div class="kanban-column" id="column-judicial_review">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">⚖️</span>
+                    <span class="column-title">Judicial Review</span>
+                  </div>
+                  <span class="column-wip-badge wip-active">0 / 2</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+
+              <!-- Column 7: Done -->
+              <div class="kanban-column" id="column-done">
+                <div class="kanban-column-header">
+                  <div class="column-title-group">
+                    <span style="font-size: 0.85rem;">✅</span>
+                    <span class="column-title">Done</span>
+                  </div>
+                  <span class="column-wip-badge">0</span>
+                </div>
+                <div class="kanban-card-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Exceptional Trays Section -->
+          <div class="exceptional-trays-container">
+            <!-- Blocked Tray -->
+            <div class="exceptional-tray-box">
+              <div class="tray-header">
+                <div class="tray-title">
+                  <span style="color: var(--accent-rose);">🚫</span>
+                  <span>Blocked Issues</span>
+                </div>
+                <span class="tray-count-pill" id="tray-blocked-count">0</span>
+              </div>
+              <div class="tray-items-flex" id="tray-blocked-list"></div>
+            </div>
+
+            <!-- Rework Tray -->
+            <div class="exceptional-tray-box">
+              <div class="tray-header">
+                <div class="tray-title">
+                  <span style="color: var(--accent-amber);">↺</span>
+                  <span>Rework Iterations</span>
+                </div>
+                <span class="tray-count-pill" id="tray-rework-count">0</span>
+              </div>
+              <div class="tray-items-flex" id="tray-rework-list"></div>
+            </div>
+          </div>
         </section>
 
       </div>
@@ -382,6 +557,115 @@
 </div>
 
 <!-- ====================================================================
+     MAS Native Project Management Board Modals & Drawers
+     ==================================================================== -->
+
+<!-- Slide-Over Issue Detail Drawer -->
+<div class="board-detail-drawer" id="board-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-issue-title">
+  <div class="drawer-header">
+    <div>
+      <span class="card-key" id="drawer-issue-key">KEY-0</span>
+      <h2 id="drawer-issue-title" style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin: 4px 0 0 0;">Issue Title</h2>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="type-badge type-task" id="drawer-issue-state">BACKLOG</span>
+      <button class="drawer-close-btn" id="drawer-close-btn" aria-label="Close Issue Drawer">✕</button>
+    </div>
+  </div>
+  <div class="drawer-content">
+    <div>
+      <div class="drawer-section-title">Description</div>
+      <div id="drawer-issue-desc" style="font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; background: var(--bg-tertiary); padding: 12px; border-radius: 8px; border: 1px solid var(--surface-border);"></div>
+    </div>
+    <div>
+      <div class="drawer-section-title">Scope Jail Whitelist</div>
+      <div id="drawer-issue-scope" style="font-size: 0.8rem; font-family: var(--font-mono);"></div>
+    </div>
+    <div>
+      <div class="drawer-section-title">Cryptographic Evidence Manifest</div>
+      <div id="drawer-issue-evidence" class="drawer-evidence-list"></div>
+    </div>
+    <div>
+      <div class="drawer-section-title">Independent Critic Verdicts</div>
+      <div id="drawer-issue-verdicts" class="drawer-verdict-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Technical Guard Rejection Modal -->
+<div class="rejection-modal-backdrop" id="rejection-modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="rejection-modal-title">
+  <div class="rejection-modal-dialog">
+    <div class="rejection-header">
+      <span style="font-size: 1.4rem;">🛡️</span>
+      <span id="rejection-modal-title">Guard Rejection Violation</span>
+    </div>
+    <div class="rejection-body" id="rejection-modal-body"></div>
+    <div style="display: flex; justify-content: flex-end;">
+      <button class="btn btn-primary btn-sm" id="rejection-modal-close-btn">Acknowledge Invariant</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Issue Modal -->
+<div class="modal-overlay" id="modal-new-issue" role="dialog" aria-modal="true" aria-labelledby="modal-new-issue-title" style="display: none;">
+  <div class="new-issue-modal-dialog">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+      <h3 id="modal-new-issue-title" style="font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin: 0;">➕ Register New Backlog Issue</h3>
+      <button class="drawer-close-btn" id="modal-close-new-issue" type="button">✕</button>
+    </div>
+    <form id="form-new-issue">
+      <div class="form-group">
+        <label class="form-label" for="new-issue-title">Issue Title</label>
+        <input type="text" id="new-issue-title" class="form-input" placeholder="e.g. Implement Merkle tree leaf integrity" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="new-issue-desc">Description & Acceptance Criteria</label>
+        <textarea id="new-issue-desc" class="form-textarea" rows="3" placeholder="Context, problem statement, and definition of done..."></textarea>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label" for="new-issue-type">Issue Type</label>
+          <select id="new-issue-type" class="form-input">
+            <option value="TASK" selected>TASK</option>
+            <option value="DEFECT">DEFECT</option>
+            <option value="EPIC">EPIC</option>
+            <option value="STORY">STORY</option>
+            <option value="SPIKE">SPIKE</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-issue-priority">Priority</label>
+          <select id="new-issue-priority" class="form-input">
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM" selected>MEDIUM</option>
+            <option value="LOW">LOW</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label" for="new-issue-assignee">Assignee Principal</label>
+          <input type="text" id="new-issue-assignee" class="form-input" value="systems_engineer" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-issue-appetite">Token Appetite (Tokens)</label>
+          <input type="number" id="new-issue-appetite" class="form-input" value="50000" min="1000" step="5000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="new-issue-whitelist">Scope Jail Whitelist (Comma-separated)</label>
+        <input type="text" id="new-issue-whitelist" class="form-input" value="*" placeholder="e.g. mas/pm/*, tests/test_pm*.py">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="boardView.closeNewIssueModal()">Cancel</button>
+        <button type="submit" class="board-btn-primary">Register Issue</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ====================================================================
      Application Logic & Data Bundles
      ==================================================================== -->
 <script src="js/toast.js"></script>
@@ -393,6 +677,7 @@
 <script src="js/simulators/topology_sim.js"></script>
 <script src="js/simulators/benchmark_matrix.js"></script>
 <script src="js/simulators/timeline.js"></script>
+<script src="js/board.js"></script>
 <script src="js/app.js"></script>
 <script>
   // Reading progress bar

@@ -18,6 +18,7 @@ from mas.pm.models import (
     Issue,
     IssueState,
     IssueType,
+    PriorityLevel,
     Project,
 )
 
@@ -62,6 +63,8 @@ def pm_create_issue(
     title: str,
     description: str = "",
     issue_type: str = "TASK",
+    priority: str = "MEDIUM",
+    sprint_id: Optional[str] = None,
     parent_key: Optional[str] = None,
     assignee_principal: Optional[str] = None,
     appetite_tokens: int = 50_000,
@@ -91,6 +94,8 @@ def pm_create_issue(
         description=description,
         issue_type=IssueType(issue_type.upper()),
         current_state=IssueState.BACKLOG,
+        priority=PriorityLevel(priority.upper()) if priority else PriorityLevel.MEDIUM,
+        sprint_id=sprint_id,
         parent_id=parent_id,
         assignee_principal=assignee_principal,
         appetite_tokens=appetite_tokens,
@@ -104,6 +109,8 @@ def pm_create_issue(
         "issue_key": saved.key,
         "issue_id": saved.id,
         "state": saved.current_state.value,
+        "priority": saved.priority.value,
+        "sprint_id": saved.sprint_id,
     }
 
 
