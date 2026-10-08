@@ -9,7 +9,7 @@ description = "ACINONYX Multi-Agent Operating Runtime"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Acinonyx" }]
-dependencies = []
+dependencies = ["PyYAML>=6,<7"]
 
 [project.optional-dependencies]
 http = []
@@ -26,12 +26,13 @@ browser = [
 [project.scripts]
 mas = "mas.cli:main"
 mas-doctor = "mas.cli:main"
+mas-swarm = "mas.swarm.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["mas*"]
 
 [tool.setuptools.package-data]
-mas = ["py.typed"]
+mas = ["py.typed", "dashboard/static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,5 @@
+[
+  {"id": "positive", "input": [1, 2, 3], "expected": 6},
+  {"id": "empty", "input": [], "expected": 0},
+  {"id": "negative", "input": [-7, 2], "expected": -5}
+]

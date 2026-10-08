@@ -5,6 +5,13 @@ Version **0.2.0** — development prototype; enterprise engagement demos remain 
 
 See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for an honest implemented / demo-only / planned matrix.
 
+The new [supervised coding swarm](docs/architecture/SUPERVISED_SWARM.md) provides a
+separate `mas-swarm` CLI with isolated candidate execution, host-owned verification,
+durable signed state and a separate human approval gate. Its initial scope is
+Python functions; it does not establish enterprise readiness for the legacy runtime.
+See the [MAS architecture diagram](docs/architecture/MAS_ARCHITECTURE.md) for the
+relationship between the legacy runtime and the supervised swarm.
+
 ## Repository map
 
 | Folder | What belongs here |
