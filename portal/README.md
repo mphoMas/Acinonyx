@@ -1,3 +1,19 @@
+# Acinonyx primary delivery board
+
+**The canonical interface for planning, assigning, tracking, verifying, and reviewing all Acinonyx work is [`scrum.html`](scrum.html).** Use the MAS-PM backend as the source of truth; do not maintain competing local-only task boards. All initiatives, epics, tasks, defects, sprints, agent assignments, evidence, and judicial-review status belong in MAS-PM.
+
+Start the integrated server from the repository root:
+
+```bash
+python3 main.py --mode dashboard --port 8080
+```
+
+Open **http://127.0.0.1:8080/portal/scrum.html**. Check **http://127.0.0.1:8080/api/pm/projects** to verify API connectivity. The standalone `python3 -m http.server` command serves static files but does **not** provide the MAS-PM APIs required for live board operation.
+
+The research portal at [`index.html`](index.html) remains a separate knowledge/research interface, **not** the project-management source of truth. Respect server-side workflow guards, WIP limits, authenticated roles, evidence requirements, and independent judicial review; UI status alone is not evidence of completion. Do not claim production-readiness solely because the board loads.
+
+---
+
 # Active research portal
 
 `index.html` is the active entry point. `css/` contains styles; `js/` contains application code and the generated research catalog in `js/data/`.
