@@ -197,3 +197,53 @@ def verify_verdict_signature(
     )
     return hmac.compare_digest(expected, signature.strip())
 
+
+DEFAULT_EVIDENCE_SECRET = "acinonyx_evidence_provenance_secret_v1_2026"
+
+
+def sign_evidence_provenance(
+    evidence_id: str,
+    issue_id: str,
+    evidence_type: str,
+    content_hash: str,
+    uri: str,
+    secret_key: Optional[str] = None,
+) -> str:
+    """
+    GOV-03: Cryptographically signs evidence links with HMAC-SHA256 for tamper-evident provenance.
+    """
+    import hashlib
+    import hmac
+    import os
+
+    payload = f"{evidence_id}:{issue_id}:{evidence_type}:{content_hash}:{uri}"
+    key = (secret_key or os.getenv("MAS_EVIDENCE_SECRET") or os.getenv("MAS_VERDICT_SECRET") or DEFAULT_EVIDENCE_SECRET).encode("utf-8")
+    return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_evidence_provenance(
+    evidence_id: str,
+    issue_id: str,
+    evidence_type: str,
+    content_hash: str,
+    uri: str,
+    signature: str,
+    secret_key: Optional[str] = None,
+) -> bool:
+    """
+    GOV-03: Verifies that an evidence record's cryptographic provenance signature is authentic.
+    """
+    import hmac
+
+    if not signature or not signature.strip():
+        return False
+    expected = sign_evidence_provenance(
+        evidence_id=evidence_id,
+        issue_id=issue_id,
+        evidence_type=evidence_type,
+        content_hash=content_hash,
+        uri=uri,
+        secret_key=secret_key,
+    )
+    return hmac.compare_digest(expected, signature.strip())
+

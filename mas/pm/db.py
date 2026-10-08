@@ -233,6 +233,34 @@ class PMDatabase:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_transitions_issue ON pm_transitions(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_evidence_issue ON pm_evidence_links(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_verdicts_issue ON pm_critic_verdicts(issue_id);")
+
+                # GOV-03: Immutable evidence triggers
+                conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS trg_prevent_evidence_update
+                BEFORE UPDATE ON pm_evidence_links
+                BEGIN
+                    SELECT RAISE(ABORT, 'TamperViolationError: Evidence records are immutable and cannot be updated.');
+                END;
+                """)
+                conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS trg_prevent_evidence_delete
+                BEFORE DELETE ON pm_evidence_links
+                BEGIN
+                    SELECT RAISE(ABORT, 'TamperViolationError: Evidence records are immutable and cannot be deleted.');
+                END;
+                """)
+
+                # GOV-04: Separation of duties persistence trigger (prevent self-review)
+                conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS trg_prevent_self_review
+                BEFORE INSERT ON pm_critic_verdicts
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.reviewer_principal = (SELECT assignee_principal FROM pm_issues WHERE id = NEW.issue_id)
+                        THEN RAISE(ABORT, 'SeparationOfDutiesViolation: Issue assignee cannot record a review verdict on their own work.')
+                    END;
+                END;
+                """)
         finally:
             conn.close()
 
@@ -537,6 +565,16 @@ class PMDatabase:
         conn = self._get_connection()
         try:
             now = datetime.now(timezone.utc).isoformat()
+            if not evidence.payload.get("provenance_signature"):
+                from mas.security import sign_evidence_provenance
+                ev_type_val = evidence.evidence_type.value if hasattr(evidence.evidence_type, "value") else str(evidence.evidence_type)
+                evidence.payload["provenance_signature"] = sign_evidence_provenance(
+                    evidence_id=evidence.id,
+                    issue_id=evidence.issue_id,
+                    evidence_type=ev_type_val,
+                    content_hash=evidence.content_hash,
+                    uri=evidence.uri,
+                )
             with conn:
                 conn.execute(
                     """
@@ -579,6 +617,69 @@ class PMDatabase:
             return results
         finally:
             conn.close()
+
+    def verify_issue_evidence_integrity(self, issue_id: str, workspace_root: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        GOV-03: Audits evidence provenance and integrity for an issue.
+        Verifies HMAC signatures and content hashes against disk/git.
+        """
+        import hashlib
+        from pathlib import Path
+        from mas.security import verify_evidence_provenance
+
+        links = self.get_evidence_links(issue_id)
+        report: Dict[str, Any] = {
+            "issue_id": issue_id,
+            "total_links": len(links),
+            "valid": True,
+            "items": [],
+            "anomalies": [],
+        }
+        root = (workspace_root or Path.cwd()).resolve()
+
+        for lnk in links:
+            ev_type_val = lnk.evidence_type.value if hasattr(lnk.evidence_type, "value") else str(lnk.evidence_type)
+            item_status = {"id": lnk.id, "type": ev_type_val, "uri": lnk.uri, "signature_valid": False, "hash_valid": True}
+
+            sig = lnk.payload.get("provenance_signature")
+            if sig:
+                item_status["signature_valid"] = verify_evidence_provenance(
+                    evidence_id=lnk.id,
+                    issue_id=lnk.issue_id,
+                    evidence_type=ev_type_val,
+                    content_hash=lnk.content_hash,
+                    uri=lnk.uri,
+                    signature=sig,
+                )
+                if not item_status["signature_valid"]:
+                    report["valid"] = False
+                    report["anomalies"].append(f"Provenance signature mismatch for evidence {lnk.id}")
+            else:
+                item_status["signature_valid"] = False
+                report["valid"] = False
+                report["anomalies"].append(f"Missing provenance signature for evidence {lnk.id}")
+
+            if lnk.evidence_type == EvidenceType.TEST_RUN_LOG:
+                clean_uri = lnk.uri.replace("file://", "")
+                p = Path(clean_uri)
+                if not p.is_absolute():
+                    p = root / p
+                if not p.is_file():
+                    report["valid"] = False
+                    item_status["hash_valid"] = False
+                    report["anomalies"].append(f"Evidence file '{clean_uri}' does not exist on disk")
+                else:
+                    calc = hashlib.sha256(p.read_bytes()).hexdigest()
+                    if calc.lower() != lnk.content_hash.lower():
+                        report["valid"] = False
+                        item_status["hash_valid"] = False
+                        report["anomalies"].append(
+                            f"Content hash mismatch for {clean_uri}: recorded={lnk.content_hash}, calculated={calc}"
+                        )
+
+            report["items"].append(item_status)
+
+        return report
 
     # --- Critic Verdict Operations ---
 

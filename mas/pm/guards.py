@@ -227,6 +227,24 @@ def validate_evidence(
     root = (workspace_root or Path.cwd()).resolve()
 
     for link in links:
+        # GOV-03: Provenance signature verification
+        sig = link.payload.get("provenance_signature")
+        if sig:
+            from mas.security import verify_evidence_provenance
+            ev_type_val = link.evidence_type.value if hasattr(link.evidence_type, "value") else str(link.evidence_type)
+            if not verify_evidence_provenance(
+                evidence_id=link.id,
+                issue_id=link.issue_id,
+                evidence_type=ev_type_val,
+                content_hash=link.content_hash,
+                uri=link.uri,
+                signature=sig,
+            ):
+                raise UnverifiedWorkError(
+                    f"Evidence provenance signature verification failed for link {link.id} on {issue.key}: "
+                    f"cryptographic signature is invalid or tampered."
+                )
+
         # PM-SEC-002: Test run log verification
         if link.evidence_type == EvidenceType.TEST_RUN_LOG:
             exit_code = link.payload.get("exit_code")
