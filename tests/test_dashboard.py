@@ -113,6 +113,19 @@ class TestDashboardServer(unittest.TestCase):
             self.assertEqual(len(issues), 1)
             self.assertEqual(issues[0]["title"], "Board Test Issue")
 
+        projects_url = f"http://127.0.0.1:{self.port}/api/pm/projects"
+        with self.opener.open(projects_url, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            proj_data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("projects", proj_data)
+            self.assertTrue(any(p["key"] == pkey for p in proj_data["projects"]))
+
+        advisor_url = f"http://127.0.0.1:{self.port}/api/pm/advisor/summary"
+        with self.opener.open(advisor_url, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            adv_data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("projects", adv_data)
+
 
 class TestDashboardSecurity(unittest.TestCase):
     """SEC-04: Test bearer token authorization and CORS policy enforcement."""

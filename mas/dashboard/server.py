@@ -57,6 +57,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Credentials", "true")
                 self.send_header("Vary", "Origin")
+            elif origin == "null":
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Vary", "Origin")
 
     def _send_json(self, data: Any, status: int = 200) -> None:
         response_bytes = json.dumps(data).encode("utf-8")
@@ -93,6 +96,13 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "index.html not found")
                 return
+
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self._apply_cors_headers()
+            self.end_headers()
+            return
+
 
         if path in ("/scrum", "/scrum.html"):
             repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

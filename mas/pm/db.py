@@ -285,6 +285,47 @@ class PMDatabase:
         finally:
             conn.close()
 
+    def get_project(self, project_id: str) -> Optional[Project]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_projects WHERE id = ?", (project_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return Project(
+                id=row["id"],
+                key=row["key"],
+                name=row["name"],
+                description=row["description"] or "",
+                token_budget=row["token_budget"],
+                tokens_consumed=row["tokens_consumed"],
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+        finally:
+            conn.close()
+
+    def list_projects(self) -> List[Project]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_projects ORDER BY created_at ASC")
+            rows = cur.fetchall()
+            return [
+                Project(
+                    id=row["id"],
+                    key=row["key"],
+                    name=row["name"],
+                    description=row["description"] or "",
+                    token_budget=row["token_budget"],
+                    tokens_consumed=row["tokens_consumed"],
+                    created_at=str(row["created_at"]),
+                    updated_at=str(row["updated_at"]),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
     # --- Issue Operations ---
 
     def create_issue(self, issue: Issue) -> Issue:
