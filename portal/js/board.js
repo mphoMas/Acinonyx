@@ -384,7 +384,7 @@
       const initials = assignee.substring(0, 2).toUpperCase();
       const allocMatch = (issue.description || '').match(/\[ALLOCATION_ID:([A-Za-z0-9_-]+)\]/);
       const allocBadge = allocMatch ? `<span class="badge-alloc-id" style="background:rgba(0,255,157,0.18);color:#00ff9d;border:1px solid rgba(0,255,157,0.4);border-radius:4px;padding:1px 5px;font-size:0.72rem;font-weight:700;font-family:var(--font-mono);margin-left:6px;">${this.escapeHtml(allocMatch[1])}</span>` : '';
-      const isSprint2Done = ['MAS-25', 'MAS-26', 'MAS-27', 'MAS-29'].includes(issue.key);
+      const isSprint2Done = ['MAS-25', 'MAS-26', 'MAS-27', 'MAS-28', 'MAS-29', 'MAS-33'].includes(issue.key);
       const sprint2Badge = isSprint2Done ? `<span class="badge-sprint2-done" style="background:rgba(0,255,157,0.22);color:#00ff9d;border:1px solid #00ff9d;border-radius:4px;padding:1px 6px;font-size:0.68rem;font-weight:700;font-family:var(--font-mono);margin-left:6px;box-shadow:0 0 8px rgba(0,255,157,0.3);">SPRINT 2 DONE</span>` : '';
 
       if (isSprint2Done) {

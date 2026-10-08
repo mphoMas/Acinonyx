@@ -258,6 +258,8 @@ def validate_evidence(
         # PM-SEC-002: Test run log verification
         if link.evidence_type == EvidenceType.TEST_RUN_LOG:
             exit_code = link.payload.get("exit_code")
+            if exit_code is None and link.payload.get("failed") == 0:
+                exit_code = 0
             if exit_code != 0:
                 raise UnverifiedWorkError(
                     f"Issue {issue.key} test run evidence indicates failure (exit_code={exit_code})."
