@@ -68,7 +68,7 @@ def sync(*, dry_run=False, db=None):
         if dry_run:
             created.append(task["id"])
             continue
-        description = "\\n".join([
+        description = "\n".join([
             f"[ALLOCATION_ID:{task['id']}]",
             f"Source: work_queue/tasks.json",
             f"Assigned builder: {task['assignee_principal']}",
