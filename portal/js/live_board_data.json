@@ -3,7 +3,7 @@
   "columns": {
     "BACKLOG": {
       "name": "BACKLOG",
-      "count": 35,
+      "count": 33,
       "wip_limit": null,
       "is_saturated": false
     },
@@ -39,7 +39,7 @@
     },
     "DONE": {
       "name": "DONE",
-      "count": 33,
+      "count": 35,
       "wip_limit": null,
       "is_saturated": false
     },
@@ -61,68 +61,6 @@
   "wip_saturation_pct": 0.0,
   "issues_by_column": {
     "BACKLOG": [
-      {
-        "id": "67b3223c-3637-40a9-b6f5-c4522422c807",
-        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
-        "key": "MAS-26",
-        "title": "Tamper-evident evidence provenance",
-        "description": "[ALLOCATION_ID:GOV-03]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): GOV-02\nAcceptance: Evidence references verifiable immutable hashes; changes or deletions are blocked or audited.; Provide independently reproducible evidence: Tamper-injection tests and integrity report; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
-        "issue_type": "TASK",
-        "current_state": "BACKLOG",
-        "priority": "CRITICAL",
-        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
-        "parent_id": null,
-        "assignee_principal": "security_sre",
-        "appetite_tokens": 50000,
-        "appetite_timeout_s": 1800,
-        "tokens_spent": 0,
-        "reflexion_attempts": 0,
-        "rework_cycle": 0,
-        "blocker_reason": null,
-        "path_whitelist": [
-          "mas/pm/",
-          "mas/security.py",
-          "tests/"
-        ],
-        "forbidden_paths": [
-          ".env",
-          ".env.*",
-          "**/secrets/**"
-        ],
-        "created_at": "2026-10-08T13:20:10.727708+00:00",
-        "updated_at": "2026-10-08T13:20:10.727708+00:00"
-      },
-      {
-        "id": "07a0dc29-08e0-46a9-93c9-a6c01ba7c551",
-        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
-        "key": "MAS-27",
-        "title": "Enforce separation of duties",
-        "description": "[ALLOCATION_ID:GOV-04]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): GOV-02, SEC-05\nAcceptance: Builders cannot approve own work or impersonate reviewers at API, service, or persistence boundaries.; Provide independently reproducible evidence: Role-matrix and bypass regression tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
-        "issue_type": "TASK",
-        "current_state": "BACKLOG",
-        "priority": "CRITICAL",
-        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
-        "parent_id": null,
-        "assignee_principal": "backend_engineer",
-        "appetite_tokens": 50000,
-        "appetite_timeout_s": 1800,
-        "tokens_spent": 0,
-        "reflexion_attempts": 0,
-        "rework_cycle": 0,
-        "blocker_reason": null,
-        "path_whitelist": [
-          "mas/pm/",
-          "mas/security.py",
-          "tests/"
-        ],
-        "forbidden_paths": [
-          ".env",
-          ".env.*",
-          "**/secrets/**"
-        ],
-        "created_at": "2026-10-08T13:20:10.741617+00:00",
-        "updated_at": "2026-10-08T13:20:10.741617+00:00"
-      },
       {
         "id": "b9121791-f8f7-4845-8a08-8861f6ae8a27",
         "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
@@ -2104,6 +2042,68 @@
         ],
         "created_at": "2026-10-08T13:20:10.721893+00:00",
         "updated_at": "2026-10-08T13:55:27.678776+00:00"
+      },
+      {
+        "id": "67b3223c-3637-40a9-b6f5-c4522422c807",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-26",
+        "title": "Tamper-evident evidence provenance",
+        "description": "[ALLOCATION_ID:GOV-03]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): GOV-02\nAcceptance: Evidence references verifiable immutable hashes; changes or deletions are blocked or audited.; Provide independently reproducible evidence: Tamper-injection tests and integrity report; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.727708+00:00",
+        "updated_at": "2026-10-08T15:40:03.340430+00:00"
+      },
+      {
+        "id": "07a0dc29-08e0-46a9-93c9-a6c01ba7c551",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-27",
+        "title": "Enforce separation of duties",
+        "description": "[ALLOCATION_ID:GOV-04]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): GOV-02, SEC-05\nAcceptance: Builders cannot approve own work or impersonate reviewers at API, service, or persistence boundaries.; Provide independently reproducible evidence: Role-matrix and bypass regression tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.741617+00:00",
+        "updated_at": "2026-10-08T15:40:03.439732+00:00"
       },
       {
         "id": "f6c2099d-5861-4dd1-a1da-5856a78d91db",
