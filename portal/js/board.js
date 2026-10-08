@@ -20,6 +20,7 @@
     constructor() {
       this.currentProjectKey = 'MAS';
       this.currentSprintFilter = 'ALL';
+      this.currentColView = 'ALL';
       this.boardData = null;
       this.selectedIssue = null;
       this.isSubmitting = false;
@@ -34,6 +35,19 @@
     }
 
     bindEvents() {
+      // Column view tabs
+      const colViewBtns = document.querySelectorAll('#board-col-view-tabs button');
+      colViewBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          this.currentColView = e.currentTarget.dataset.colView;
+          colViewBtns.forEach(b => {
+            b.style.borderColor = (b.dataset.colView === this.currentColView) ? 'var(--accent-cyan, #00f0ff)' : 'var(--surface-border, rgba(255, 255, 255, 0.1))';
+            b.style.color = (b.dataset.colView === this.currentColView) ? 'var(--accent-cyan, #00f0ff)' : 'var(--text-secondary, #94a3b8)';
+          });
+          this.renderColumns();
+        });
+      });
+
       // Project Selector change
       const projSelect = document.getElementById('board-project-select');
       if (projSelect) {
@@ -135,7 +149,16 @@
         }
       } catch (err) {
         console.warn('Backend board API unreachable, falling back to embedded state:', err);
-        this.boardData = this.getFallbackBoardData();
+        try {
+          const fbResp = await fetch('js/live_board_data.json');
+          if (fbResp.ok) {
+            this.boardData = await fbResp.json();
+          } else {
+            this.boardData = this.getFallbackBoardData();
+          }
+        } catch {
+          this.boardData = this.getFallbackBoardData();
+        }
       }
 
       this.updateTelemetryHUD();
@@ -213,6 +236,11 @@
     renderColumns() {
       if (!this.boardData) return;
 
+      const rowEl = document.querySelector('.kanban-columns-row');
+      if (rowEl) {
+        rowEl.classList.toggle('single-col', this.currentColView === 'DONE');
+      }
+
       const columnOrder = [
         'BACKLOG',
         'REFINED',
@@ -229,6 +257,16 @@
       columnOrder.forEach(colKey => {
         const colEl = document.getElementById(`column-${colKey.toLowerCase()}`);
         if (!colEl) return;
+
+        if (this.currentColView === 'DONE' && colKey !== 'DONE') {
+          colEl.style.display = 'none';
+          return;
+        } else if (this.currentColView === 'ACTIVE' && !['IN_PROGRESS', 'VERIFICATION', 'JUDICIAL_REVIEW', 'DONE'].includes(colKey)) {
+          colEl.style.display = 'none';
+          return;
+        } else {
+          colEl.style.display = 'flex';
+        }
 
         const cardList = colEl.querySelector('.kanban-card-list');
         const wipBadge = colEl.querySelector('.column-wip-badge');
@@ -257,7 +295,8 @@
             const matchKey = (issue.key || '').toLowerCase().includes(searchVal);
             const matchTitle = (issue.title || '').toLowerCase().includes(searchVal);
             const matchAssignee = (issue.assignee_principal || '').toLowerCase().includes(searchVal);
-            if (!matchKey && !matchTitle && !matchAssignee) return false;
+            const matchDesc = (issue.description || '').toLowerCase().includes(searchVal);
+            if (!matchKey && !matchTitle && !matchAssignee && !matchDesc) return false;
           }
 
           return true;
@@ -276,6 +315,9 @@
 
         // Render Cards
         cardList.innerHTML = '';
+        if (colKey === 'DONE') {
+          filteredIssues.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+        }
         if (filteredIssues.length === 0) {
           cardList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.75rem; text-align: center; padding: 24px 0;">No issues</div>`;
         } else {
@@ -340,10 +382,23 @@
       const priority = (issue.priority || 'MEDIUM').toLowerCase();
       const assignee = issue.assignee_principal || 'Unassigned';
       const initials = assignee.substring(0, 2).toUpperCase();
+      const allocMatch = (issue.description || '').match(/\[ALLOCATION_ID:([A-Za-z0-9_-]+)\]/);
+      const allocBadge = allocMatch ? `<span class="badge-alloc-id" style="background:rgba(0,255,157,0.18);color:#00ff9d;border:1px solid rgba(0,255,157,0.4);border-radius:4px;padding:1px 5px;font-size:0.72rem;font-weight:700;font-family:var(--font-mono);margin-left:6px;">${this.escapeHtml(allocMatch[1])}</span>` : '';
+      const isSprint2Done = (issue.key === 'MAS-25' || issue.key === 'MAS-29');
+      const sprint2Badge = isSprint2Done ? `<span class="badge-sprint2-done" style="background:rgba(0,255,157,0.22);color:#00ff9d;border:1px solid #00ff9d;border-radius:4px;padding:1px 6px;font-size:0.68rem;font-weight:700;font-family:var(--font-mono);margin-left:6px;box-shadow:0 0 8px rgba(0,255,157,0.3);">SPRINT 2 DONE</span>` : '';
+
+      if (isSprint2Done) {
+        card.style.borderColor = 'rgba(0, 255, 157, 0.7)';
+        card.style.boxShadow = '0 0 12px rgba(0, 255, 157, 0.25)';
+      }
 
       card.innerHTML = `
         <div class="card-header-row">
-          <span class="card-key">${this.escapeHtml(issue.key)}</span>
+          <div style="display: flex; align-items: center;">
+            <span class="card-key">${this.escapeHtml(issue.key)}</span>
+            ${allocBadge}
+            ${sprint2Badge}
+          </div>
           <div class="card-badges-row">
             <span class="type-badge type-${type}">${type}</span>
             <span class="priority-badge priority-${priority}">${priority}</span>

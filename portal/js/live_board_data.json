@@ -1,0 +1,1965 @@
+{
+  "project_key": "MAS",
+  "columns": {
+    "BACKLOG": {
+      "name": "BACKLOG",
+      "count": 29,
+      "wip_limit": null,
+      "is_saturated": false
+    },
+    "REFINED": {
+      "name": "REFINED",
+      "count": 0,
+      "wip_limit": null,
+      "is_saturated": false
+    },
+    "STAGED": {
+      "name": "STAGED",
+      "count": 0,
+      "wip_limit": null,
+      "is_saturated": false
+    },
+    "IN_PROGRESS": {
+      "name": "IN_PROGRESS",
+      "count": 0,
+      "wip_limit": 4,
+      "is_saturated": false
+    },
+    "VERIFICATION": {
+      "name": "VERIFICATION",
+      "count": 0,
+      "wip_limit": 2,
+      "is_saturated": false
+    },
+    "JUDICIAL_REVIEW": {
+      "name": "JUDICIAL_REVIEW",
+      "count": 0,
+      "wip_limit": 2,
+      "is_saturated": false
+    },
+    "DONE": {
+      "name": "DONE",
+      "count": 33,
+      "wip_limit": null,
+      "is_saturated": false
+    },
+    "BLOCKED": {
+      "name": "BLOCKED",
+      "count": 0,
+      "wip_limit": null,
+      "is_saturated": false
+    },
+    "REJECTED_REWORK": {
+      "name": "REJECTED_REWORK",
+      "count": 0,
+      "wip_limit": null,
+      "is_saturated": false
+    }
+  },
+  "total_active_wip": 0,
+  "flow_health": "OPTIMAL",
+  "wip_saturation_pct": 0.0,
+  "issues_by_column": {
+    "BACKLOG": [
+      {
+        "id": "67b3223c-3637-40a9-b6f5-c4522422c807",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-26",
+        "title": "Tamper-evident evidence provenance",
+        "description": "[ALLOCATION_ID:GOV-03]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): GOV-02\nAcceptance: Evidence references verifiable immutable hashes; changes or deletions are blocked or audited.; Provide independently reproducible evidence: Tamper-injection tests and integrity report; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.727708+00:00",
+        "updated_at": "2026-10-08T13:20:10.727708+00:00"
+      },
+      {
+        "id": "07a0dc29-08e0-46a9-93c9-a6c01ba7c551",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-27",
+        "title": "Enforce separation of duties",
+        "description": "[ALLOCATION_ID:GOV-04]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): GOV-02, SEC-05\nAcceptance: Builders cannot approve own work or impersonate reviewers at API, service, or persistence boundaries.; Provide independently reproducible evidence: Role-matrix and bypass regression tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.741617+00:00",
+        "updated_at": "2026-10-08T13:20:10.741617+00:00"
+      },
+      {
+        "id": "b9121791-f8f7-4845-8a08-8861f6ae8a27",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-28",
+        "title": "Adversarial judicial-review suite",
+        "description": "[ALLOCATION_ID:GOV-05]\nSource: work_queue/tasks.json\nAssigned builder: adversarial_red_team\nIndependent reviewer: chief_architect\nDependencies (allocation IDs): GOV-03, GOV-04\nAcceptance: Forged verdicts, replayed evidence, missing reviews, and conflicting decisions fail safely.; Provide independently reproducible evidence: Attack suite and independent findings; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "adversarial_red_team",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.748268+00:00",
+        "updated_at": "2026-10-08T13:20:10.748268+00:00"
+      },
+      {
+        "id": "f28551ee-1686-4a9f-afbc-ac9b734a967a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-30",
+        "title": "Least-privilege agent identity and credentials",
+        "description": "[ALLOCATION_ID:SEC-06]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): SEC-05\nAcceptance: Principals authenticate to scoped permissions; credentials are revocable and isolated.; Provide independently reproducible evidence: Permission matrix, denied-action tests, rotation drill; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/security.py, mas/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/security.py",
+          "mas/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.759701+00:00",
+        "updated_at": "2026-10-08T13:20:10.759701+00:00"
+      },
+      {
+        "id": "a67b1ecf-a8db-40d7-bed5-398daf35c802",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-31",
+        "title": "Sandbox and tool execution policy",
+        "description": "[ALLOCATION_ID:SEC-07]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): SEC-06\nAcceptance: Filesystem, shell, browser, and network tools enforce deny-by-default scoped policies.; Provide independently reproducible evidence: Sandbox escape and network/filesystem denial tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/tools/, mas/security.py, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/tools/",
+          "mas/security.py",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.777853+00:00",
+        "updated_at": "2026-10-08T13:20:10.777853+00:00"
+      },
+      {
+        "id": "3a47c91d-227c-488e-933e-9a0a02eb2543",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-32",
+        "title": "Supply-chain and secret scanning",
+        "description": "[ALLOCATION_ID:SEC-08]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: security_sre\nDependencies (allocation IDs): SEC-05\nAcceptance: CI rejects exposed secrets, disallowed vulnerable dependencies, and unapproved artifacts.; Provide independently reproducible evidence: Negative scanner CI runs and configuration; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: .github/, scripts/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          ".github/",
+          "scripts/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.784481+00:00",
+        "updated_at": "2026-10-08T13:20:10.784481+00:00"
+      },
+      {
+        "id": "46aa3143-c388-4941-a0a6-d35263bcd12a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-33",
+        "title": "Enforce dependencies and assignment authorization",
+        "description": "[ALLOCATION_ID:PM-07]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): SEC-05\nAcceptance: Claims and transitions enforce dependencies; reassignment requires authenticated authorization.; Provide independently reproducible evidence: Dependency graph and unauthorized reassignment tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.790650+00:00",
+        "updated_at": "2026-10-08T13:20:10.790650+00:00"
+      },
+      {
+        "id": "7cfbd38e-0a3e-446b-b132-51b9575f8fd1",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-34",
+        "title": "Atomic agent claims leases and heartbeats",
+        "description": "[ALLOCATION_ID:PM-08]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: backend_engineer\nDependencies (allocation IDs): PM-07\nAcceptance: One active lease per task; expired leases recover without duplicate execution.; Provide independently reproducible evidence: Concurrent claim and lease expiry tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.816072+00:00",
+        "updated_at": "2026-10-08T13:20:10.816072+00:00"
+      },
+      {
+        "id": "579bb905-e416-4a1b-875f-9dc15f0c78cf",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-35",
+        "title": "Retries timeouts and dead-letter recovery",
+        "description": "[ALLOCATION_ID:PM-09]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): PM-08\nAcceptance: Bounded retries preserve evidence and prevent duplicate side effects; dead letters remain inspectable.; Provide independently reproducible evidence: Crash, restart, timeout, and retry tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.832267+00:00",
+        "updated_at": "2026-10-08T13:20:10.832267+00:00"
+      },
+      {
+        "id": "6fb6dc49-95fc-454b-8b88-bcc48a855466",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-36",
+        "title": "Capacity-aware scheduling and WIP controls",
+        "description": "[ALLOCATION_ID:PM-10]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: product_lead\nDependencies (allocation IDs): PM-08\nAcceptance: Scheduling respects priority, dependencies, agent capacity, budget, and WIP ceilings.; Provide independently reproducible evidence: Scheduling simulation and concurrency report; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.839694+00:00",
+        "updated_at": "2026-10-08T13:20:10.839694+00:00"
+      },
+      {
+        "id": "2c90e6a4-cacb-4cca-9280-b59e3c8d1720",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-37",
+        "title": "Reliable Git-to-board reconciliation",
+        "description": "[ALLOCATION_ID:PM-11]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): PM-07\nAcceptance: Imports are idempotent; conflicts detected; existing states and active assignments are not silently overwritten.; Provide independently reproducible evidence: Import conflict and idempotency tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/git_queue.py, mas/pm/db.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/git_queue.py",
+          "mas/pm/db.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.846577+00:00",
+        "updated_at": "2026-10-08T13:20:10.846577+00:00"
+      },
+      {
+        "id": "83ebebd0-6099-49b9-9836-c04401f686ea",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-38",
+        "title": "Automated Git change detection and agent pickup",
+        "description": "[ALLOCATION_ID:PM-12]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: security_sre\nDependencies (allocation IDs): PM-08, PM-11\nAcceptance: Authorized Git changes reach board and eligible agents without manual card creation.; Provide independently reproducible evidence: Git push to board to agent E2E test; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/dashboard/, scripts/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/dashboard/",
+          "scripts/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.853556+00:00",
+        "updated_at": "2026-10-08T13:20:10.853556+00:00"
+      },
+      {
+        "id": "d2239000-16e7-4aba-9a12-b9784dcb2ab3",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-39",
+        "title": "Versioned task agent event and tool contracts",
+        "description": "[ALLOCATION_ID:ARC-01]\nSource: work_queue/tasks.json\nAssigned builder: chief_architect\nIndependent reviewer: backend_engineer\nDependencies (allocation IDs): PM-07\nAcceptance: Contracts include schema versions, compatibility policy, and migration behavior.; Provide independently reproducible evidence: Versioned specifications and compatibility tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/, docs/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "docs/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.862385+00:00",
+        "updated_at": "2026-10-08T13:20:10.862385+00:00"
+      },
+      {
+        "id": "8168d674-8aca-438b-8217-79888c8d7f14",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-40",
+        "title": "Durable event processing and idempotency",
+        "description": "[ALLOCATION_ID:ARC-02]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: platform_sre\nDependencies (allocation IDs): ARC-01\nAcceptance: Events survive restart; duplicates are idempotent; failed events replay safely.; Provide independently reproducible evidence: Persistence, replay, and fault injection tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.878040+00:00",
+        "updated_at": "2026-10-08T13:20:10.878040+00:00"
+      },
+      {
+        "id": "e6390f12-9c7b-4880-a30c-3b436356162a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-41",
+        "title": "Service boundaries and architectural fitness tests",
+        "description": "[ALLOCATION_ID:ARC-03]\nSource: work_queue/tasks.json\nAssigned builder: chief_architect\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): ARC-01, ARC-02\nAcceptance: Module boundaries documented and prohibited dependencies caught in CI.; Provide independently reproducible evidence: Architecture decisions and fitness tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/, docs/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "docs/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.884477+00:00",
+        "updated_at": "2026-10-08T13:20:10.884477+00:00"
+      },
+      {
+        "id": "70318553-c346-44c7-b7f9-a4529de2d5ed",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-42",
+        "title": "Runtime browser worker isolation verification",
+        "description": "[ALLOCATION_ID:CU-06]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: security_sre\nDependencies (allocation IDs): SEC-07\nAcceptance: Health checks inspect actual isolation and fail when protections are absent.; Provide independently reproducible evidence: Positive and negative runtime isolation tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/tools/computer_use.py, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/tools/computer_use.py",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.890070+00:00",
+        "updated_at": "2026-10-08T13:20:10.890070+00:00"
+      },
+      {
+        "id": "e841d9ea-ff01-4f44-8491-34212e4c14de",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-43",
+        "title": "Permissioned browser and desktop action policies",
+        "description": "[ALLOCATION_ID:CU-07]\nSource: work_queue/tasks.json\nAssigned builder: agent_workflow_engineer\nIndependent reviewer: security_sre\nDependencies (allocation IDs): CU-06\nAcceptance: Computer actions require scoped authorization, bounded execution, audit trails, and sensitive-action approval.; Provide independently reproducible evidence: Denied action and supervised browser tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/tools/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/tools/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.977130+00:00",
+        "updated_at": "2026-10-08T13:20:10.977130+00:00"
+      },
+      {
+        "id": "01364136-f8ce-417e-b299-52bf5e46d579",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-44",
+        "title": "Restore Scrum board end-to-end functionality",
+        "description": "[ALLOCATION_ID:UI-05]\nSource: work_queue/tasks.json\nAssigned builder: frontend_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): PM-11\nAcceptance: Board loads live projects and issues, shows accurate state, and permits authorized transitions without runtime errors.; Provide independently reproducible evidence: Browser screenshots and API/Playwright tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: portal/, mas/dashboard/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/",
+          "mas/dashboard/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.984253+00:00",
+        "updated_at": "2026-10-08T13:20:10.984253+00:00"
+      },
+      {
+        "id": "4c013b37-2153-482a-a001-3a2958edf95a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-45",
+        "title": "Live agent task evidence and review visibility",
+        "description": "[ALLOCATION_ID:UI-06]\nSource: work_queue/tasks.json\nAssigned builder: frontend_engineer\nIndependent reviewer: product_lead\nDependencies (allocation IDs): UI-05, PM-08, GOV-03\nAcceptance: Board shows truthful ownership, blockers, evidence, and review status with accessible navigation.; Provide independently reproducible evidence: Browser acceptance and accessibility tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: portal/, mas/dashboard/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/",
+          "mas/dashboard/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.990109+00:00",
+        "updated_at": "2026-10-08T13:20:10.990109+00:00"
+      },
+      {
+        "id": "ebf09d17-aa69-4471-aae1-97f54fc75d1f",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-46",
+        "title": "Independent re-audit of all 24 legacy tasks",
+        "description": "[ALLOCATION_ID:QA-01]\nSource: work_queue/tasks.json\nAssigned builder: qa_critic\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): GOV-04, SEC-05\nAcceptance: Each legacy ticket gets independently verified disposition; unsupported DONE claims flagged for rework.; Provide independently reproducible evidence: 24-item audit matrix with verifiable evidence; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: tests/, docs/, scripts/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "qa_critic",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "docs/",
+          "scripts/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.020227+00:00",
+        "updated_at": "2026-10-08T13:20:11.020227+00:00"
+      },
+      {
+        "id": "53647103-4c64-4fff-a712-0bb950aa4ff0",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-47",
+        "title": "Deterministic integration and end-to-end environments",
+        "description": "[ALLOCATION_ID:QA-02]\nSource: work_queue/tasks.json\nAssigned builder: qa_critic\nIndependent reviewer: platform_sre\nDependencies (allocation IDs): UI-05\nAcceptance: Isolated reproducible tests cover intake through independent acceptance.; Provide independently reproducible evidence: CI artifacts and reproducibility results; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: tests/, scripts/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "qa_critic",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "scripts/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.034151+00:00",
+        "updated_at": "2026-10-08T13:20:11.034151+00:00"
+      },
+      {
+        "id": "64fd990c-9e12-44fc-8624-9db9b13cbe03",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-48",
+        "title": "Failure concurrency and adversarial regression",
+        "description": "[ALLOCATION_ID:QA-03]\nSource: work_queue/tasks.json\nAssigned builder: adversarial_red_team\nIndependent reviewer: chief_architect\nDependencies (allocation IDs): QA-02, PM-09\nAcceptance: Fault injection catches authorization, corruption, replay, and recovery defects.; Provide independently reproducible evidence: Reproducible fault matrix and test results; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "adversarial_red_team",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.040103+00:00",
+        "updated_at": "2026-10-08T13:20:11.040103+00:00"
+      },
+      {
+        "id": "429e5504-f607-4ecc-a9bf-671f91f94d1a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-49",
+        "title": "Protected CI/CD and artifact provenance",
+        "description": "[ALLOCATION_ID:OPS-05]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: security_sre\nDependencies (allocation IDs): GOV-04, SEC-08\nAcceptance: Release gates block failing tests, unverifiable artifacts, and missing independent approval.; Provide independently reproducible evidence: CI policy and negative pipeline tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: .github/, scripts/, docs/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          ".github/",
+          "scripts/",
+          "docs/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.047349+00:00",
+        "updated_at": "2026-10-08T13:20:11.047349+00:00"
+      },
+      {
+        "id": "9cd0e0e1-c979-4048-99bd-3e1d3d4b325e",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-50",
+        "title": "Monitoring alerts budgets and runbooks",
+        "description": "[ALLOCATION_ID:OPS-06]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: finops_governor\nDependencies (allocation IDs): PM-09\nAcceptance: Agent failure, queue latency, token spend, denials, and stuck tasks have actionable alerts.; Provide independently reproducible evidence: Alert drills, dashboards, and runbooks; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/, docs/, scripts/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "docs/",
+          "scripts/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.062975+00:00",
+        "updated_at": "2026-10-08T13:20:11.062975+00:00"
+      },
+      {
+        "id": "9fe52e86-b4c3-487d-91fa-635ee2df7aaf",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-51",
+        "title": "Backup recovery rollback and controlled rollout",
+        "description": "[ALLOCATION_ID:OPS-07]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): OPS-05, OPS-06\nAcceptance: State restoration, schema rollback, and deployment rollback meet approved recovery objectives.; Provide independently reproducible evidence: Restore and rollback exercise logs; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: scripts/, docs/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "scripts/",
+          "docs/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.069695+00:00",
+        "updated_at": "2026-10-08T13:20:11.069695+00:00"
+      },
+      {
+        "id": "19bd0ad0-31a3-4612-9ed7-895a6af53e32",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-52",
+        "title": "Load soak and resilience qualification",
+        "description": "[ALLOCATION_ID:OPS-08]\nSource: work_queue/tasks.json\nAssigned builder: platform_sre\nIndependent reviewer: chief_architect\nDependencies (allocation IDs): PM-10, OPS-07\nAcceptance: Representative workloads meet agreed throughput, latency, resource, and recovery targets.; Provide independently reproducible evidence: Benchmarks and resilience report; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: tests/, scripts/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "scripts/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.077006+00:00",
+        "updated_at": "2026-10-08T13:20:11.077006+00:00"
+      },
+      {
+        "id": "74ecf1a9-4402-44e3-ae02-6920f5fe8361",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-53",
+        "title": "Independent production readiness audit",
+        "description": "[ALLOCATION_ID:REL-01]\nSource: work_queue/tasks.json\nAssigned builder: adversarial_red_team\nIndependent reviewer: product_lead\nDependencies (allocation IDs): QA-01, QA-03, OPS-07, OPS-08, ARC-03, CU-07, UI-06, GOV-05\nAcceptance: Release gates have independently reproducible evidence with no unresolved critical findings.; Provide independently reproducible evidence: Independent release decision and risk register; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: docs/, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "LOW",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "adversarial_red_team",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "docs/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.085995+00:00",
+        "updated_at": "2026-10-08T13:20:11.085995+00:00"
+      },
+      {
+        "id": "26be4620-39ce-4222-a9f8-e699239a404b",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-54",
+        "title": "Controlled autonomous pilot and 10/10 reassessment",
+        "description": "[ALLOCATION_ID:REL-02]\nSource: work_queue/tasks.json\nAssigned builder: chief_architect\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): REL-01, PM-12\nAcceptance: Representative tasks complete monitored end-to-end pilot and seven categories meet agreed acceptance criteria.; Provide independently reproducible evidence: Pilot report, failure analysis, independent scorecard; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: docs/, tests/, scripts/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "LOW",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "docs/",
+          "tests/",
+          "scripts/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:11.098597+00:00",
+        "updated_at": "2026-10-08T13:20:11.098597+00:00"
+      },
+      {
+        "id": "267d741e-4fc3-4efc-b2fc-409c17395f2a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-55",
+        "title": "Ticket category, agent assignment history and verified token usage on Scrum board",
+        "description": "[ALLOCATION_ID:PM-13]\nSource: work_queue/tasks.json\nAssigned builder: frontend_engineer\nIndependent reviewer: qa_critic\nDependencies (allocation IDs): PM-07, UI-05\nAcceptance: Define and persist a versioned ticket category taxonomy, including Security, Governance, Backend, Frontend, Computer Use, QA, Architecture, Operations and Research; support existing tickets without losing history; Show current assigned agent principal and authorized assigned-by principal with assignment timestamp; maintain immutable or append-only assignment and reassignment history with actor, time and reason; Ingest actual model/provider usage per ticket and execution attempt, including input, output, cached and total tokens where available; deduplicate events and never represent unavailable usage as zero; Display per-ticket token budget, consumed and remaining tokens, usage by agent and model, and estimated or billed cost with pricing source and currency; avoid double counting on retries; Expose category, assignee, assigned-by and token metrics on the live Scrum board cards and ticket detail drawer with accessible responsive UX; Enforce role-based permissions for category edits and reassignment; usage events must be attributable and tamper-evident; Include schema migrations, backward-compatible API contracts, automated database/API/UI tests and independently reproduced screenshots; obtain authenticated independent reviewer approval\nScope: mas/pm/, mas/dashboard/, portal/, tests/, docs/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "BACKLOG",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/dashboard/",
+          "portal/",
+          "tests/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:27:31.218694+00:00",
+        "updated_at": "2026-10-08T13:27:31.218694+00:00"
+      }
+    ],
+    "REFINED": [],
+    "STAGED": [],
+    "IN_PROGRESS": [],
+    "VERIFICATION": [],
+    "JUDICIAL_REVIEW": [],
+    "DONE": [
+      {
+        "id": "5a74ee46-c0c7-4da8-8a4b-c1a7bfe2ef0f",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-SEC-001",
+        "title": "Derive agent and reviewer identities from authenticated execution context; prohibit caller-supplied identity impersonation",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.287208+00:00",
+        "updated_at": "2026-10-08T08:42:50.547415+00:00"
+      },
+      {
+        "id": "24dc21d0-9777-401b-8a6c-86e613b74f12",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-SEC-002",
+        "title": "Fail closed on missing, forged, stale, or mismatched evidence; verify real execution artifacts",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.290574+00:00",
+        "updated_at": "2026-10-08T08:42:50.588984+00:00"
+      },
+      {
+        "id": "8fcaa1ea-65c7-4844-abae-630623af11f6",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-CON-001",
+        "title": "Make state checks, WIP checks, and transitions atomic under concurrent workers",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.306634+00:00",
+        "updated_at": "2026-10-08T08:42:50.653175+00:00"
+      },
+      {
+        "id": "d15111be-1431-4757-a3d1-d9465df4b242",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-SEC-003",
+        "title": "Enforce scope whitelist and forbidden paths against actual file operations and changed files",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.352361+00:00",
+        "updated_at": "2026-10-08T08:42:50.805580+00:00"
+      },
+      {
+        "id": "582bca2e-46a1-47c1-8d71-d3ffa650aa42",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-DATA-001",
+        "title": "Replace COUNT(*) + 1 issue numbering with transactional sequence allocation",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.355850+00:00",
+        "updated_at": "2026-10-08T08:42:50.859659+00:00"
+      },
+      {
+        "id": "49c4a1ec-4199-4c1f-88f2-116df7962e14",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "PM-GOV-001",
+        "title": "Enforce guards for every FSM transition and invalidate stale approvals after rework",
+        "description": "",
+        "issue_type": "DEFECT",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.359228+00:00",
+        "updated_at": "2026-10-08T08:42:50.903558+00:00"
+      },
+      {
+        "id": "f442186b-d100-4362-aeb7-3272e12370ca",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-PM-BOARD-001",
+        "title": "Design and Implement the Native Scrum/Kanban Project Management Board",
+        "description": "",
+        "issue_type": "EPIC",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+        "parent_id": null,
+        "assignee_principal": null,
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "*"
+        ],
+        "forbidden_paths": [],
+        "created_at": "2026-10-08T08:07:02.363733+00:00",
+        "updated_at": "2026-10-08T08:49:28.428700+00:00"
+      },
+      {
+        "id": "60bf9fbb-8ed8-4cfa-bb02-61c9bef3a2db",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-1",
+        "title": "Audit exposed credentials and rotate affected secrets",
+        "description": "[ALLOCATION_ID:SEC-01]\\nProposed owner/role: Security SRE\\nDependencies (planning IDs): None\\nScope: mas/, scripts/, .github/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/",
+          "scripts/",
+          ".github/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.850668+00:00",
+        "updated_at": "2026-10-08T11:56:17.613112+00:00"
+      },
+      {
+        "id": "fa1ed31b-4c03-4243-a06e-421d404eb16d",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-2",
+        "title": "Secure authenticated identities and reviewer authorization",
+        "description": "[ALLOCATION_ID:SEC-02]\\nProposed owner/role: Backend Engineer + Security SRE\\nDependencies (planning IDs): SEC-01\\nScope: mas/dashboard/, mas/pm/, mas/security.py\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/dashboard/",
+          "mas/pm/",
+          "mas/security.py"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.859540+00:00",
+        "updated_at": "2026-10-08T11:58:30.080081+00:00"
+      },
+      {
+        "id": "5153b83c-7c68-47d5-b3c6-c8cc443e0e72",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-3",
+        "title": "Fail-closed evidence and commit-scope verification",
+        "description": "[ALLOCATION_ID:SEC-03]\\nProposed owner/role: Security SRE + QA Critic\\nDependencies (planning IDs): SEC-02\\nScope: mas/pm/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.866466+00:00",
+        "updated_at": "2026-10-08T11:59:35.872263+00:00"
+      },
+      {
+        "id": "aed8deaa-c28b-4a99-97b8-13c8c0a4c42c",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-4",
+        "title": "Prove atomic WIP, unique issue keys, and FSM safety",
+        "description": "[ALLOCATION_ID:SEC-04]\\nProposed owner/role: Backend Engineer\\nDependencies (planning IDs): SEC-02\\nScope: mas/pm/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.873112+00:00",
+        "updated_at": "2026-10-08T11:59:36.423403+00:00"
+      },
+      {
+        "id": "7eb340e5-66f1-40c4-9f20-2e037a888f52",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-5",
+        "title": "Repair failing GitHub CI and verify Docker pipeline",
+        "description": "[ALLOCATION_ID:OPS-01]\\nProposed owner/role: Platform/SRE\\nDependencies (planning IDs): None\\nScope: .github/, Dockerfile, docker-compose.yml, scripts/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          ".github/",
+          "Dockerfile",
+          "docker-compose.yml",
+          "scripts/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.879647+00:00",
+        "updated_at": "2026-10-08T11:56:17.725444+00:00"
+      },
+      {
+        "id": "823e8f36-e776-4bbb-894a-720673d4eea9",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-6",
+        "title": "Eliminate self-certified releases and evaluator bypasses",
+        "description": "[ALLOCATION_ID:GOV-01]\\nProposed owner/role: QA Critic + Red Team\\nDependencies (planning IDs): SEC-03\\nScope: mas/pm/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "qa_critic",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.887785+00:00",
+        "updated_at": "2026-10-08T12:02:43.043799+00:00"
+      },
+      {
+        "id": "aeafeddf-e6b2-41b1-aa39-9a957d64a4cc",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-7",
+        "title": "Validate Scrum board end-to-end against live MAS-PM",
+        "description": "[ALLOCATION_ID:PM-01]\\nProposed owner/role: Frontend Engineer + QA Critic\\nDependencies (planning IDs): SEC-02, SEC-04\\nScope: portal/scrum.html, mas/dashboard/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/scrum.html",
+          "mas/dashboard/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.895151+00:00",
+        "updated_at": "2026-10-08T12:04:33.938318+00:00"
+      },
+      {
+        "id": "66492046-7d6e-4a4d-bb24-4b219a1bb67b",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-8",
+        "title": "Make board the canonical intake and assignment workflow",
+        "description": "[ALLOCATION_ID:PM-02]\\nProposed owner/role: Product Lead + Backend Engineer\\nDependencies (planning IDs): PM-01\\nScope: portal/, mas/pm/, mas/dashboard/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "product_lead",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/",
+          "mas/pm/",
+          "mas/dashboard/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.940233+00:00",
+        "updated_at": "2026-10-08T12:07:25.861388+00:00"
+      },
+      {
+        "id": "5a57f10f-5db7-47e5-b6bb-ad31a0786a92",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-9",
+        "title": "Define issue contracts, dependencies, and acceptance gates",
+        "description": "[ALLOCATION_ID:PM-03]\\nProposed owner/role: Chief Architect + Product Lead\\nDependencies (planning IDs): SEC-04\\nScope: mas/pm/, docs/, templates/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "docs/",
+          "templates/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.975069+00:00",
+        "updated_at": "2026-10-08T12:04:34.524181+00:00"
+      },
+      {
+        "id": "2437f5aa-a8cf-4018-b206-09c7ce165676",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-10",
+        "title": "Build agent claim, dispatch, and heartbeat lifecycle",
+        "description": "[ALLOCATION_ID:PM-04]\\nProposed owner/role: Agent Workflow Engineer\\nDependencies (planning IDs): PM-02, PM-03\\nScope: mas/pm/, mas/orchestration/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/orchestration/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.982895+00:00",
+        "updated_at": "2026-10-08T12:09:05.122287+00:00"
+      },
+      {
+        "id": "67c706ac-575c-4245-a194-9355eb1f574d",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-11",
+        "title": "Integrate sprint planning, capacity, and flow analytics",
+        "description": "[ALLOCATION_ID:PM-05]\\nProposed owner/role: Product Lead + Backend Engineer\\nDependencies (planning IDs): PM-02\\nScope: mas/pm/, portal/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "product_lead",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "portal/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:39.988404+00:00",
+        "updated_at": "2026-10-08T12:09:04.428188+00:00"
+      },
+      {
+        "id": "7915379b-53cf-4f1a-970e-9ac1ec812484",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-12",
+        "title": "Implement immutable issue audit trail and rework history",
+        "description": "[ALLOCATION_ID:PM-06]\\nProposed owner/role: Backend Engineer\\nDependencies (planning IDs): SEC-03\\nScope: mas/pm/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.018236+00:00",
+        "updated_at": "2026-10-08T12:02:40.609052+00:00"
+      },
+      {
+        "id": "42854fd8-7a91-41e1-a5c5-12659503546e",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-13",
+        "title": "Finalize computer-use threat model and permission boundaries",
+        "description": "[ALLOCATION_ID:CU-01]\\nProposed owner/role: Chief Architect + Security SRE\\nDependencies (planning IDs): SEC-02\\nScope: docs/, mas/tools/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "docs/",
+          "mas/tools/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.024427+00:00",
+        "updated_at": "2026-10-08T11:59:37.488912+00:00"
+      },
+      {
+        "id": "1281a3a8-f49a-4a0a-8cde-53faba4fb9b4",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-14",
+        "title": "Build isolated Playwright browser execution worker",
+        "description": "[ALLOCATION_ID:CU-02]\\nProposed owner/role: Agent Workflow Engineer\\nDependencies (planning IDs): CU-01\\nScope: mas/tools/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "agent_workflow_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/tools/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.030790+00:00",
+        "updated_at": "2026-10-08T12:04:35.651252+00:00"
+      },
+      {
+        "id": "8c6c2d50-e5d3-4b6b-8c35-a3f0988a9c15",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-15",
+        "title": "Implement independent browser, visual, and a11y verifier",
+        "description": "[ALLOCATION_ID:CU-03]\\nProposed owner/role: QA Critic + Frontend Engineer\\nDependencies (planning IDs): CU-02\\nScope: mas/tools/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "qa_critic",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/tools/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.070137+00:00",
+        "updated_at": "2026-10-08T12:07:19.354660+00:00"
+      },
+      {
+        "id": "5fca2e18-454e-4aaf-95d3-732751bff14e",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-16",
+        "title": "Run defect-injection and forged-evidence regression suite",
+        "description": "[ALLOCATION_ID:CU-04]\\nProposed owner/role: Red Team\\nDependencies (planning IDs): CU-03, GOV-01\\nScope: tests/, mas/eval/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "adversarial_red_team",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "tests/",
+          "mas/eval/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.077079+00:00",
+        "updated_at": "2026-10-08T12:09:05.482392+00:00"
+      },
+      {
+        "id": "455858c5-b695-4e72-a3cf-76e719d2a13a",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-17",
+        "title": "Research native desktop computer-use executor",
+        "description": "[ALLOCATION_ID:CU-05]\\nProposed owner/role: Research Lead + Architect\\nDependencies (planning IDs): CU-01\\nScope: research/, docs/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "market_researcher",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "research/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.084148+00:00",
+        "updated_at": "2026-10-08T12:04:35.737667+00:00"
+      },
+      {
+        "id": "1e83f934-38ff-4ad2-8289-7139df1f2cf1",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-18",
+        "title": "Create Acinonyx design system and visual identity",
+        "description": "[ALLOCATION_ID:UX-01]\\nProposed owner/role: Design Lead\\nDependencies (planning IDs): None\\nScope: portal/css/, docs/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "design_lead",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/css/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.090795+00:00",
+        "updated_at": "2026-10-08T11:56:18.310069+00:00"
+      },
+      {
+        "id": "054d4143-72b7-4ead-b890-8ae223318454",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-19",
+        "title": "Refine board accessibility, keyboard use, and responsive UX",
+        "description": "[ALLOCATION_ID:UX-02]\\nProposed owner/role: Design Lead + Frontend Engineer\\nDependencies (planning IDs): PM-01, UX-01\\nScope: portal/scrum.html, portal/css/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/scrum.html",
+          "portal/css/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.115468+00:00",
+        "updated_at": "2026-10-08T12:07:25.665973+00:00"
+      },
+      {
+        "id": "34b9b1f4-0310-4670-9fc8-66616e34f390",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-20",
+        "title": "Repair research portal navigation and accessibility",
+        "description": "[ALLOCATION_ID:UX-03]\\nProposed owner/role: Frontend Engineer + QA Critic\\nDependencies (planning IDs): CU-03\\nScope: portal/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "frontend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "portal/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.121706+00:00",
+        "updated_at": "2026-10-08T12:09:03.855231+00:00"
+      },
+      {
+        "id": "493d92cf-2454-4cc3-b64e-b4b1a26c5bbf",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-21",
+        "title": "Integrate anti-slop design linting and visual regression",
+        "description": "[ALLOCATION_ID:UX-04]\\nProposed owner/role: Design Lead + QA Critic\\nDependencies (planning IDs): CU-03, UX-01\\nScope: scripts/, tests/, portal/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "design_lead",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "scripts/",
+          "tests/",
+          "portal/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.128203+00:00",
+        "updated_at": "2026-10-08T12:08:57.679975+00:00"
+      },
+      {
+        "id": "8bf99bb0-e504-4344-8ce2-9d3f269ae31e",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-22",
+        "title": "Define observability, token budgets, and circuit-breaker alerts",
+        "description": "[ALLOCATION_ID:OPS-02]\\nProposed owner/role: Platform/SRE + FinOps\\nDependencies (planning IDs): SEC-04\\nScope: mas/observability.py, mas/pm/, docs/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "finops_governor",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/observability.py",
+          "mas/pm/",
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.160494+00:00",
+        "updated_at": "2026-10-08T12:04:36.273787+00:00"
+      },
+      {
+        "id": "6ef2ff69-d2a6-4b50-9fa6-f992fbf3c830",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-23",
+        "title": "Test database backup, recovery, and migration strategy",
+        "description": "[ALLOCATION_ID:OPS-03]\\nProposed owner/role: Platform/SRE\\nDependencies (planning IDs): PM-06\\nScope: mas/pm/, scripts/, tests/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "HIGH",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "platform_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "scripts/",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.166802+00:00",
+        "updated_at": "2026-10-08T12:07:18.728274+00:00"
+      },
+      {
+        "id": "36eedb41-5bad-42ff-b531-350d7db9cfd6",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-24",
+        "title": "Publish release readiness checklist and pilot report",
+        "description": "[ALLOCATION_ID:OPS-04]\\nProposed owner/role: Chief Architect + QA Critic\\nDependencies (planning IDs): GOV-01, OPS-01, OPS-03\\nScope: docs/\\nAcceptance: independently verifiable implementation or documented research; passing relevant tests; attached empirical evidence; independent reviewer approval.\\nInitial state: BACKLOG. Do not auto-dispatch or claim DONE.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "MEDIUM",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "chief_architect",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "docs/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T10:02:40.174033+00:00",
+        "updated_at": "2026-10-08T12:09:04.534726+00:00"
+      },
+      {
+        "id": "147fc8e1-6892-440e-9d35-35ae7c4bb6d0",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-25",
+        "title": "Independent reviewer verdict service",
+        "description": "[ALLOCATION_ID:GOV-02]\nSource: work_queue/tasks.json\nAssigned builder: backend_engineer\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): None\nAcceptance: Only authenticated reviewer actions create verdicts; scripts cannot manufacture approvals.; Provide independently reproducible evidence: Negative authorization tests and signed reviewer decision records; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/pm/, mas/security.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "backend_engineer",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/pm/",
+          "mas/security.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.721893+00:00",
+        "updated_at": "2026-10-08T13:55:27.678776+00:00"
+      },
+      {
+        "id": "f6c2099d-5861-4dd1-a1da-5856a78d91db",
+        "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+        "key": "MAS-29",
+        "title": "Close identity and fail-open verification defects",
+        "description": "[ALLOCATION_ID:SEC-05]\nSource: work_queue/tasks.json\nAssigned builder: security_sre\nIndependent reviewer: adversarial_red_team\nDependencies (allocation IDs): None\nAcceptance: Unverified principals and invalid or unreadable Git changesets are rejected, never accepted.; Provide independently reproducible evidence: Impersonation and malformed-commit regression tests; Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts; Obtain independently authenticated review and authorized workflow acceptance\nScope: mas/security.py, mas/pm/guards.py, tests/\nStatus: BACKLOG. Dependency checks and workflow approvals are not bypassed.",
+        "issue_type": "TASK",
+        "current_state": "DONE",
+        "priority": "CRITICAL",
+        "sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+        "parent_id": null,
+        "assignee_principal": "security_sre",
+        "appetite_tokens": 50000,
+        "appetite_timeout_s": 1800,
+        "tokens_spent": 0,
+        "reflexion_attempts": 0,
+        "rework_cycle": 0,
+        "blocker_reason": null,
+        "path_whitelist": [
+          "mas/security.py",
+          "mas/pm/guards.py",
+          "tests/"
+        ],
+        "forbidden_paths": [
+          ".env",
+          ".env.*",
+          "**/secrets/**"
+        ],
+        "created_at": "2026-10-08T13:20:10.753923+00:00",
+        "updated_at": "2026-10-08T13:55:27.615637+00:00"
+      }
+    ],
+    "BLOCKED": [],
+    "REJECTED_REWORK": []
+  },
+  "sprints": [
+    {
+      "id": "b55ddd80-17a6-4374-879f-271b1d09947b",
+      "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+      "name": "Sprint 1: Core Governance & PM Board",
+      "goal": "Remediate 6 blocking architectural defects and deploy native visual board",
+      "state": "CLOSED",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-10-08T08:42:50.463677+00:00"
+    },
+    {
+      "id": "6f2fef1d-3ead-4383-8449-c199c31845e7",
+      "project_id": "f826c700-974f-4dbc-94b4-f15606f626c8",
+      "name": "Sprint 2: Acinonyx Frontier Foundation & Capability Delivery",
+      "goal": "Deliver Acinonyx Git-allocated capabilities, security hardening, and pipeline readiness under full FSM governance",
+      "state": "ACTIVE",
+      "start_date": "2026-10-08T11:56:14.825385+00:00",
+      "end_date": null,
+      "created_at": "2026-10-08T11:56:14.825933+00:00"
+    }
+  ],
+  "active_sprint_id": "6f2fef1d-3ead-4383-8449-c199c31845e7"
+}
