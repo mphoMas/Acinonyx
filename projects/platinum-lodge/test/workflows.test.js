@@ -1,0 +1,96 @@
+import {test, before, after} from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const dir=mkdtempSync(join(tmpdir(),'platinum-test-'));
+const port=3100+Math.floor(Math.random()*900),base=`http://127.0.0.1:${port}`;let proc,cookie='';
+async function call(path,method='GET',data,auth=cookie){const res=await fetch(base+'/api/'+path,{method,headers:{'Content-Type':'application/json','X-Platinum-Request':'1',Cookie:auth},...(data?{body:JSON.stringify(data)}:{})});return {status:res.status,data:await res.json(),cookie:res.headers.get('set-cookie')?.split(';')[0]};}
+before(async()=>{proc=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),DATA_DIR:dir},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{proc.stdout.on('data',chunk=>{if(String(chunk).includes('ready'))resolve();});proc.on('error',reject);proc.on('exit',code=>reject(Error('Server exited '+code)));});});
+after(async()=>{proc.kill();await new Promise(r=>proc.once('exit',r));rmSync(dir,{recursive:true,force:true});});
+test('first-use account, isolation, booking conflicts, payments, housekeeping, events, and permissions',async()=>{
+assert.equal((await call('state')).status,401);
+assert.equal((await call('bootstrap')).data.needsSetup,true);
+let r=await call('setup','POST',{name:'Hotel Manager',email:'manager@example.test',password:'Strong-test-password-123'});assert.equal(r.status,201);cookie=r.cookie;
+assert.equal((await call('setup','POST',{name:'Intruder',email:'other@example.test',password:'Strong-test-password-123'})).status,409);
+assert.equal((await call('state')).data.rooms.length,0);
+assert.equal((await call('rooms','POST',{number:'101',type:'Deluxe',capacity:2,rate:5000})).status,201);
+let s=(await call('state')).data;const room=s.rooms[0],today=s.today;const tomorrow=new Date(Date.parse(today+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+const payload={guest:'Test Guest',email:'guest@example.test',phone:'+258 84 000 0000',company:'',room_id:room.id,arrival:today,departure:tomorrow,adults:2,rate:5000,source:'Direct',notes:''};
+r=await call('reservations','POST',payload);assert.equal(r.status,201);const rid=r.data.id;
+assert.equal((await call('reservations','POST',payload)).status,409);
+assert.equal((await call('reservations','POST',{...payload,adults:3})).status,400);
+await call('rooms/'+room.id,'PATCH',{cleaning:'dirty'});
+assert.equal((await call(`reservations/${rid}/status`,'POST',{status:'checked-in'})).status,409);
+await call('rooms/'+room.id,'PATCH',{cleaning:'clean'});
+assert.equal((await call(`reservations/${rid}/status`,'POST',{status:'checked-in'})).status,200);
+assert.equal((await call('rooms/'+room.id,'PATCH',{blocked:true})).status,409);
+assert.equal((await call(`reservations/${rid}/status`,'POST',{status:'checked-out'})).status,409);
+assert.equal((await call('orders','POST',{outlet:'Restaurant',description:'Lunch',amount:750,settlement:'Room charge',reservation_id:rid})).status,201);
+let f=(await call(`reservations/${rid}/folio`)).data;assert.equal(f.balance,575000);assert.equal(f.charges.length,2);
+assert.equal((await call('payments','POST',{reservation_id:rid,amount:5751,method:'Cash',reference:''})).status,400);
+assert.equal((await call('payments','POST',{reservation_id:rid,amount:5750,method:'Cash',reference:'Paid'})).status,201);
+assert.equal((await call(`reservations/${rid}/status`,'POST',{status:'checked-out'})).status,200);
+s=(await call('state')).data;assert.equal(s.rooms[0].cleaning,'dirty');assert.equal(s.occupancy.length,0);assert.ok(s.audit.some(x=>x.action==='Payment recorded'));
+assert.equal((await call('venues','POST',{name:'Test Hall',capacity:50,rate:10000})).status,201);
+s=(await call('state')).data;const event={title:'Test conference',organiser:'Test Company',venue_id:s.venues[0].id,start:today+'T09:00',end:today+'T17:00',attendees:40,status:'confirmed',amount:10000,deposit:2000,notes:''};
+assert.equal((await call('events','POST',event)).status,201);
+assert.equal((await call('events','POST',event)).status,409);
+assert.equal((await call('events','POST',{...event,start:tomorrow+'T09:00',end:tomorrow+'T17:00',attendees:60})).status,400);
+assert.equal((await call('users','POST',{name:'Cleaner',email:'cleaner@example.test',role:'housekeeping',password:'Cleaner-test-password-123'})).status,201);
+r=await call('login','POST',{email:'cleaner@example.test',password:'Cleaner-test-password-123'});const staffCookie=r.cookie;assert.equal(r.status,200);
+s=(await call('state','GET',null,staffCookie)).data;assert.equal(s.reservations,undefined);assert.equal(s.payments,undefined);assert.equal(s.users,undefined);
+assert.equal((await call('payments','POST',{reservation_id:rid,amount:1,method:'Cash'},staffCookie)).status,403);
+assert.equal((await call('rooms/'+room.id,'PATCH',{cleaning:'clean'},staffCookie)).status,403);
+assert.equal((await call('rooms/'+room.id,'PATCH',{cleaning:'cleaning'},staffCookie)).status,200);
+assert.equal((await call('rooms/'+room.id,'PATCH',{cleaning:'inspection'},staffCookie)).status,200);
+assert.equal((await call('rooms/'+room.id,'PATCH',{cleaning:'clean'})).status,200);
+const users=(await call('state')).data.users;const cleaner=users.find(u=>u.email==='cleaner@example.test');await call('users/'+cleaner.id,'PATCH',{active:false});assert.equal((await call('state','GET',null,staffCookie)).status,401);
+const demo=await call('demo','POST',{});assert.equal(demo.status,201);assert.equal((await call('state','GET',null,demo.cookie)).data.rooms.length,24);assert.equal((await call('state')).data.rooms.length,1);
+assert.equal((await call('backup')).data.rooms.length,1);assert.equal((await call('backup')).data.users,undefined);
+assert.equal((await call('logout','POST',{},demo.cookie)).status,200);
+});
+test('rejects cross-origin mutations and HTML injection stays data',async()=>{
+const res=await fetch(base+'/api/rooms',{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({number:'200',type:'Room',capacity:2,rate:50})});assert.equal(res.status,403);
+const response=await fetch(base+'/api/rooms',{method:'POST',headers:{'Content-Type':'application/json','X-Platinum-Request':'1',Origin:'https://another-site.example',Cookie:cookie},body:'{}'});assert.equal(response.status,403);
+assert.equal((await fetch(base+'/')).status,200);assert.equal((await fetch(base+'/styles.css')).status,200);
+});
+test('financial retries, amendments, refunds, and atomic validation',async()=>{
+const s=(await call('state')).data, room=s.rooms[0],today=s.today;const next=n=>new Date(Date.parse(today+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
+async function keyed(path,data,key){const res=await fetch(base+'/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Platinum-Request':'1','Idempotency-Key':key,Cookie:cookie},body:JSON.stringify(data)});return {status:res.status,data:await res.json()};}
+const booking={guest:'Retry Test',room_id:room.id,arrival:today,departure:next(1),adults:1,rate:5000,source:'Direct'};
+const first=await keyed('reservations',booking,'booking-test-key');const replay=await keyed('reservations',booking,'booking-test-key');assert.equal(first.status,201);assert.equal(replay.data.id,first.data.id);
+assert.equal((await keyed('reservations',{...booking,guest:'Changed request'},'booking-test-key')).status,409);
+const rid=first.data.id;
+const charge={reservation_id:rid,description:'Laundry',department:'Laundry',amount:100};assert.equal((await keyed('charges',charge,'charge-test-key')).status,201);assert.equal((await keyed('charges',charge,'charge-test-key')).status,201);
+const payment={reservation_id:rid,amount:50,method:'Cash',reference:'Retry test'};assert.equal((await keyed('payments',payment,'payment-test-key')).status,201);assert.equal((await keyed('payments',payment,'payment-test-key')).status,201);
+let f=(await call(`reservations/${rid}/folio`)).data;assert.equal(f.charges.length,2);assert.equal(f.payments.length,1);assert.equal(f.balance,505000);
+await call('rooms','POST',{number:'102',type:'Suite',capacity:3,rate:7000});const room2=(await call('state')).data.rooms.find(x=>x.number==='102');
+assert.equal((await call('reservations/'+rid,'PATCH',{room_id:room2.id,departure:next(2),adults:2})).status,200);
+f=(await call(`reservations/${rid}/folio`)).data;assert.equal(f.reservation.rate,500000);assert.equal(f.balance,1005000);
+assert.equal((await call('refunds','POST',{reservation_id:rid,amount:51,reason:'Too much'})).status,400);
+const refund={reservation_id:rid,amount:50,reason:'Deposit returned'};assert.equal((await keyed('refunds',refund,'refund-test-key')).status,201);assert.equal((await keyed('refunds',refund,'refund-test-key')).status,201);
+f=(await call(`reservations/${rid}/folio`)).data;assert.equal(f.paid,0);assert.equal(f.payments.length,2);
+assert.equal((await call(`reservations/${rid}/status`,'POST',{status:'cancelled'})).status,200);assert.equal((await call(`reservations/${rid}/folio`)).data.balance,0);
+const event=(await call('state')).data.events[0];assert.equal((await call('events/'+event.id,'PATCH',{status:'cancelled',deposit:20000})).status,400);assert.equal((await call('state')).data.events[0].status,'confirmed');
+await call('users','POST',{name:'Inspector',email:'inspector@example.test',password:'Inspector-password-123',role:'housekeeping'});const cleaner=(await call('login','POST',{email:'inspector@example.test',password:'Inspector-password-123'})).cookie;
+assert.equal((await call('rooms/'+room.id,'PATCH',{cleaning:'dirty',rate:1},cleaner)).status,403);assert.equal((await call('state')).data.rooms[0].cleaning,'clean');
+});
+test('SQLite data survives a process restart and sessions require fresh sign-in',async()=>{
+proc.kill();await new Promise(r=>proc.once('exit',r));
+proc=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),DATA_DIR:dir},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{proc.stdout.on('data',c=>String(c).includes('ready')&&resolve());proc.once('error',reject);});
+assert.equal((await call('state')).status,401);const login=await call('login','POST',{email:'manager@example.test',password:'Strong-test-password-123'});assert.equal(login.status,200);cookie=login.cookie;
+const s=(await call('state')).data;assert.equal(s.rooms.length,2);assert.equal(s.reservations.length,2);assert.ok(s.audit.length>10);
+});
+test('a consistent backup restores records and staff authentication',async()=>{
+const destination=join(dir,'restore-test');
+const backupProcess=spawn(process.execPath,['scripts/backup.mjs',destination],{env:{...process.env,DATA_DIR:dir},stdio:['ignore','pipe','pipe']});let error='';backupProcess.stderr.on('data',c=>error+=c);const code=await new Promise(r=>backupProcess.once('exit',r));assert.equal(code,0,error);
+proc.kill();await new Promise(r=>proc.once('exit',r));proc=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),DATA_DIR:destination},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{proc.stdout.on('data',c=>String(c).includes('ready')&&resolve());proc.once('error',reject);});
+const login=await call('login','POST',{email:'manager@example.test',password:'Strong-test-password-123'});assert.equal(login.status,200);cookie=login.cookie;const s=(await call('state')).data;assert.equal(s.rooms.length,2);assert.equal(s.reservations.length,2);assert.equal(s.events.length,1);assert.ok(s.users.some(u=>u.email==='inspector@example.test'));
+});
+test('dining staff receive only the in-house guest details needed for room charges',async()=>{
+await call('users','POST',{name:'Dining Staff',email:'dining@example.test',role:'dining',password:'Dining-password-123'});
+const login=await call('login','POST',{email:'dining@example.test',password:'Dining-password-123'});const s=(await call('state','GET',null,login.cookie)).data;assert.equal(s.payments,undefined);assert.equal(s.events,undefined);assert.equal(s.users,undefined);assert.ok(s.reservations.every(r=>r.status==='checked-in'&&r.phone===undefined&&r.email===undefined&&r.charges===undefined));
+const manager=(await call('state')).data;assert.equal((await call('reservations/'+manager.reservations[0].id+'/folio','GET',null,login.cookie)).status,403);
+});
