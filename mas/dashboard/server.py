@@ -569,6 +569,34 @@ def run_dashboard(
     from mas.providers.gateway import ModelGatewayServer
     from mas.providers.http_provider import OpenAICompatibleProvider
 
+    # Sync the Git-tracked work queue to MAS-PM on startup and whenever the
+    # checked-out manifest changes. No workflow transitions or dispatch occur.
+    import os
+    from pathlib import Path
+    from mas.pm.git_queue import MANIFEST, sync as sync_git_queue
+
+    def _sync_queue_once():
+        try:
+            result = sync_git_queue()
+            if result["created"]:
+                print(f"📋 MAS-PM Git queue: {len(result['created'])} issues imported")
+        except Exception as exc:
+            print(f"⚠️  MAS-PM Git queue sync failed: {exc}")
+
+    _sync_queue_once()
+    if os.environ.get("MAS_GIT_QUEUE_AUTOSYNC", "true").lower() not in ("0", "false", "no"):
+        def _watch_git_queue():
+            import time
+            previous = MANIFEST.stat().st_mtime_ns if MANIFEST.exists() else None
+            while True:
+                time.sleep(30)
+                current = MANIFEST.stat().st_mtime_ns if MANIFEST.exists() else None
+                if current != previous:
+                    _sync_queue_once()
+                    previous = current
+
+        threading.Thread(target=_watch_git_queue, name="mas-git-queue-sync", daemon=True).start()
+
     ent = enterprise or ConsultingEnterprise()
 
     # 1. Initialize and launch Live Model Gateway on gateway_port
