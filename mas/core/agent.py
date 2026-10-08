@@ -116,6 +116,7 @@ class BaseAgent:
         llm_provider: Optional[Any] = None,
         retrieve_reflections: bool = True,
         require_grounding: bool = False,
+        allowed_tools: Optional[List[str]] = None,
     ) -> None:
         from mas.memory.working import WorkingMemory
         from mas.memory.episodic import EpisodicMemory
@@ -130,9 +131,16 @@ class BaseAgent:
         self.llm_provider = llm_provider
         self.retrieve_reflections = retrieve_reflections
         self.require_grounding = require_grounding
+        self.allowed_tools = allowed_tools
         self._is_active = True
         self.total_tokens_consumed = 0
         self._evidence_ids: List[str] = []
+
+        if self.mcp_client and hasattr(self.mcp_client, "registry"):
+            reg = self.mcp_client.registry
+            if hasattr(reg, "tool_acl"):
+                tools_to_grant = allowed_tools if allowed_tools is not None else list(reg.tools.keys())
+                reg.tool_acl.allow(self.name, tools_to_grant)
 
         # Pin system prompt into working memory
         sys_msg = Message(

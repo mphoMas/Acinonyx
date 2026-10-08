@@ -10,19 +10,23 @@ from mas.mcp.protocol import MCPRegistry
 from mas.mcp.transport import MCPClient
 from mas.squad.squad import EngineeringSquad
 from mas.tools.executor import register_default_tools
-from mas.tools.filesystem import register_filesystem_tools
+from mas.config import REPO_ROOT
+from mas.tools.filesystem import ALLOWED_PROJECT_ROOTS, register_filesystem_tools, set_allowed_roots
 
 
 class TestEngineeringSquad(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.test_dir = tempfile.mkdtemp(prefix="mas_squad_test_")
+        self.orig_roots = list(ALLOWED_PROJECT_ROOTS)
+        set_allowed_roots([REPO_ROOT, self.test_dir])
         self.registry = MCPRegistry()
         register_default_tools(self.registry)
         register_filesystem_tools(self.registry)
         self.client = MCPClient(self.registry)
 
     async def asyncTearDown(self):
+        set_allowed_roots(self.orig_roots)
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     async def test_squad_autonomous_mission_with_repair(self):

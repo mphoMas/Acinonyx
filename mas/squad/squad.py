@@ -179,8 +179,8 @@ class EngineeringSquad:
             test_code = test_generator_fn(spec, attempt=1)
 
         if self.mcp_client:
-            await self.mcp_client.call_tool("fs_write", {"path": target_code_file, "content": impl_code})
-            await self.mcp_client.call_tool("fs_write", {"path": target_test_file, "content": test_code})
+            await self.mcp_client.call_tool("fs_write", {"path": target_code_file, "content": impl_code}, principal=self.engineer.name)
+            await self.mcp_client.call_tool("fs_write", {"path": target_test_file, "content": test_code}, principal=self.engineer.name)
 
         reflections: List[str] = []
         success = False
@@ -194,7 +194,7 @@ class EngineeringSquad:
                 f"runpy.run_path('{target_test_file}', run_name='__main__')\n"
             )
 
-            test_report = await self.mcp_client.call_tool("run_python", {"code": test_run_cmd})
+            test_report = await self.mcp_client.call_tool("run_python", {"code": test_run_cmd}, principal=self.engineer.name)
 
             if "EXIT_FAILURE" not in test_report and "ERROR" not in test_report:
                 success = True
@@ -231,8 +231,8 @@ class EngineeringSquad:
                 test_code = test_generator_fn(spec, attempt=attempt + 1)
 
             if self.mcp_client:
-                await self.mcp_client.call_tool("fs_write", {"path": target_code_file, "content": impl_code})
-                await self.mcp_client.call_tool("fs_write", {"path": target_test_file, "content": test_code})
+                await self.mcp_client.call_tool("fs_write", {"path": target_code_file, "content": impl_code}, principal=self.engineer.name)
+                await self.mcp_client.call_tool("fs_write", {"path": target_test_file, "content": test_code}, principal=self.engineer.name)
 
         return SquadMissionResult(
             task_name=task_name,

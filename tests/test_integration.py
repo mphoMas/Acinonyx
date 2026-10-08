@@ -14,7 +14,7 @@ class CodingAgentWithReflexion(BaseAgent):
 
     async def execute_task_with_reflexion(self, initial_code: str, fix_code: str) -> str:
         # 1. Attempt initial code
-        output_1 = await self.mcp_client.call_tool("run_python", {"code": initial_code})
+        output_1 = await self.mcp_client.call_tool("run_python", {"code": initial_code}, principal=self.name)
         if "EXIT_FAILURE" in output_1 or "ERROR" in output_1:
             # Failure detected -> Record verbal reflection
             await self.reflect(
@@ -26,7 +26,7 @@ class CodingAgentWithReflexion(BaseAgent):
             )
 
             # 2. Re-attempt with corrected code informed by reflection
-            output_2 = await self.mcp_client.call_tool("run_python", {"code": fix_code})
+            output_2 = await self.mcp_client.call_tool("run_python", {"code": fix_code}, principal=self.name)
             await self.reflect(
                 task="Execute mathematical calculation with guard",
                 success=True,

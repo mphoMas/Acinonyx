@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
 from mas.config import CONFIG
-from mas.security import ToolACL, default_tool_acl, sanitize_tool_arguments
+from mas.security import DEFAULT_SAFE_TOOLS, ToolACL, default_tool_acl, sanitize_tool_arguments
 
 
 # Standard JSON-RPC 2.0 Error Codes
@@ -136,6 +136,7 @@ class MCPRegistry:
         description: str,
         input_schema: Dict[str, Any],
         handler: Callable[..., Coroutine[Any, Any, Any]],
+        allow_default: bool = False,
     ) -> None:
         self.tools[name] = ToolDefinition(
             name=name,
@@ -143,7 +144,8 @@ class MCPRegistry:
             input_schema=input_schema,
             handler=handler,
         )
-        self.tool_acl.default_allow.add(name)
+        if allow_default or name in DEFAULT_SAFE_TOOLS:
+            self.tool_acl.default_allow.add(name)
 
     def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Any:
         """Synchronously execute a registered tool handler."""
@@ -239,19 +241,17 @@ class MCPRegistry:
                     )
 
                 if CONFIG.tool_acl_enabled and not self.tool_acl.is_allowed(caller, tool_name):
-                    # Principals without explicit ACL still use default_allow
                     if caller and caller in self.tool_acl.principals:
                         return JsonRpcResponse.fail(
                             request.id,
                             APPLICATION_ERROR,
                             f"ACL denied tool '{tool_name}' for principal '{caller}'",
                         )
-                    if tool_name not in self.tool_acl.default_allow:
-                        return JsonRpcResponse.fail(
-                            request.id,
-                            APPLICATION_ERROR,
-                            f"ACL denied tool '{tool_name}'",
-                        )
+                    return JsonRpcResponse.fail(
+                        request.id,
+                        APPLICATION_ERROR,
+                        f"ACL denied tool '{tool_name}' for unauthenticated or unauthorized caller",
+                    )
 
                 try:
                     arguments = sanitize_tool_arguments(arguments or {})

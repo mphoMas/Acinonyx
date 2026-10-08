@@ -36,9 +36,7 @@ class ToolACL:
 
 
 DEFAULT_SAFE_TOOLS = {
-    "run_python",
     "fs_read",
-    "fs_write",
     "fs_list",
     "fs_glob",
     "git_status",

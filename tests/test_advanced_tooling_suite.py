@@ -27,15 +27,25 @@ from mas.tools.pii_tool import (
 )
 
 
+import shutil
+import tempfile
+from mas.config import REPO_ROOT
+from mas.tools.filesystem import ALLOWED_PROJECT_ROOTS, set_allowed_roots
+
+
 class TestSurgicalPatchTool(unittest.TestCase):
     def setUp(self):
-        self.test_file = "/tmp/test_patch_sample.py"
+        self.orig_roots = list(ALLOWED_PROJECT_ROOTS)
+        self.test_dir = tempfile.mkdtemp(prefix="mas_patch_test_")
+        set_allowed_roots([REPO_ROOT, self.test_dir])
+        self.test_file = os.path.join(self.test_dir, "test_patch_sample.py")
         with open(self.test_file, "w", encoding="utf-8") as f:
             f.write("def calculate_tax(amount):\n    rate = 0.15\n    return amount * rate\n")
 
     def tearDown(self):
-        if os.path.exists(self.test_file):
-            os.remove(self.test_file)
+        set_allowed_roots(self.orig_roots)
+        if hasattr(self, "test_dir") and os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_patch_unique_match(self):
         res = fs_patch_file_tool(

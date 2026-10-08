@@ -13,8 +13,9 @@ class MCPClient:
     Client interface for interacting with an MCP server instance or registry.
     """
 
-    def __init__(self, registry: MCPRegistry) -> None:
+    def __init__(self, registry: MCPRegistry, default_principal: Optional[str] = None) -> None:
         self.registry = registry
+        self.default_principal = default_principal
         self._req_counter = 0
         self._initialized = False
 
@@ -52,15 +53,16 @@ class MCPClient:
         principal: Optional[str] = None,
     ) -> str:
         """Call a specific tool by name with arguments and return text content."""
+        effective_principal = principal or self.default_principal
         params: Dict[str, Any] = {"name": name, "arguments": arguments or {}}
-        if principal:
-            params["principal"] = principal
+        if effective_principal:
+            params["principal"] = effective_principal
         req = JsonRpcRequest(
             id=self._next_id(),
             method="tools/call",
             params=params,
         )
-        resp = await self.registry.handle_request(req, principal=principal)
+        resp = await self.registry.handle_request(req, principal=effective_principal)
         if resp and resp.error:
             raise RuntimeError(f"Tool '{name}' error: {resp.error.message}")
         if resp and resp.result:

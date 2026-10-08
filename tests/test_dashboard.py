@@ -93,5 +93,76 @@ class TestDashboardServer(unittest.TestCase):
             self.assertTrue(len(art_data["prd"]) > 0)
 
 
+class TestDashboardSecurity(unittest.TestCase):
+    """SEC-04: Test bearer token authorization and CORS policy enforcement."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.port = get_free_port()
+        cls.token = "mas-secure-admin-token-777"
+        cls.enterprise = ConsultingEnterprise(name="Security Test Enterprise")
+        cls.server = DashboardServer(
+            cls.enterprise,
+            host="127.0.0.1",
+            port=cls.port,
+            auth_token=cls.token,
+        )
+        cls.server.start_background()
+        cls.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        time.sleep(0.3)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+
+    def test_unauthenticated_mutating_dispatch_denied(self):
+        url = f"http://127.0.0.1:{self.port}/api/dispatch"
+        payload = json.dumps({"enabled": True}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with self.opener.open(req, timeout=3.0) as resp:
+                self.assertEqual(resp.status, 401)
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 401)
+
+    def test_authenticated_mutating_dispatch_allowed(self):
+        url = f"http://127.0.0.1:{self.port}/api/dispatch"
+        payload = json.dumps({"enabled": True}).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.token}",
+        }
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with self.opener.open(req, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["success"])
+
+    def test_unauthenticated_events_read_denied(self):
+        url = f"http://127.0.0.1:{self.port}/api/events"
+        req = urllib.request.Request(url)
+        try:
+            with self.opener.open(req, timeout=3.0) as resp:
+                self.assertEqual(resp.status, 401)
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 401)
+
+    def test_authenticated_events_read_allowed(self):
+        url = f"http://127.0.0.1:{self.port}/api/events"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self.token}"})
+        with self.opener.open(req, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("events", data)
+
+    def test_cors_denies_untrusted_origin(self):
+        url = f"http://127.0.0.1:{self.port}/api/status"
+        req = urllib.request.Request(url, headers={"Origin": "http://malicious-site.example.com"})
+        with self.opener.open(req, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIsNone(resp.headers.get("Access-Control-Allow-Origin"))
+
+
 if __name__ == "__main__":
     unittest.main()
+

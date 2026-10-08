@@ -9,6 +9,27 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from mas.release_policy import (
+    PolicyEvaluationResult,
+    PolicySpec,
+    compute_candidate_hash,
+    evaluate_release_policy,
+)
+
+__all__ = [
+    "ValidationError",
+    "SchemaSpec",
+    "validate_message",
+    "validate_against_schema",
+    "require_grounding",
+    "validate_data_contract",
+    "PolicySpec",
+    "PolicyEvaluationResult",
+    "compute_candidate_hash",
+    "evaluate_release_policy",
+]
+
+
 class ValidationError(ValueError):
     """Raised when a payload fails schema or message-edge validation."""
 
@@ -139,11 +160,3 @@ def validate_data_contract(content: str) -> Tuple[bool, str, Dict[str, Any]]:
 
     return True, "Data contract successfully validated", data
 
-
-# Re-export Release Policy Engine
-from mas.release_policy import (
-    PolicySpec,
-    PolicyEvaluationResult,
-    compute_candidate_hash,
-    evaluate_release_policy,
-)

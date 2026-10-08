@@ -10,7 +10,7 @@ import os
 import threading
 from dataclasses import asdict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Optional
+from typing import Any, List, Optional
 from urllib.parse import urlparse
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.engagement import ConsultingEngagement, EngagementArtifacts
@@ -27,25 +27,51 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     initial_roster_names: set = set()
     static_dir: str = ""
     cio_audit_report: Optional[dict] = None  # cached after first run
+    auth_token: Optional[str] = None
+    allowed_origins: set = set()
 
     def log_message(self, format, *args):
         # Silence default request console spam for a clean operational terminal
         pass
+
+    def _is_authenticated(self) -> bool:
+        """Verify request bearer token against configured dashboard auth token."""
+        if not self.auth_token:
+            return True
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+            import hmac
+            return hmac.compare_digest(token, self.auth_token)
+        return False
+
+    def _apply_cors_headers(self) -> None:
+        """Apply restricted CORS headers, denying permissive wildcards."""
+        origin = self.headers.get("Origin")
+        if origin:
+            if (
+                origin.startswith("http://127.0.0.1:")
+                or origin.startswith("http://localhost:")
+                or origin in self.allowed_origins
+            ):
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Credentials", "true")
+                self.send_header("Vary", "Origin")
 
     def _send_json(self, data: Any, status: int = 200) -> None:
         response_bytes = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(response_bytes)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(response_bytes)
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._apply_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_GET(self):
@@ -87,6 +113,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(data)
 
         elif path == "/api/roster":
+            if not self._is_authenticated():
+                self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
+                return
             departments_data = {}
             for dept_type, dept in self.enterprise.departments.items():
                 agents_info = []
@@ -104,11 +133,17 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"departments": departments_data})
 
         elif path == "/api/events":
+            if not self._is_authenticated():
+                self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
+                return
             history = self.enterprise.event_bus.get_history()
             event_dicts = [m.to_dict() for m in history]
             self._send_json({"events": event_dicts})
 
         elif path == "/api/artifacts":
+            if not self._is_authenticated():
+                self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
+                return
             if self.latest_artifacts:
                 art = self.latest_artifacts
                 art_dict = {
@@ -155,6 +190,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if not self._is_authenticated():
+            self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
+            return
 
         if path == "/api/engage":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -221,18 +260,24 @@ class DashboardServer:
     def __init__(
         self,
         enterprise: ConsultingEnterprise,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8080,
+        auth_token: Optional[str] = None,
+        allowed_origins: Optional[List[str]] = None,
     ) -> None:
         self.enterprise = enterprise
         self.host = host
         self.port = port
+        self.auth_token = auth_token or os.environ.get("MAS_DASHBOARD_TOKEN")
+        self.allowed_origins = set(allowed_origins or [])
         self.static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
         # Configure request handler
         DashboardRequestHandler.enterprise = self.enterprise
         DashboardRequestHandler.static_dir = self.static_dir
         DashboardRequestHandler.initial_roster_names = set(self.enterprise.get_roster().keys())
+        DashboardRequestHandler.auth_token = self.auth_token
+        DashboardRequestHandler.allowed_origins = self.allowed_origins
 
         self.server = ThreadingHTTPServer((self.host, self.port), DashboardRequestHandler)
         self._thread: Optional[threading.Thread] = None
@@ -253,9 +298,10 @@ class DashboardServer:
 
 def run_dashboard(
     enterprise: Optional[ConsultingEnterprise] = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8080,
     gateway_port: int = 8001,
+    auth_token: Optional[str] = None,
 ):
     """Entry point to launch the observability dashboard and live model gateway."""
     from mas.providers.gateway import ModelGatewayServer
@@ -279,7 +325,7 @@ def run_dashboard(
     ent.attach_llm_provider(provider)
     print("🔗 Enterprise agents connected to Live Model Gateway.")
 
-    server = DashboardServer(ent, host=host, port=port)
+    server = DashboardServer(ent, host=host, port=port, auth_token=auth_token)
     print(f"\n🦁 ACINONYX OBSERVABILITY DASHBOARD LIVE ON: http://127.0.0.1:{port}")
     print("Press Ctrl+C to terminate.")
     try:
