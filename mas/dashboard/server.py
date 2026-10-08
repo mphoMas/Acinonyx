@@ -416,6 +416,39 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     "target_state": target_state,
                 }, status=400)
 
+        elif path == "/api/pm/verdicts":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            issue_key = payload.get("issue_key")
+            verdict = payload.get("verdict")
+            reviewer_principal = payload.get("reviewer_principal")
+            findings = payload.get("findings", {})
+            commit_sha = payload.get("commit_sha")
+
+            if not issue_key or not verdict or not reviewer_principal:
+                self._send_json({"error": "Missing issue_key, verdict, or reviewer_principal"}, status=400)
+                return
+
+            from mas.security import ExecutionContext
+            from mas.pm.tools import pm_record_verdict
+            try:
+                with ExecutionContext.scope(reviewer_principal):
+                    result = pm_record_verdict(
+                        issue_key=issue_key,
+                        verdict=verdict,
+                        findings=findings,
+                        commit_sha=commit_sha,
+                    )
+                self._send_json({"success": True, "result": result})
+            except Exception as e:
+                self._send_json({
+                    "success": False,
+                    "error": e.__class__.__name__,
+                    "message": str(e),
+                }, status=403)
+
         elif path == "/api/pm/issues/create":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
