@@ -1,0 +1,665 @@
+{
+  "schema_version": 1,
+  "project_key": "MAS",
+  "source": "acinonyx-conversation-backlog-2026-10-08",
+  "tasks": [
+    {
+      "id": "SEC-01",
+      "title": "Audit exposed credentials and rotate affected secrets",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        "mas/",
+        "scripts/",
+        ".github/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-02",
+      "title": "Secure authenticated identities and reviewer authorization",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-01"
+      ],
+      "scope": [
+        "mas/dashboard/",
+        "mas/pm/",
+        "mas/security.py"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-03",
+      "title": "Fail-closed evidence and commit-scope verification",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-02"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-04",
+      "title": "Prove atomic WIP, unique issue keys, and FSM safety",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-02"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-01",
+      "title": "Repair failing GitHub CI and verify Docker pipeline",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        ".github/",
+        "Dockerfile",
+        "docker-compose.yml",
+        "scripts/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "GOV-01",
+      "title": "Eliminate self-certified releases and evaluator bypasses",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-03"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "qa_critic",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-01",
+      "title": "Validate Scrum board end-to-end against live MAS-PM",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-02",
+        "SEC-04"
+      ],
+      "scope": [
+        "portal/scrum.html",
+        "mas/dashboard/",
+        "tests/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-02",
+      "title": "Make board the canonical intake and assignment workflow",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-01"
+      ],
+      "scope": [
+        "portal/",
+        "mas/pm/",
+        "mas/dashboard/"
+      ],
+      "assignee_principal": "product_lead",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-03",
+      "title": "Define issue contracts, dependencies, and acceptance gates",
+      "priority": "HIGH",
+      "dependencies": [
+        "SEC-04"
+      ],
+      "scope": [
+        "mas/pm/",
+        "docs/",
+        "templates/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-04",
+      "title": "Build agent claim, dispatch, and heartbeat lifecycle",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-02",
+        "PM-03"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/orchestration/",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-05",
+      "title": "Integrate sprint planning, capacity, and flow analytics",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "PM-02"
+      ],
+      "scope": [
+        "mas/pm/",
+        "portal/"
+      ],
+      "assignee_principal": "product_lead",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-06",
+      "title": "Implement immutable issue audit trail and rework history",
+      "priority": "HIGH",
+      "dependencies": [
+        "SEC-03"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-01",
+      "title": "Finalize computer-use threat model and permission boundaries",
+      "priority": "HIGH",
+      "dependencies": [
+        "SEC-02"
+      ],
+      "scope": [
+        "docs/",
+        "mas/tools/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-02",
+      "title": "Build isolated Playwright browser execution worker",
+      "priority": "HIGH",
+      "dependencies": [
+        "CU-01"
+      ],
+      "scope": [
+        "mas/tools/",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-03",
+      "title": "Implement independent browser, visual, and a11y verifier",
+      "priority": "HIGH",
+      "dependencies": [
+        "CU-02"
+      ],
+      "scope": [
+        "mas/tools/",
+        "tests/"
+      ],
+      "assignee_principal": "qa_critic",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-04",
+      "title": "Run defect-injection and forged-evidence regression suite",
+      "priority": "HIGH",
+      "dependencies": [
+        "CU-03",
+        "GOV-01"
+      ],
+      "scope": [
+        "tests/",
+        "mas/eval/"
+      ],
+      "assignee_principal": "adversarial_red_team",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-05",
+      "title": "Research native desktop computer-use executor",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "CU-01"
+      ],
+      "scope": [
+        "research/",
+        "docs/"
+      ],
+      "assignee_principal": "market_researcher",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UX-01",
+      "title": "Create Acinonyx design system and visual identity",
+      "priority": "HIGH",
+      "dependencies": [],
+      "scope": [
+        "portal/css/",
+        "docs/"
+      ],
+      "assignee_principal": "design_lead",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UX-02",
+      "title": "Refine board accessibility, keyboard use, and responsive UX",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-01",
+        "UX-01"
+      ],
+      "scope": [
+        "portal/scrum.html",
+        "portal/css/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UX-03",
+      "title": "Repair research portal navigation and accessibility",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "CU-03"
+      ],
+      "scope": [
+        "portal/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UX-04",
+      "title": "Integrate anti-slop design linting and visual regression",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "CU-03",
+        "UX-01"
+      ],
+      "scope": [
+        "scripts/",
+        "tests/",
+        "portal/"
+      ],
+      "assignee_principal": "design_lead",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-02",
+      "title": "Define observability, token budgets, and circuit-breaker alerts",
+      "priority": "HIGH",
+      "dependencies": [
+        "SEC-04"
+      ],
+      "scope": [
+        "mas/observability.py",
+        "mas/pm/",
+        "docs/"
+      ],
+      "assignee_principal": "finops_governor",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-03",
+      "title": "Test database backup, recovery, and migration strategy",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-06"
+      ],
+      "scope": [
+        "mas/pm/",
+        "scripts/",
+        "tests/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-04",
+      "title": "Publish release readiness checklist and pilot report",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "GOV-01",
+        "OPS-01",
+        "OPS-03"
+      ],
+      "scope": [
+        "docs/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Provide relevant passing test or research evidence",
+        "Attach Git commit or verifiable artifact",
+        "Obtain independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    }
+  ]
+}
