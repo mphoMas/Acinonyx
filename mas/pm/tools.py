@@ -142,12 +142,14 @@ def pm_transition_issue(
     """Transitions an issue through the FSM with transition guard validation."""
     database = db or get_pm_db()
     fsm = FSMEngine(database)
-    updated = fsm.transition(
-        issue_id_or_key=issue_key,
-        target_state=target_state,
-        caller_principal=caller_principal,
-        reason=reason,
-    )
+    from mas.security import ExecutionContext
+    with ExecutionContext.scope(caller_principal):
+        updated = fsm.transition(
+            issue_id_or_key=issue_key,
+            target_state=target_state,
+            caller_principal=caller_principal,
+            reason=reason,
+        )
     return {
         "status": "TRANSITIONED",
         "issue_key": updated.key,
@@ -256,6 +258,51 @@ def pm_list_issues(
 
     issues = database.list_issues(project_id=project.id, state=state)
     return [i.model_dump() for i in issues]
+
+
+def pm_record_verdict(
+    issue_key: str,
+    verdict: str,
+    findings: Optional[Dict[str, Any]] = None,
+    commit_sha: Optional[str] = None,
+    db: Optional[PMDatabase] = None,
+) -> Dict[str, Any]:
+    """
+    GOV-02: Authenticated reviewer verdict service.
+    Only the authenticated reviewer principal can record a verdict.
+    Enforces separation of builder and judge, signs the verdict cryptographically,
+    and records findings.
+    """
+    database = db or get_pm_db()
+    issue = database.get_issue(issue_key)
+    if not issue:
+        raise ValueError(f"Issue '{issue_key}' not found.")
+
+    from mas.security import ExecutionContext
+    reviewer = ExecutionContext.resolve_authenticated_principal()
+
+    from mas.pm.models import CriticVerdict, CriticVerdictType
+    verdict_type = CriticVerdictType(verdict.upper())
+
+    critic_verdict = CriticVerdict(
+        id=f"v-{uuid.uuid4().hex[:12]}",
+        issue_id=issue.id,
+        reviewer_principal=reviewer,
+        verdict=verdict_type,
+        findings=findings or {},
+        rework_cycle=issue.rework_cycle,
+        commit_sha=commit_sha,
+    )
+    recorded = database.record_verdict(critic_verdict, enforce_auth=True)
+    return {
+        "status": "RECORDED",
+        "verdict_id": recorded.id,
+        "issue_key": issue.key,
+        "reviewer_principal": reviewer,
+        "verdict": recorded.verdict.value,
+        "signature": recorded.signature,
+        "rework_cycle": recorded.rework_cycle,
+    }
 
 
 def register_pm_tools(registry: Any, db: Optional[PMDatabase] = None) -> None:
@@ -414,4 +461,23 @@ def register_pm_tools(registry: Any, db: Optional[PMDatabase] = None) -> None:
             "required": ["project_key"],
         },
         handler=lambda project_key, state=None: pm_list_issues(project_key, state=state, db=db),
+    )
+
+    # 9. pm_record_verdict
+    registry.register_tool(
+        name="pm_record_verdict",
+        description="Records an independently authenticated, cryptographically signed reviewer verdict for an issue.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "issue_key": {"type": "string", "description": "Issue key (e.g. MAS-25)"},
+                "verdict": {"type": "string", "description": "PASS, HARD_FAIL, or REJECT_REWORK", "enum": ["PASS", "HARD_FAIL", "REJECT_REWORK"]},
+                "findings": {"type": "object", "description": "Detailed review findings and notes", "default": {}},
+                "commit_sha": {"type": "string", "description": "Verified Git commit SHA under review", "default": None},
+            },
+            "required": ["issue_key", "verdict"],
+        },
+        handler=lambda issue_key, verdict, findings=None, commit_sha=None: pm_record_verdict(
+            issue_key=issue_key, verdict=verdict, findings=findings, commit_sha=commit_sha, db=db
+        ),
     )

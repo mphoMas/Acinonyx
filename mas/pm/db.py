@@ -582,15 +582,44 @@ class PMDatabase:
 
     # --- Critic Verdict Operations ---
 
-    def record_verdict(self, verdict: CriticVerdict) -> CriticVerdict:
+    def record_verdict(self, verdict: CriticVerdict, enforce_auth: bool = True) -> CriticVerdict:
         conn = self._get_connection()
         try:
+            if enforce_auth:
+                from mas.security import ExecutionContext
+                auth_principal = ExecutionContext.resolve_authenticated_principal()
+                if auth_principal != verdict.reviewer_principal:
+                    raise PermissionError(
+                        f"UnauthorizedVerdictError: Authenticated principal '{auth_principal}' "
+                        f"cannot record verdict for reviewer '{verdict.reviewer_principal}'."
+                    )
+                cur = conn.execute("SELECT key, assignee_principal FROM pm_issues WHERE id = ?", (verdict.issue_id,))
+                issue_row = cur.fetchone()
+                if issue_row and issue_row["assignee_principal"]:
+                    if issue_row["assignee_principal"] == verdict.reviewer_principal:
+                        raise PermissionError(
+                            f"SeparationOfDutiesError: Assignee '{issue_row['assignee_principal']}' "
+                            f"cannot record a review verdict on their own issue {issue_row['key']}."
+                        )
+
             now = datetime.now(timezone.utc).isoformat()
             if verdict.rework_cycle == 0:
                 cur = conn.execute("SELECT rework_cycle FROM pm_issues WHERE id = ?", (verdict.issue_id,))
                 row = cur.fetchone()
                 if row and "rework_cycle" in row.keys() and row["rework_cycle"] is not None:
                     verdict.rework_cycle = int(row["rework_cycle"])
+
+            verdict_val = verdict.verdict.value if hasattr(verdict.verdict, "value") else str(verdict.verdict)
+            if not verdict.signature or verdict.signature.startswith("unsigned:"):
+                from mas.security import sign_verdict_payload
+                verdict.signature = sign_verdict_payload(
+                    issue_id=verdict.issue_id,
+                    reviewer_principal=verdict.reviewer_principal,
+                    verdict_value=verdict_val,
+                    rework_cycle=verdict.rework_cycle,
+                    commit_sha=verdict.commit_sha,
+                    findings=verdict.findings,
+                )
 
             with conn:
                 conn.execute(
@@ -603,7 +632,7 @@ class PMDatabase:
                         verdict.id,
                         verdict.issue_id,
                         verdict.reviewer_principal,
-                        verdict.verdict.value if hasattr(verdict.verdict, "value") else str(verdict.verdict),
+                        verdict_val,
                         json.dumps(verdict.findings),
                         verdict.signature,
                         verdict.rework_cycle,
