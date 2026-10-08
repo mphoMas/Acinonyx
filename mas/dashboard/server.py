@@ -86,11 +86,35 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(content)))
+                self._apply_cors_headers()
                 self.end_headers()
                 self.wfile.write(content)
                 return
             else:
                 self.send_error(404, "index.html not found")
+                return
+
+        if path in ("/scrum", "/scrum.html"):
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            candidates = [
+                os.path.join(repo_root, "acinonyx_scrum.html"),
+                os.path.join(repo_root, "scrum.html"),
+                os.path.join(repo_root, "portal", "acinonyx_scrum.html"),
+                os.path.join(repo_root, "portal", "scrum.html"),
+            ]
+            scrum_path = next((p for p in candidates if os.path.exists(p)), None)
+            if scrum_path:
+                with open(scrum_path, "rb") as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self._apply_cors_headers()
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            else:
+                self.send_error(404, "scrum.html not found")
                 return
 
         # -----------------------------------------------------------------

@@ -183,6 +183,14 @@ class TestDashboardSecurity(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             self.assertIsNone(resp.headers.get("Access-Control-Allow-Origin"))
 
+    def test_scrum_route(self):
+        url = f"http://127.0.0.1:{self.port}/scrum"
+        with self.opener.open(url, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIn("text/html", resp.headers.get("Content-Type", ""))
+            content = resp.read().decode("utf-8")
+            self.assertIn("Acinonyx", content)
+
 
 if __name__ == "__main__":
     unittest.main()
