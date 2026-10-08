@@ -31,6 +31,7 @@ Start with the [documentation index](docs/README.md). The [structure guide](docs
 | Surface | Mode |
 |---|---|
 | Event bus, supervisor DAG, debate, SOP pipeline, MCP, memory, tools | **Implemented** (unit + eval covered) |
+| Native Scrum/Kanban PM engine + visual board | **Implemented** (guarded FSM + Little's Law WIP + Playwright verified) |
 | LLM ReAct / squad LLM repair / HR LLM gap analysis | **Implemented** when an LLM provider is attached |
 | Echo agents in `main.py`, enterprise engagement without LLM | **Demo / staged** (deterministic templates) |
 | Multi-tenant IAM, managed vector SaaS | **Planned** |
@@ -46,6 +47,7 @@ mas/
 ├── config.py, audit.py, validation.py, security.py, observability.py, capabilities.py, cli.py
 ├── core/           # Message, EventBus (+ JSONL audit), BaseAgent, State, Swarm
 ├── orchestration/  # Supervisor (timeout/retry/FailurePolicy), Debate (+ sycophancy score), SOP (+ SchemaSpec)
+├── pm/             # Embedded SQLite WAL, guarded FSM, Little's Law WIP, evidence verification
 ├── mcp/            # JSON-RPC tools / resources / prompts + initialize
 ├── memory/         # Working + episodic SQLite vector store
 ├── providers/      # Mock + HTTP OpenAI-compatible
@@ -72,7 +74,7 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 # Mission demos (template agents unless LLM env configured)
 python3 main.py --mode supervisor
 python3 main.py --mode enterprise   # staged dry-run by default
-python3 main.py --mode dashboard --port 8080
+python3 main.py --mode dashboard --port 8080   # Observability at / and Living Portal & PM Board at /portal
 ```
 
 ### Optional live LLM

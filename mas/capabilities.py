@@ -53,6 +53,7 @@ CAPABILITIES: List[Capability] = [
     Capability("research_knowledge_vault_rag", CapabilityStatus.IMPLEMENTED, "Active full-text retrieval across 8-volume AI Encyclopedia and research archives", "mas.tools.knowledge_vault_tool"),
     Capability("human_in_the_loop_gate", CapabilityStatus.IMPLEMENTED, "Structured clarification question queue with interactive and autonomous resolution", "mas.tools.hitl_tool"),
     Capability("popia_pii_anonymizer", CapabilityStatus.IMPLEMENTED, "POPIA & GDPR compliance tool redacting South African IDs (Luhn), cards, emails & phones", "mas.tools.pii_tool"),
+    Capability("native_pm_board", CapabilityStatus.IMPLEMENTED, "Agent-native Scrum/Kanban board, FSM engine, Little's Law WIP, and cryptographic evidence verification", "mas.pm"),
 ]
 
 

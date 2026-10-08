@@ -21,6 +21,7 @@ Statuses: `implemented` | `demo-only` | `planned`
 | CLI doctor | implemented | `mas.cli` | Runtime health report |
 | Enterprise engagement | **demo-only** | `mas.organization.engagement` | Scripted pipeline; dry-run default |
 | Echo / template agents | **demo-only** | `main.py` | Pass-through without LLM |
+| Native Scrum/Kanban PM board | implemented | `mas.pm` | Guarded FSM, Little's Law WIP, Playwright verified |
 | Multi-tenant IAM / OAuth | planned | — | Not shipped |
 | Managed vector SaaS adapters | planned | — | Not shipped |
 
