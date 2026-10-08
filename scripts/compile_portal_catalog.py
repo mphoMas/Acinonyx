@@ -13,7 +13,7 @@ import glob
 from pathlib import Path
 from datetime import datetime, timezone
 
-REPO_ROOT = Path("/home/acinonyx/Desktop/MAS")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 RESEARCH_DIR = REPO_ROOT / "research"
 PORTAL_DIR = REPO_ROOT / "portal"
 DATA_DIR = PORTAL_DIR / "js" / "data"

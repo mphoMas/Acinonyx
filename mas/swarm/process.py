@@ -55,5 +55,8 @@ async def run_process(
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        await proc.wait()
         await asyncio.gather(*tasks, return_exceptions=True)
+        async def discard(stream):
+            while await stream.read(4096):
+                pass
+        await asyncio.gather(discard(proc.stdout), discard(proc.stderr), proc.wait())

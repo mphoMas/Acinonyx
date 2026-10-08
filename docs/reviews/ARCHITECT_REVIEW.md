@@ -1,5 +1,7 @@
 # Independent Architecture Review — Acinonyx Frontier
 
+> Historical assessment. See [current revision verification](REVISION_VERIFICATION_2026_10_08.md) for the latest remediation and executed evidence.
+
 Reviewed commit: `7e75b857703b3744da456eced493f83d87d10559` (`Acinonyx_frontier`).
 Reviewer: Codex, Independent Reviewer & Chief Architect (Platform, AI & Data).
 Scope: initial source and local execution audit of the runtime, security boundaries, data integrity, AI evidence, packaging, and deployment claims. This is not an exhaustive penetration test or certification.

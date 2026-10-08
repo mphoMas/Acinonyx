@@ -178,10 +178,10 @@ async def browser_screenshot_tool(
 
     # Inject local packages and browser paths
     pkg_dir = f"{REPO_ROOT}/bin/packages"
-    browser_dir = f"{REPO_ROOT}/bin/browsers"
+    browser_dir = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", f"{REPO_ROOT}/bin/browsers")
     if pkg_dir not in sys.path:
         sys.path.insert(0, pkg_dir)
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_dir
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", browser_dir)
 
     try:
         from playwright.async_api import async_playwright
@@ -218,10 +218,10 @@ async def browser_navigate_tool(url: str) -> Dict[str, Any]:
     import sys
 
     pkg_dir = f"{REPO_ROOT}/bin/packages"
-    browser_dir = f"{REPO_ROOT}/bin/browsers"
+    browser_dir = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", f"{REPO_ROOT}/bin/browsers")
     if pkg_dir not in sys.path:
         sys.path.insert(0, pkg_dir)
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_dir
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", browser_dir)
 
     try:
         from playwright.async_api import async_playwright

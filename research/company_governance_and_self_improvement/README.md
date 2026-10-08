@@ -35,11 +35,11 @@ graph TD
 
 | Document | Description & Key Contents |
 |---|---|
-| **[01. The Grand Squad Symposium & Gap Analysis](file:///home/acinonyx/Desktop/MAS/research/company_governance_and_self_improvement/01_squad_debate_and_gap_analysis.md)** | Verbatim multi-agent debate transcript across all 12 key roles (`CIOAgent`, `hr_director`, `client_director`, `lead_architect`, `data_engineer`, `senior_engineer`, `qa_critic`, `adversarial_red_team`, etc.), synthesizing the research into actionable organizational design. |
-| **[The Acinonyx Ways of Working (WoW)](file:///home/acinonyx/Desktop/MAS/WAYS_OF_WORKING.md)** | The definitive Enterprise Operating Manual & Constitution at the repository root: Team Topologies, 6-phase lifecycle, 8 non-negotiable invariants, Definition of Ready/Done, and Little's Law flow management. |
-| **[Data Contract Template](file:///home/acinonyx/Desktop/MAS/templates/data-contract.template.yml)** | Standardized, machine-readable Data Contract specification validated at runtime by `mas.validation.validate_data_contract()`. |
-| **[Architectural Decision Record Template](file:///home/acinonyx/Desktop/MAS/templates/adr.template.md)** | Formal ADR template for documenting technical trade-offs, options, and consequences under `/docs/adr/`. |
-| **[Client RFP Intake & Scope Jail Template](file:///home/acinonyx/Desktop/MAS/templates/rfp-intake.template.md)** | Commercial engagement brief template establishing measurable KPIs and a strict "Scope Jail" to eliminate scope creep. |
+| **[01. The Grand Squad Symposium & Gap Analysis](01_squad_debate_and_gap_analysis.md)** | Verbatim multi-agent debate transcript across all 12 key roles (`CIOAgent`, `hr_director`, `client_director`, `lead_architect`, `data_engineer`, `senior_engineer`, `qa_critic`, `adversarial_red_team`, etc.), synthesizing the research into actionable organizational design. |
+| **[The Acinonyx Ways of Working (WoW)](../../company/WAYS_OF_WORKING.md)** | The definitive Enterprise Operating Manual & Constitution at the repository root: Team Topologies, 6-phase lifecycle, 8 non-negotiable invariants, Definition of Ready/Done, and Little's Law flow management. |
+| **[Data Contract Template](../../templates/data-contract.template.yml)** | Standardized, machine-readable Data Contract specification validated at runtime by `mas.validation.validate_data_contract()`. |
+| **[Architectural Decision Record Template](../../templates/adr.template.md)** | Formal ADR template for documenting technical trade-offs, options, and consequences under `/docs/adr/`. |
+| **[Client RFP Intake & Scope Jail Template](../../templates/rfp-intake.template.md)** | Commercial engagement brief template establishing measurable KPIs and a strict "Scope Jail" to eliminate scope creep. |
 
 ---
 

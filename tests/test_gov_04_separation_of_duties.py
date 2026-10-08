@@ -7,13 +7,10 @@ import sqlite3
 import pytest
 
 from mas.pm.db import PMDatabase
-from mas.pm.fsm import FSMEngine
 from mas.pm.guards import SeparationOfDutiesError, assert_separation_of_builder_and_judge
 from mas.pm.models import (
     CriticVerdict,
     CriticVerdictType,
-    EvidenceLink,
-    EvidenceType,
     Issue,
     IssueState,
     Project,

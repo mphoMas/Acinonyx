@@ -102,16 +102,16 @@ class EventBus:
                 validate_message(current_msg)
 
         async with self._lock:
+            # A configured audit sink is mandatory: failure must prevent
+            # history mutation and subscriber dispatch, rather than silently
+            # allowing unaudited side effects.
+            if self._audit is not None:
+                self._audit.append_message(current_msg)
             self._published_count += 1
             if current_msg.token_usage:
                 self._total_tokens_routed += current_msg.token_usage.total_tokens
             if self._log_history:
                 self._history.append(current_msg)
-            if self._audit is not None:
-                try:
-                    self._audit.append_message(current_msg)
-                except Exception:
-                    pass
 
         topic = current_msg.metadata.topic
         recipient = current_msg.recipient

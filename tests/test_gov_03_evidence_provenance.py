@@ -4,14 +4,13 @@ Tamper-evident evidence provenance, immutable evidence triggers, and integrity a
 """
 
 import hashlib
-import json
 import sqlite3
 import pytest
 
 from mas.pm.db import PMDatabase
 from mas.pm.guards import UnverifiedWorkError, validate_evidence
 from mas.pm.models import EvidenceLink, EvidenceType, Issue, IssueState, Project
-from mas.security import sign_evidence_provenance, verify_evidence_provenance
+from mas.security import verify_evidence_provenance
 
 
 @pytest.fixture

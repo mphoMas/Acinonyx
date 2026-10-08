@@ -8,7 +8,6 @@ study
 company/founder
 archives
 RunQL
-portal
 *.pdf
 **/__pycache__
 .pytest_cache

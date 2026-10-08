@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -263,7 +264,14 @@ def run_local_gitops_ci(
     Execute local CI verification directly inside the project directory,
     validating test suites and publishing a telemetry event to EventBus.
     """
-    cmd = test_command or "python3 -m unittest discover -s tests -p 'test_*.py' -v"
+    # Use the active interpreter and reject an empty discovery run explicitly.
+    cmd = test_command or [sys.executable, "-c", (
+        "import sys,unittest; "
+        "suite=unittest.defaultTestLoader.discover('tests',pattern='test_*.py'); "
+        "count=suite.countTestCases(); "
+        "result=unittest.TextTestRunner(verbosity=2).run(suite); "
+        "sys.exit(0 if count > 0 and result.wasSuccessful() else 1)"
+    )]
     t0 = time.time()
 
     env = os.environ.copy()
@@ -271,11 +279,13 @@ def run_local_gitops_ci(
 
     proc = subprocess.run(
         cmd,
-        shell=True,
+        shell=test_command is not None,
         cwd=project_path,
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,
+        check=False,
     )
     duration = time.time() - t0
     success = (proc.returncode == 0)

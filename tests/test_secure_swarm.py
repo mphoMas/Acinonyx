@@ -236,7 +236,7 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
         import sys
 
         with self.assertRaises(SwarmError):
-            await run_process([sys.executable, "-c", "print('x'*100000)"], output_limit=256)
+            await asyncio.wait_for(run_process([sys.executable, "-c", "print('x'*1000000)"], output_limit=256), timeout=5)
         start = time.monotonic()
         with self.assertRaises(asyncio.TimeoutError):
             await run_process([sys.executable, "-c", "import os,time; os.fork(); time.sleep(30)"], timeout=0.15)
@@ -309,6 +309,12 @@ def solve(x):
             await self.worker.evaluate("def solve(x): return 'x'*100000", None, self.run_id)
         with self.assertRaises(CandidateError):
             await self.worker.evaluate("import os,time\ndef solve(x):\n os.fork()\n time.sleep(30)", None, self.run_id)
+        rc, out, _ = await self.worker._docker("ps", "--all", "--quiet", "--filter", f"label=acinonyx.swarm.run={self.run_id}")
+        self.assertEqual((rc, out), (0, b""))
+
+    async def test_memory_exhaustion_rejected_and_container_removed(self):
+        with self.assertRaises(CandidateError):
+            await self.worker.evaluate("def solve(x): return len(bytearray(256 * 1024 * 1024))", None, self.run_id)
         rc, out, _ = await self.worker._docker("ps", "--all", "--quiet", "--filter", f"label=acinonyx.swarm.run={self.run_id}")
         self.assertEqual((rc, out), (0, b""))
 

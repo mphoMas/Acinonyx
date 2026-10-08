@@ -39,7 +39,7 @@ and design patterns for building autonomous multi-agent systems and enterprise s
 - **Standard Operating Procedures (SOPs)**: Enforcing strict artifacts (PRD, OpenAPI specs, test reports) at handover gates to prevent error cascade.
 - **Reflexion & Critique Loops**: Iterative self-correction with bounded rounds ($K \le 3$) and independent verification before state commits.
 
-### 4. [Multi-Agent Tooling & The MCP Fabric](file:///home/acinonyx/Desktop/MAS/research/multi_agent_systems/knowledge_base/05_multi_agent_tooling_and_mcp_fabric.md)
+### 4. [Multi-Agent Tooling & The MCP Fabric](knowledge_base/05_multi_agent_tooling_and_mcp_fabric.md)
 - **Theoretical Foundations**: CoALA internal ($\mathcal{A}_{\text{internal}}$) vs external ($\mathcal{A}_{\text{external}}$) action space decomposition, Toolformer, and Gorilla.
 - **Formal Definitions**: Precise mathematical contracts for **Function** ($\Sigma_{\text{in}}, \Sigma_{\text{out}}, \mathcal{P}_{\text{pre}}, \mathcal{P}_{\text{post}}, \mathcal{J}_{\text{scope}}$) versus **Usage** ($\mathcal{R}_{\text{caller}}, \mathcal{T}_{\text{phase}}, \mathcal{M}_{\text{sync}}, \mathcal{C}_{\text{finops}}$).
 - **Comprehensive Audit**: 9 operational categories auditing all 24 implemented MAS tools versus 18 critical missing enterprise tools (BigQuery, GCS, dbt, A2A delegation, knowledge vault RAG).

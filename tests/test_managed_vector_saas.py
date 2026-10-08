@@ -72,7 +72,9 @@ def test_managed_vector_store_factory_and_adapters():
     assert isinstance(vertex_store, VertexAIVectorSearchAdapter)
     desc = vertex_store.describe_index()
     assert desc["provider"] == "vertex_ai"
-    assert desc["psc_enabled"] is True
+    assert desc["psc_enabled"] is False
+    assert desc["mode"] == "simulated"
+    assert desc["persistent"] is False
 
     # 3. Pinecone provider
     pinecone_store = ManagedVectorStoreFactory.create(
@@ -82,7 +84,8 @@ def test_managed_vector_store_factory_and_adapters():
         dimension=1536,
     )
     assert isinstance(pinecone_store, PineconeAdapter)
-    assert pinecone_store.describe_index()["serverless"] is True
+    assert pinecone_store.describe_index()["serverless"] is False
+    assert pinecone_store.describe_index()["backend_provider"] == "mock"
 
     # 4. Qdrant provider
     qdrant_store = ManagedVectorStoreFactory.create(

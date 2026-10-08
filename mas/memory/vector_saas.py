@@ -1,7 +1,7 @@
 """
 mas.memory.vector_saas: External Managed Vector Database Adapters.
-Provides production enterprise connectors for Vertex AI Vector Search, Pinecone,
-Qdrant, and zero-dependency local mock environments.
+Provides local simulations of Vertex AI Vector Search, Pinecone and Qdrant.
+These adapters do not connect to remote services or provide durable storage.
 
 Architect: Acinonyx / Data & AI Architecture Directorate
 """
@@ -146,7 +146,10 @@ class MockManagedVectorStore(BaseManagedVectorStore):
             "dimension": self.dimension,
             "total_records": total_vectors,
             "namespaces": list(self._storage.keys()),
-            "status": "READY",
+            "status": "SIMULATED",
+            "mode": "simulated",
+            "backend_provider": "mock",
+            "persistent": False,
         }
 
 
@@ -194,7 +197,7 @@ class VertexAIVectorSearchAdapter(BaseManagedVectorStore):
             "region": self.region,
             "index_endpoint_id": self.index_endpoint_id,
             "deployed_index_id": self.deployed_index_id,
-            "psc_enabled": True,
+            "psc_enabled": False,
         })
         return base_desc
 
@@ -235,7 +238,7 @@ class PineconeAdapter(BaseManagedVectorStore):
             "provider": VectorProvider.PINECONE.value,
             "index_name": self.index_name,
             "dimension": self.dimension,
-            "serverless": True,
+            "serverless": False,
         })
         return base_desc
 

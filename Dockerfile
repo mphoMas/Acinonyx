@@ -1,10 +1,11 @@
 # MAS-Core runtime image (demo / staged dispatch by default)
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 
 WORKDIR /app
 
 ENV PYTHONPATH=/app \
     MAS_WORKSPACE=/app \
+    MAS_PM_DB_PATH=/app/workspace/mas_pm.db \
     MAS_ENABLE_LIVE_DISPATCH=false \
     MAS_SANDBOX_PYTHON=true \
     MAS_TOOL_ACL=true \
@@ -14,7 +15,9 @@ ENV PYTHONPATH=/app \
 
 # Node.js + pinned Playwright 1.49.1 (package-lock.json) with browser binaries baked in at build time
 COPY package.json package-lock.json ./
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    apt-get update && apt-get install -y --no-install-recommends nodejs npm bubblewrap xvfb xdotool \
     && npm ci \
     && npx playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
@@ -24,11 +27,15 @@ COPY mas/ mas/
 COPY main.py pyproject.toml README.md ./
 COPY company/MANDATE.md company/MANDATE.md
 COPY docs/ docs/
+COPY portal/ portal/
+COPY work_queue/ work_queue/
 
 # Run as an unprivileged user
-RUN useradd --create-home --uid 10001 mas \
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    useradd --create-home --uid 10001 mas \
     && mkdir -p /app/workspace/audit /app/workspace/projects \
-    && pip install -e . \
+    && pip install -e ".[browser]" \
     && chown -R mas:mas /app
 USER mas
 

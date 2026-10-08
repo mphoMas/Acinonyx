@@ -15,7 +15,7 @@ from mas.iam import (
 
 @pytest.fixture
 def iam():
-    return MultiTenantIAM(signing_secret="test-secret-key-12345")
+    return MultiTenantIAM(signing_secret="test-only-private-signing-key-1234567890")
 
 
 def test_tenant_lifecycle(iam):

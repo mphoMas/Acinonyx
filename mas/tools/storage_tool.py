@@ -1,6 +1,6 @@
 """
 mas.tools.storage_tool: Google Cloud Storage (GCS) object operations tool for MAS agents.
-Enables bucket listing, file staging, and object uploads/downloads with simulated fallback.
+Enables bucket listing, file staging, and object uploads/downloads with explicit failure when the cloud CLI is unavailable.
 
 Architect: Acinonyx
 """
@@ -38,12 +38,12 @@ def gcs_list_objects_tool(
 
     if not gcloud_bin:
         return {
-            "success": True,
+            "success": False,
             "uri": target,
             "items": [],
             "count": 0,
-            "mode": "simulated",
-            "message": "Simulated GCS listing (gcloud CLI unavailable).",
+            "mode": "unavailable",
+            "error": "GCS CLI unavailable; no objects were listed.",
         }
 
     cmd = [gcloud_bin, "storage", "ls"]
@@ -53,6 +53,8 @@ def gcs_list_objects_tool(
 
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15.0)
+        if proc.returncode != 0:
+            return {"success": False, "uri": target, "items": [], "error": proc.stderr.strip(), "mode": "native"}
         output = proc.stdout.strip()
         lines = [line.strip() for line in output.splitlines() if line.strip()]
         METRICS.incr("gcs.list_success")
@@ -74,7 +76,7 @@ def gcs_read_text_tool(uri: str, max_bytes: int = 100000) -> Dict[str, Any]:
 
     gcloud_bin = _find_gcloud_or_gsutil()
     if not gcloud_bin:
-        return {"success": True, "uri": uri, "content": "Simulated GCS object content.", "mode": "simulated"}
+        return {"success": False, "uri": uri, "error": "GCS CLI unavailable; no object was read.", "mode": "unavailable"}
 
     cmd = [gcloud_bin, "storage", "cat", uri]
     try:

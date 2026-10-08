@@ -74,10 +74,12 @@ class TestGitOpsTooling(unittest.TestCase):
         self.assertEqual(resp["repo"], "acinonyx/mas-core")
 
     def test_run_local_gitops_ci_with_event_bus(self):
-        # Run local CI on OmniLedger project
-        project_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "workspace", "projects", "omniledger")
-        )
+        # A self-contained project makes real CI portable to clean checkouts.
+        project_dir = self.temp_dir
+        tests_dir = os.path.join(project_dir, "tests")
+        os.makedirs(tests_dir)
+        with open(os.path.join(tests_dir, "test_smoke.py"), "w", encoding="utf-8") as fixture:
+            fixture.write("import unittest\nclass Smoke(unittest.TestCase):\n    def test_sum(self): self.assertEqual(2 + 3, 5)\n")
         bus = EventBus()
         events = []
 
@@ -91,6 +93,21 @@ class TestGitOpsTooling(unittest.TestCase):
         self.assertTrue(res["success"], f"CI failed: {res.get('stderr')}")
         self.assertEqual(res["exit_code"], 0)
         self.assertGreater(res["duration_seconds"], 0)
+
+    def test_empty_test_suite_never_reports_success(self):
+        os.makedirs(os.path.join(self.temp_dir, "tests"))
+        result = run_local_gitops_ci(self.temp_dir)
+        self.assertFalse(result["success"])
+        self.assertNotEqual(result["exit_code"], 0)
+
+    def test_failing_test_suite_reports_failure(self):
+        test_dir = os.path.join(self.temp_dir, "tests")
+        os.makedirs(test_dir)
+        with open(os.path.join(test_dir, "test_failure.py"), "w") as fixture:
+            fixture.write("import unittest\nclass Failure(unittest.TestCase):\n    def test_failure(self): self.fail('intentional failure')\n")
+        result = run_local_gitops_ci(self.temp_dir)
+        self.assertFalse(result["success"])
+        self.assertIn("intentional failure", result["stderr"])
 
     def test_register_gitops_tools_in_mcp_registry(self):
         registry = MCPRegistry()

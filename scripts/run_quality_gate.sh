@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# scripts/run_quality_gate.sh: Enterprise Quality & Verification Gate (10/10)
-# Enforces zero-regression test execution, 100% capability completeness,
+# scripts/run_quality_gate.sh: Repository Quality & Verification Gate
+# Enforces zero-regression test execution, capability reporting,
 # Merkle provenance integrity, and zero broken links across the MAS estate.
 # ==============================================================================
 set -euo pipefail
@@ -20,11 +20,11 @@ echo -e "\n[GATE 2/5]: Checking Runtime Health & Capabilities Matrix..."
 python3 -m mas.cli doctor
 python3 -m mas.cli capabilities
 
-echo -e "\n[GATE 3/5]: Running Research Directorate Swarm Verification..."
+echo -e "\n[GATE 3/5]: Checking Local Research Assets and Links..."
 python3 scripts/verify_research_swarm.py
 
-echo -e "\n[GATE 4/5]: Compiling Portal Catalog & Data Cache..."
-python3 scripts/compile_portal_catalog.py
+echo -e "\n[GATE 4/5]: Checking Python Source Compilation..."
+python3 -m compileall -q mas scripts
 
 echo -e "\n[GATE 5/5]: Executing Full Unit & Integration Test Suite..."
 python3 -m pytest tests/ -v

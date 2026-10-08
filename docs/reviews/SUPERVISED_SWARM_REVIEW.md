@@ -1,5 +1,7 @@
 # Supervised swarm delivery review — 2026-10-08
 
+> Historical assessment. See [current revision verification](REVISION_VERIFICATION_2026_10_08.md) for the latest remediation and executed evidence.
+
 ## 1. Verdict & Executive Summary
 
 - **Status: APPROVED WITH CONDITIONS** for a dedicated-machine, supervised Python-function pilot. **REJECTED** for enterprise production, public hostile-code execution or a 10/10 certification of full MAS.

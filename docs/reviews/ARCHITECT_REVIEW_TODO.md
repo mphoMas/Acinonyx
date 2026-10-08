@@ -6,6 +6,10 @@ Baseline inspected: `7e75b857703b3744da456eced493f83d87d10559`.
 
 This is a review backlog, not a production approval. Initial observations are from source inspection; tests have not yet been executed for this branch. Priorities describe review order and potential consequence, not confirmed severity for every subsystem.
 
+## Latest remediation
+
+The baseline failures, full integration prerequisites and bounded recovery/adversarial checks have now been addressed. See [revision verification](REVISION_VERIFICATION_2026_10_08.md) and its evidence manifest for actual results. Enterprise tenant enforcement, external audit anchoring, real data-service integration and sustained multi-host/load assurance remain deployment blockers. Earlier checked items below describe the historical assessment, not current production approval.
+
 ## Review status
 
 Initial review completed; verdict: **REJECTED (REQUIRES RE-WORK)** for enterprise production and untrusted execution. See [ARCHITECT_REVIEW.md](ARCHITECT_REVIEW.md) for findings and evidence. Checked items mean the initial assessment was performed, not that its acceptance criteria passed or defects were fixed. Browser/desktop, external cloud/model, load, Docker image startup, and backup/restore validation remain outstanding as recorded in the report.

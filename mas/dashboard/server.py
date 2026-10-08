@@ -37,7 +37,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     def _is_authenticated(self) -> bool:
         """Verify request bearer token against configured dashboard auth token."""
         if not self.auth_token:
-            return True
+            return False
         auth_header = self.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
@@ -198,17 +198,17 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
         elif path == "/api/cio-audit":
             # Return cached report if available, otherwise run the audit now
-            if DashboardRequestHandler.cio_audit_report is None:
+            if type(self).cio_audit_report is None:
                 cio = self.enterprise.cio
                 loop = asyncio.new_event_loop()
                 try:
                     report = loop.run_until_complete(cio.run_infrastructure_audit())
                     report_dict = report.to_dict()
                     report_dict["markdown"] = report.to_markdown()
-                    DashboardRequestHandler.cio_audit_report = report_dict
+                    type(self).cio_audit_report = report_dict
                 finally:
                     loop.close()
-            self._send_json(DashboardRequestHandler.cio_audit_report)
+            self._send_json(type(self).cio_audit_report)
 
         elif path == "/api/gateway":
             self._send_json({
@@ -346,7 +346,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 artifacts = loop.run_until_complete(
                     engagement.execute_engagement(client_name=client_name, raw_rfp=rfp)
                 )
-                DashboardRequestHandler.latest_artifacts = artifacts
+                type(self).latest_artifacts = artifacts
                 self._send_json({
                     "success": True,
                     "client_name": client_name,
@@ -356,17 +356,17 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 loop.close()
 
         elif path == "/api/cio-audit/refresh":
-            DashboardRequestHandler.cio_audit_report = None
+            type(self).cio_audit_report = None
             cio = self.enterprise.cio
             loop = asyncio.new_event_loop()
             try:
                 report = loop.run_until_complete(cio.run_infrastructure_audit())
                 report_dict = report.to_dict()
                 report_dict["markdown"] = report.to_markdown()
-                DashboardRequestHandler.cio_audit_report = report_dict
+                type(self).cio_audit_report = report_dict
             finally:
                 loop.close()
-            self._send_json({"success": True, "timestamp": DashboardRequestHandler.cio_audit_report["audit_timestamp"]})
+            self._send_json({"success": True, "timestamp": type(self).cio_audit_report["audit_timestamp"]})
 
         elif path == "/api/dispatch":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -391,7 +391,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
             issue_key = payload.get("issue_key")
             target_state = payload.get("target_state")
-            caller_principal = payload.get("caller_principal", "founder_lead")
+            caller_principal = self.auth_principal
+            if payload.get("caller_principal", caller_principal) != caller_principal:
+                self._send_json({"error": "Caller identity must match authenticated dashboard principal"}, status=403)
+                return
             reason = payload.get("reason", "")
 
             if not issue_key or not target_state:
@@ -400,12 +403,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
             from mas.pm.tools import pm_transition_issue
             try:
-                result = pm_transition_issue(
-                    issue_key=issue_key,
-                    target_state=target_state,
-                    caller_principal=caller_principal,
-                    reason=reason,
-                )
+                from mas.security import ExecutionContext
+                with ExecutionContext.scope(caller_principal):
+                    result = pm_transition_issue(
+                        issue_key=issue_key,
+                        target_state=target_state,
+                        caller_principal=caller_principal,
+                        reason=reason,
+                    )
                 self._send_json({"success": True, "result": result})
             except Exception as e:
                 self._send_json({
@@ -423,7 +428,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
             issue_key = payload.get("issue_key")
             verdict = payload.get("verdict")
-            reviewer_principal = payload.get("reviewer_principal")
+            reviewer_principal = self.auth_principal
+            if payload.get("reviewer_principal", reviewer_principal) != reviewer_principal:
+                self._send_json({"error": "Reviewer identity must match authenticated dashboard principal"}, status=403)
+                return
             findings = payload.get("findings", {})
             commit_sha = payload.get("commit_sha")
 
@@ -577,14 +585,19 @@ class DashboardServer:
         self.allowed_origins = set(allowed_origins or [])
         self.static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-        # Configure request handler
-        DashboardRequestHandler.enterprise = self.enterprise
-        DashboardRequestHandler.static_dir = self.static_dir
-        DashboardRequestHandler.initial_roster_names = set(self.enterprise.get_roster().keys())
-        DashboardRequestHandler.auth_token = self.auth_token
-        DashboardRequestHandler.allowed_origins = self.allowed_origins
-
-        self.server = ThreadingHTTPServer((self.host, self.port), DashboardRequestHandler)
+        # Each server owns its credentials, enterprise and cached artifacts.
+        # Class-wide mutation leaked state and tokens across concurrent servers.
+        handler = type("BoundDashboardRequestHandler", (DashboardRequestHandler,), {
+            "enterprise": self.enterprise,
+            "static_dir": self.static_dir,
+            "initial_roster_names": set(self.enterprise.get_roster().keys()),
+            "auth_token": self.auth_token,
+            "auth_principal": os.environ.get("MAS_DASHBOARD_PRINCIPAL", "dashboard_operator"),
+            "allowed_origins": self.allowed_origins,
+            "latest_artifacts": None,
+            "cio_audit_report": None,
+        })
+        self.server = ThreadingHTTPServer((self.host, self.port), handler)
         self._thread: Optional[threading.Thread] = None
 
     def start_background(self) -> None:
@@ -615,7 +628,6 @@ def run_dashboard(
     # Sync the Git-tracked work queue to MAS-PM on startup and whenever the
     # checked-out manifest changes. No workflow transitions or dispatch occur.
     import os
-    from pathlib import Path
     from mas.pm.git_queue import MANIFEST, sync as sync_git_queue
 
     def _sync_queue_once():

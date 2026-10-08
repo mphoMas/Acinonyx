@@ -6,6 +6,7 @@ Enforces WAL mode, foreign keys, 5000ms busy timeout, and atomic transactions.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -27,7 +28,7 @@ from mas.pm.models import (
     SprintState,
 )
 
-DEFAULT_DB_PATH = Path("mas_pm.db")
+DEFAULT_DB_PATH = Path(os.environ.get("MAS_PM_DB_PATH", "mas_pm.db"))
 
 
 class PMDatabase:
@@ -692,7 +693,7 @@ class PMDatabase:
         finally:
             conn.close()
 
-    def verify_issue_evidence_integrity(self, issue_id: str, workspace_root: Optional[Any] = None) -> Dict[str, Any]:
+    def verify_issue_evidence_integrity(self, issue_id: str, workspace_root: Optional[Any] = None) -> dict[str, Any]:
         """
         GOV-03: Audits evidence provenance and integrity for an issue.
         Verifies HMAC signatures and content hashes against disk/git.
@@ -702,7 +703,7 @@ class PMDatabase:
         from mas.security import verify_evidence_provenance
 
         links = self.get_evidence_links(issue_id)
-        report: Dict[str, Any] = {
+        report: dict[str, Any] = {
             "issue_id": issue_id,
             "total_links": len(links),
             "valid": True,

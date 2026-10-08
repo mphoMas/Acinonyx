@@ -40,14 +40,14 @@ def bigquery_dry_run_tool(query: str, project_id: Optional[str] = None) -> Dict[
     """
     bq_bin = _find_bq_binary()
     if not bq_bin:
-        LOGGER.warning("BigQuery CLI (bq) not found; executing simulated FinOps dry-run.")
+        LOGGER.warning("BigQuery CLI unavailable; dry-run refused.")
         return {
-            "success": True,
-            "valid": True,
-            "bytes_processed": 0,
-            "estimated_cost_usd": 0.0,
-            "message": "Simulated dry-run: Query syntax valid.",
-            "mode": "simulated",
+            "success": False,
+            "valid": False,
+            "bytes_processed": None,
+            "estimated_cost_usd": None,
+            "error": "BigQuery CLI (bq) is required; no query was validated or executed.",
+            "mode": "unavailable",
         }
 
     cmd = [
@@ -81,6 +81,8 @@ def bigquery_dry_run_tool(query: str, project_id: Optional[str] = None) -> Dict[
 
         # Parse bytes: e.g. "running this query will process 12345 bytes of data"
         match = re.search(r"process\s+([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]?B|bytes)", combined_output, re.IGNORECASE)
+        if not match:
+            return {"success": False, "valid": False, "error": "BigQuery dry-run did not report bytes processed.", "mode": "native"}
         bytes_val = 0
         if match:
             raw_num = float(match.group(1))
@@ -141,14 +143,7 @@ def bigquery_query_run_tool(
 
     bq_bin = _find_bq_binary()
     if not bq_bin:
-        # Simulated execution for offline testing
-        return {
-            "success": True,
-            "total_rows": 1,
-            "rows": [{"status": "simulated_success", "query": query}],
-            "bytes_processed": 0,
-            "mode": "simulated",
-        }
+        return {"success": False, "rows": [], "error": "BigQuery CLI unavailable; no query executed.", "mode": "unavailable"}
 
     cmd = [
         bq_bin,
@@ -161,6 +156,10 @@ def bigquery_query_run_tool(
     ]
     if project_id:
         cmd.extend(["--project_id", project_id])
+    if max_bytes_billed is not None:
+        if isinstance(max_bytes_billed, bool) or not isinstance(max_bytes_billed, int) or max_bytes_billed <= 0:
+            return {"success": False, "error": "max_bytes_billed must be a positive integer"}
+        cmd.append(f"--maximum_bytes_billed={max_bytes_billed}")
     cmd.append(query)
 
     try:

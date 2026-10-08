@@ -8,7 +8,7 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 
@@ -143,7 +143,15 @@ def validate_reviewer_authorization(
         )
 
 
-DEFAULT_VERDICT_SECRET = "acinonyx_verdict_signing_secret_v1_2026"
+def _signing_key(explicit: Optional[str], *variables: str) -> bytes:
+    """Persistent governance records require configured private signing material."""
+    import os
+    key = explicit
+    if key is None:
+        key = next((os.environ[name] for name in variables if os.environ.get(name)), None)
+    if key is None or len(key.encode("utf-8")) < 32:
+        raise ValueError("A private governance signing key of at least 32 bytes must be configured")
+    return key.encode("utf-8")
 
 
 def sign_verdict_payload(
@@ -161,11 +169,10 @@ def sign_verdict_payload(
     import hashlib
     import hmac
     import json
-    import os
 
     findings_json = json.dumps(findings or {}, sort_keys=True)
     payload = f"{issue_id}:{reviewer_principal}:{verdict_value}:{rework_cycle}:{commit_sha or ''}:{findings_json}"
-    key = (secret_key or os.getenv("MAS_VERDICT_SECRET") or DEFAULT_VERDICT_SECRET).encode("utf-8")
+    key = _signing_key(secret_key, "MAS_VERDICT_SECRET")
     return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
@@ -198,7 +205,7 @@ def verify_verdict_signature(
     return hmac.compare_digest(expected, signature.strip())
 
 
-DEFAULT_EVIDENCE_SECRET = "acinonyx_evidence_provenance_secret_v1_2026"
+
 
 
 def sign_evidence_provenance(
@@ -214,10 +221,9 @@ def sign_evidence_provenance(
     """
     import hashlib
     import hmac
-    import os
 
     payload = f"{evidence_id}:{issue_id}:{evidence_type}:{content_hash}:{uri}"
-    key = (secret_key or os.getenv("MAS_EVIDENCE_SECRET") or os.getenv("MAS_VERDICT_SECRET") or DEFAULT_EVIDENCE_SECRET).encode("utf-8")
+    key = _signing_key(secret_key, "MAS_EVIDENCE_SECRET", "MAS_VERDICT_SECRET")
     return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 

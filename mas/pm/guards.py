@@ -239,6 +239,8 @@ def validate_evidence(
     for link in links:
         # GOV-03: Provenance signature verification
         sig = link.payload.get("provenance_signature")
+        if not sig:
+            raise UnverifiedWorkError(f"Missing evidence provenance signature for {link.id}")
         if sig:
             from mas.security import verify_evidence_provenance
             ev_type_val = link.evidence_type.value if hasattr(link.evidence_type, "value") else str(link.evidence_type)
@@ -321,7 +323,9 @@ def validate_critic_verdicts(db: PMDatabase, issue: Issue, required_roles: List[
                 f"Issue {issue.key} received REJECT_REWORK verdict from {v.reviewer_principal} in rework cycle {issue.rework_cycle}: {v.findings}"
             )
         if v.verdict == CriticVerdictType.PASS:
-            if v.signature and not v.signature.startswith("sig_"):
+            if not v.signature:
+                raise UnverifiedWorkError(f"Missing cryptographic signature for verdict from {v.reviewer_principal}")
+            if v.signature:
                 from mas.security import verify_verdict_signature
                 verdict_val = v.verdict.value if hasattr(v.verdict, "value") else str(v.verdict)
                 if not verify_verdict_signature(

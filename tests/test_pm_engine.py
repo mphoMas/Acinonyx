@@ -174,7 +174,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
             reviewer_principal="qa_critic",
             verdict=CriticVerdictType.PASS,
             findings={"coverage": 92.5},
-            signature="sig_qa",
+            signature="",
         )
     )
     temp_pm_db.record_verdict(
@@ -184,7 +184,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
             reviewer_principal="adversarial_red_team",
             verdict=CriticVerdictType.PASS,
             findings={"vulnerabilities": 0},
-            signature="sig_sec",
+            signature="",
         )
     )
 
@@ -200,7 +200,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
             reviewer_principal="chief_architect",
             verdict=CriticVerdictType.PASS,
             findings={"contract_compliance": "100%"},
-            signature="sig_arch",
+            signature="",
         )
     )
 
@@ -399,17 +399,19 @@ def test_evidence_integrity_sha256_verification(temp_pm_db, tmp_path):
         fsm.transition("CORE-1", IssueState.VERIFICATION, caller_principal="senior_engineer")
     assert "Evidence integrity mismatch" in str(exc_info.value)
 
-    # Fix hash with correct SHA-256
+    # Evidence is immutable: correcting an old record must be rejected.
+    import sqlite3
     conn = temp_pm_db._get_connection()
-    with conn:
-        conn.execute(
-            "UPDATE pm_evidence_links SET content_hash = ? WHERE id = 'ev-test-tampered'",
-            (correct_hash,),
-        )
-    conn.close()
-
-    # Transition now succeeds
-    step = fsm.transition("CORE-1", IssueState.VERIFICATION, caller_principal="senior_engineer")
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"), conn:
+            conn.execute("UPDATE pm_evidence_links SET content_hash = ? WHERE id = 'ev-test-tampered'", (correct_hash,))
+    finally:
+        conn.close()
+    # A clean independent issue with genuine evidence may pass verification.
+    temp_pm_db.create_issue(Issue(id="i2", project_id=proj.id, key="CORE-2", title="Valid evidence", current_state=IssueState.IN_PROGRESS, assignee_principal="senior_engineer"))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git-valid", issue_id="i2", evidence_type=EvidenceType.GIT_COMMIT, content_hash=head_sha, uri=f"git:commit:{head_sha}"))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test-valid", issue_id="i2", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=correct_hash, uri=f"file://{test_log}", payload={"exit_code": 0}))
+    step = fsm.transition("CORE-2", IssueState.VERIFICATION, caller_principal="senior_engineer")
     assert step.current_state == IssueState.VERIFICATION
 
 

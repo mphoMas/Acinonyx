@@ -55,7 +55,7 @@ def _create_sample_issue(db: PMDatabase, key: str, title: str, assignee: str = N
 
 def test_dependency_registration_and_querying(test_pm):
     task_a = _create_sample_issue(test_pm, "MAS-101", "Prerequisite Task A", "backend_engineer")
-    task_b = _create_sample_issue(test_pm, "MAS-102", "Dependent Task B", "backend_engineer")
+    _create_sample_issue(test_pm, "MAS-102", "Dependent Task B", "backend_engineer")
 
     # Self-dependency must fail
     with pytest.raises(ValueError, match="cannot depend on itself"):
@@ -122,7 +122,7 @@ def test_pm_claim_task_enforces_dependencies(test_pm):
 
 
 def test_assignment_authorization_rules(test_pm):
-    task = _create_sample_issue(test_pm, "MAS-107", "Security Task", None)
+    _create_sample_issue(test_pm, "MAS-107", "Security Task", None)
 
     # 1. Unassigned task can be assigned to self
     with ExecutionContext.scope("security_sre"):
@@ -153,8 +153,8 @@ def test_assignment_authorization_rules(test_pm):
 
 
 def test_claim_task_enforces_agent_wip_limit(test_pm):
-    task1 = _create_sample_issue(test_pm, "MAS-108", "Task 1", None)
-    task2 = _create_sample_issue(test_pm, "MAS-109", "Task 2", None)
+    _create_sample_issue(test_pm, "MAS-108", "Task 1", None)
+    _create_sample_issue(test_pm, "MAS-109", "Task 2", None)
 
     # Agent claims Task 1
     with ExecutionContext.scope("qa_critic"):

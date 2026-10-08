@@ -80,74 +80,21 @@ def test_pm_sec_001_impersonation_prevention(temp_pm_db):
         assert step_auto.current_state == IssueState.REFINED
 
 
-def test_pm_sec_002_evidence_fail_closed(temp_pm_db, tmp_path):
-    """PM-SEC-002: Asserts that non-existent commits and tampered files fail closed."""
+@pytest.mark.parametrize("failure", ["invalid_commit", "missing_log", "failed_tests"])
+def test_pm_sec_002_evidence_fail_closed(temp_pm_db, tmp_path, failure):
+    """Each immutable evidence scenario independently fails closed."""
     proj = temp_pm_db.create_project(Project(id="p1", key="EVD", name="Evidence Proj"))
-    issue = temp_pm_db.create_issue(
-        Issue(
-            id="i1",
-            project_id=proj.id,
-            key="EVD-1",
-            title="Evidence Fail Closed",
-            current_state=IssueState.IN_PROGRESS,
-            assignee_principal="coder",
-            path_whitelist=["*"],
-        )
-    )
-
-    fsm = FSMEngine(temp_pm_db)
-
-    # 1. Non-existent git commit fails closed
+    temp_pm_db.create_issue(Issue(id="i1", project_id=proj.id, key="EVD-1", title="Evidence Fail Closed", current_state=IssueState.IN_PROGRESS, assignee_principal="coder", path_whitelist=["*"]))
     log_file = tmp_path / "valid.log"
     log_file.write_text("Test run output")
-    log_hash = hashlib.sha256(log_file.read_bytes()).hexdigest()
-
-    temp_pm_db.attach_evidence(
-        EvidenceLink(
-            id="ev-git-fake",
-            issue_id=issue.id,
-            evidence_type=EvidenceType.GIT_COMMIT,
-            content_hash="deadbeefcafe1234567890abcdef1234567890ab",
-            uri="git:commit:deadbeefcafe1234567890abcdef1234567890ab",
-        )
-    )
-    temp_pm_db.attach_evidence(
-        EvidenceLink(
-            id="ev-test-ok",
-            issue_id=issue.id,
-            evidence_type=EvidenceType.TEST_RUN_LOG,
-            content_hash=log_hash,
-            uri=f"file://{log_file}",
-            payload={"exit_code": 0},
-        )
-    )
-
-    with ExecutionContext.scope("coder"):
-        with pytest.raises(UnverifiedWorkError) as exc_git:
-            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-        assert "Git commit verification failed" in str(exc_git.value)
-
-        # 2. Fix git commit with real commit, but use non-existent log file
-        real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-        conn = temp_pm_db._get_connection()
-        with conn:
-            conn.execute("UPDATE pm_evidence_links SET content_hash = ?, uri = ? WHERE id = 'ev-git-fake'", (real_sha, f"git:commit:{real_sha}"))
-            conn.execute("UPDATE pm_evidence_links SET uri = 'file:///nonexistent/path/fake.log' WHERE id = 'ev-test-ok'")
-        conn.close()
-
-        with pytest.raises(UnverifiedWorkError) as exc_missing_log:
-            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-        assert "does not exist on disk" in str(exc_missing_log.value)
-
-        # 3. Test run exit code != 0 fails closed
-        conn = temp_pm_db._get_connection()
-        with conn:
-            conn.execute("UPDATE pm_evidence_links SET uri = ?, payload = ? WHERE id = 'ev-test-ok'", (f"file://{log_file}", '{"exit_code": 1}'))
-        conn.close()
-
-        with pytest.raises(UnverifiedWorkError) as exc_fail_code:
-            fsm.transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
-        assert "test run evidence indicates failure" in str(exc_fail_code.value)
+    real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+    commit = "deadbeefcafe1234567890abcdef1234567890ab" if failure == "invalid_commit" else real_sha
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git", issue_id="i1", evidence_type=EvidenceType.GIT_COMMIT, content_hash=commit, uri=f"git:commit:{commit}"))
+    uri = "file:///nonexistent/path/fake.log" if failure == "missing_log" else f"file://{log_file}"
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test", issue_id="i1", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=hashlib.sha256(log_file.read_bytes()).hexdigest(), uri=uri, payload={"exit_code": 1 if failure == "failed_tests" else 0}))
+    messages = {"invalid_commit": "Git commit verification failed", "missing_log": "does not exist on disk", "failed_tests": "test run evidence indicates failure"}
+    with ExecutionContext.scope("coder"), pytest.raises(UnverifiedWorkError, match=messages[failure]):
+        FSMEngine(temp_pm_db).transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
 
 
 def test_pm_sec_003_scope_jail_git_changeset(temp_pm_db, tmp_path):

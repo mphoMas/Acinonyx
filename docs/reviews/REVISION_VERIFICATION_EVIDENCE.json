@@ -1,0 +1,104 @@
+{
+  "verified_utc": "2026-10-08T22:04:50.974906+00:00",
+  "baseline_commit": "d5020a0fada6d0838f6507b5dcc685cdfbfa7f18",
+  "cleanup_commit": "3e29d92c",
+  "branch": "Acinonyx_frontier",
+  "source_fingerprint_scope": "mas, tests, scripts, portal JavaScript, CI workflows, pyproject, Dockerfile and dockerignore; documentation excluded",
+  "source_sha256": "e041ca307b124ff0474ef691ce94eb4349ab33896cfe4632c38da49020076b26",
+  "mas_source_sha256": "a3e30e1e4814571fa0a8ac30d70cbce3e885d075a01604901f7447247238aa65",
+  "quality_gate": {
+    "command": "bash scripts/run_quality_gate.sh",
+    "status": "passed",
+    "pytest": {
+      "tests": 349,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 349
+    },
+    "combined_coverage_percent": 74,
+    "log": "/workspace/review-evidence/verified-release-gate.log",
+    "junit": "/workspace/review-evidence/verified-release-tests.xml"
+  },
+  "dedicated_recovery_adversarial": {
+    "passed": 51,
+    "failed": 0,
+    "skipped": 0,
+    "model": "scripted TLS fixture",
+    "workers": "real Docker"
+  },
+  "live_acceptance": {
+    "provider": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.8-flash"
+    },
+    "tasks": [
+      {
+        "name": "stable_deduplication",
+        "state": "awaiting_approval",
+        "passed_cases": 10,
+        "total_cases": 10,
+        "tokens": 2883,
+        "calls": 3
+      },
+      {
+        "name": "invoice_reconciliation",
+        "state": "awaiting_approval",
+        "passed_cases": 10,
+        "total_cases": 10,
+        "tokens": 6076,
+        "calls": 3
+      },
+      {
+        "name": "untrusted_note",
+        "state": "awaiting_approval",
+        "passed_cases": 6,
+        "total_cases": 6,
+        "tokens": 2692,
+        "calls": 3
+      }
+    ],
+    "human_release_approval": "not_requested_or_granted"
+  },
+  "research_assets": {
+    "md_files_count": 89,
+    "total_links": 197,
+    "broken_links_count": 0,
+    "merkle_root": "f264781969f2a98396a5e9b2c4df4fc3137cd2b3a4b73dd6b1cad14b606f44a3",
+    "status": "passed",
+    "academic_factual_accuracy": "not_assessed",
+    "live_agent_review": "not_performed",
+    "rating": "not_awarded"
+  },
+  "runtime_image": {
+    "image": "mas-audit:revision",
+    "checks": {
+      "non_root_uid": 10001,
+      "portal_http": 200,
+      "unconfigured_mutation_denied": 401,
+      "volume_restart_preserves_pm_project": true,
+      "legacy_python_executor": "unavailable_in_default_container; execution_refused",
+      "cleanup_confirmed": true
+    },
+    "image_id": "sha256:eff6f87671efc495bba6645e4cb7a77b27be62e9f8ed5d877fbc7a4c16ed5f9b",
+    "status": "passed",
+    "mas_source_sha256": "a3e30e1e4814571fa0a8ac30d70cbce3e885d075a01604901f7447247238aa65",
+    "matches_local_application": true
+  },
+  "wheel": {
+    "file": "mas_core-0.2.0-py3-none-any.whl",
+    "sha256": "7e027f054718d255c78b80ed5704fceeea86b004e79a0acc8203acba5f3d6eac",
+    "application_sources_match": true,
+    "clean_install": "passed",
+    "outside_checkout_application_imports": "passed"
+  },
+  "production_verdict": "rejected; supervised dedicated-host pilot approved with conditions",
+  "architecture_rating": "not_awarded",
+  "limits": [
+    "Default runtime container refuses legacy Python execution when nested bubblewrap is unavailable",
+    "Cloud vector adapters are local simulations; no real BigQuery/GCS integration acceptance run",
+    "Three sampled live goals do not establish broad model reliability",
+    "No end-to-end tenant or multi-host isolation certification",
+    "No external whole-state rollback freshness anchor"
+  ]
+}

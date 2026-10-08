@@ -76,13 +76,25 @@ PYTHONPATH=. python3 -m mas.cli doctor
 PYTHONPATH=. python3 -m mas.cli capabilities
 
 # Unit + integration + upgrade tests
-PYTHONPATH=. python3 -m unittest discover -s tests -v
+python3 -m pytest tests -q
 
 # Mission demos (template agents unless LLM env configured)
 python3 main.py --mode supervisor
 python3 main.py --mode enterprise   # staged dry-run by default
 python3 main.py --mode dashboard --port 8080   # Observability at / and Living Portal & PM Board at /portal
 ```
+
+### Authentication and durable state
+
+Set `MAS_DASHBOARD_TOKEN` through your secret manager to enable protected reads and mutations; without it, those requests are denied. `MAS_DASHBOARD_PRINCIPAL` binds that token to one trusted operator identity (default `dashboard_operator`). Request bodies cannot select a different reviewer. One shared dashboard token is not a multi-user identity system.
+
+Persistent governance records require private keys of at least 32 bytes: `MAS_VERDICT_SECRET` and `MAS_EVIDENCE_SECRET` (the latter can use the verdict key if omitted). Keep keys outside Git and restore the same keys with database backups. Existing records signed using the removed public defaults require fresh trusted review/evidence; do not relabel them as authentic. IAM uses `MAS_IAM_SECRET` when configured; otherwise its random key is process-local and tokens become invalid on restart.
+
+The default runtime container serves the dashboard/portal but its Docker security policy may prevent nested bubblewrap execution; `run_python` then refuses execution. Use a supported dedicated swarm coordinator for coding workers rather than weakening container isolation.
+
+Set `MAS_PM_DB_PATH` for durable PM storage. The container uses `/app/workspace/mas_pm.db`, inside the existing Compose workspace mount. The swarm has its separate private state directory and credentials.
+
+For full verification, install `.[dev,browser]`, Chromium (`python -m playwright install --with-deps chromium`), Xvfb, xdotool and bubblewrap. Provide a local digest-pinned `MAS_SWARM_TEST_IMAGE`; the CI workflow pulls its pinned Python image. Run `bash scripts/run_quality_gate.sh`. Research checks cover local assets and links, not factual accuracy or live agent review.
 
 ### Optional live LLM
 
@@ -105,7 +117,7 @@ docker compose up --build
 | Variable | Default | Meaning |
 |---|---|---|
 | `MAS_ENABLE_LIVE_DISPATCH` | `false` | Arm real engagement side-effects |
-| `MAS_SANDBOX_PYTHON` | `true` | Block dangerous imports in `run_python` |
+| `MAS_SANDBOX_PYTHON` | `true` | Require bubblewrap isolation for `run_python`; refuse execution if unavailable |
 | `MAS_TOOL_ACL` | `true` | Enforce tool allowlists |
 | `MAS_AUDIT_LOG` | `workspace/audit/events.jsonl` | Append-only bus audit |
 | `MAS_REQUIRE_LLM` | `false` | Fail closed if no provider when set |

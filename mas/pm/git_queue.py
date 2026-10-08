@@ -78,7 +78,7 @@ def sync(*, dry_run=False, db=None, reconcile_assignees=True):
             continue
         description = "\n".join([
             f"[ALLOCATION_ID:{task['id']}]",
-            f"Source: work_queue/tasks.json",
+            "Source: work_queue/tasks.json",
             f"Assigned builder: {task['assignee_principal']}",
             f"Independent reviewer: {task['reviewer_principal']}",
             f"Dependencies (allocation IDs): {', '.join(task['dependencies']) or 'None'}",

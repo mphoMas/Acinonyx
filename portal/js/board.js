@@ -152,7 +152,7 @@
         try {
           const fbResp = await fetch('js/live_board_data.json');
           if (fbResp.ok) {
-            this.boardData = await fbResp.json();
+            this.boardData = this.normalizeSnapshot(await fbResp.json());
           } else {
             this.boardData = this.getFallbackBoardData();
           }
@@ -165,6 +165,38 @@
       this.populateSprintFilter();
       this.renderColumns();
       this.renderExceptionalTrays();
+    }
+
+    normalizeSnapshot(snapshot) {
+      // SQLite exports are row arrays, while the UI consumes a grouped board.
+      // Keep offline evidence visibly separate from live telemetry.
+      if (!Array.isArray(snapshot)) {
+        if (!snapshot || !snapshot.issues_by_column) throw new Error('Invalid board snapshot');
+        return { ...snapshot, flow_health: 'OFFLINE_SNAPSHOT' };
+      }
+      const issuesByColumn = {};
+      const columns = {};
+      const limits = { IN_PROGRESS: 4, VERIFICATION: 2, JUDICIAL_REVIEW: 2 };
+      for (const row of snapshot) {
+        if (!row.key?.startsWith(`${this.currentProjectKey}-`)) continue;
+        const issue = { ...row };
+        for (const field of ['path_whitelist', 'forbidden_paths']) {
+          if (typeof issue[field] === 'string') issue[field] = JSON.parse(issue[field]);
+        }
+        (issuesByColumn[issue.current_state] ||= []).push(issue);
+      }
+      for (const [state, issues] of Object.entries(issuesByColumn)) {
+        columns[state] = { count: issues.length, wip_limit: limits[state] || null };
+      }
+      const active = Object.keys(limits).reduce((count, state) => count + (issuesByColumn[state]?.length || 0), 0);
+      return {
+        project_key: this.currentProjectKey,
+        issues_by_column: issuesByColumn,
+        columns,
+        flow_health: 'OFFLINE_SNAPSHOT',
+        wip_saturation_pct: Math.round(active / 8 * 100),
+        sprints: [],
+      };
     }
 
     updateTelemetryHUD() {
@@ -694,7 +726,7 @@
     getFallbackBoardData() {
       return {
         project_key: this.currentProjectKey,
-        flow_health: 'OPTIMAL',
+        flow_health: 'DEMO_DATA',
         wip_saturation_pct: 37.5,
         total_active_wip: 3,
         columns: {

@@ -25,9 +25,10 @@ class TestDashboardServer(unittest.TestCase):
     def setUpClass(cls):
         cls.port = get_free_port()
         cls.enterprise = ConsultingEnterprise(name="Test Dashboard Enterprise")
-        cls.server = DashboardServer(cls.enterprise, host="127.0.0.1", port=cls.port)
+        cls.server = DashboardServer(cls.enterprise, host="127.0.0.1", port=cls.port, auth_token="test-dashboard-private-token")
         cls.server.start_background()
         cls.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        cls.opener.addheaders = [("Authorization", "Bearer test-dashboard-private-token")]
         time.sleep(0.3)  # Allow thread to bind
 
     @classmethod

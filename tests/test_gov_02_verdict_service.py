@@ -8,9 +8,9 @@ Regression and authorization tests for GOV-02:
 """
 import pytest
 
-from mas.security import ExecutionContext, sign_verdict_payload, verify_verdict_signature
+from mas.security import ExecutionContext, verify_verdict_signature
 from mas.pm.db import PMDatabase
-from mas.pm.guards import UnverifiedWorkError, validate_critic_verdicts
+from mas.pm.guards import validate_critic_verdicts
 from mas.pm.models import (
     CriticVerdict,
     CriticVerdictType,

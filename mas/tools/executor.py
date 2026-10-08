@@ -7,9 +7,11 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import math
 import shutil
 import signal
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.config import CONFIG
@@ -47,6 +49,9 @@ def _build_command_and_env(code: str) -> tuple[List[str], Dict[str, str]]:
         "PYTHONUNBUFFERED": "1",
     }
 
+    if CONFIG.sandbox_python and not bwrap_path:
+        raise RuntimeError("Sandbox unavailable: bubblewrap is required; host execution refused")
+
     if bwrap_path:
         py_prefix = sys.prefix
         cmd = [
@@ -55,12 +60,15 @@ def _build_command_and_env(code: str) -> tuple[List[str], Dict[str, str]]:
             "--ro-bind-try", "/lib", "/lib",
             "--ro-bind-try", "/lib64", "/lib64",
             "--ro-bind-try", "/bin", "/bin",
-            "--ro-bind-try", "/etc", "/etc",
             "--ro-bind-try", py_prefix, py_prefix,
             "--proc", "/proc",
             "--dev", "/dev",
             "--tmpfs", "/tmp",
         ]
+        # Virtualenv interpreters may be symlinks into a runtime outside /usr.
+        for runtime in {sys.base_prefix, str(Path(sys.executable).resolve().parent.parent)}:
+            if runtime != py_prefix and not Path(runtime).is_relative_to("/usr"):
+                cmd.extend(["--ro-bind", runtime, runtime])
         from mas.tools.filesystem import ALLOWED_PROJECT_ROOTS
         for root in ALLOWED_PROJECT_ROOTS:
             root_str = str(root)
@@ -71,6 +79,8 @@ def _build_command_and_env(code: str) -> tuple[List[str], Dict[str, str]]:
             "--unshare-all",
             "--clearenv",
             "--die-with-parent",
+            "--setenv", "LANG", "C.UTF-8",
+            "--setenv", "PYTHONUNBUFFERED", "1",
             sys.executable,
             "-c",
             code,
@@ -93,8 +103,8 @@ def _preexec_limits() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
         # Limit open file descriptors
         resource.setrlimit(resource.RLIMIT_NOFILE, (128, 128))
-    except Exception:
-        pass
+    except (ImportError, OSError, ValueError):
+        raise
 
 
 async def run_python_code(code: str, timeout_sec: float = 10.0) -> str:
@@ -106,8 +116,13 @@ async def run_python_code(code: str, timeout_sec: float = 10.0) -> str:
         METRICS.incr("tools.run_python.denied")
         return denial
 
-    capped = min(float(timeout_sec or CONFIG.max_python_timeout_sec), CONFIG.max_python_timeout_sec)
-    cmd, safe_env = _build_command_and_env(code)
+    if isinstance(timeout_sec, bool) or not isinstance(timeout_sec, (int, float)) or not math.isfinite(timeout_sec) or timeout_sec <= 0:
+        return "ERROR: Timeout must be a finite positive number."
+    capped = min(float(timeout_sec), CONFIG.max_python_timeout_sec)
+    try:
+        cmd, safe_env = _build_command_and_env(code)
+    except RuntimeError as exc:
+        return f"ERROR: {exc}"
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -116,8 +131,17 @@ async def run_python_code(code: str, timeout_sec: float = 10.0) -> str:
         preexec_fn=_preexec_limits,
         env=safe_env,
     )
+    async def bounded_read(stream):
+        output = bytearray()
+        while chunk := await stream.read(4096):
+            output.extend(chunk)
+            if len(output) > 65536:
+                raise ValueError("Execution output limit exceeded")
+        return bytes(output)
+
+    tasks = [asyncio.create_task(bounded_read(proc.stdout)), asyncio.create_task(bounded_read(proc.stderr)), asyncio.create_task(proc.wait())]
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=capped)
+        stdout, stderr, _ = await asyncio.wait_for(asyncio.gather(*tasks), timeout=capped)
         out_str = stdout.decode("utf-8", errors="replace")
         err_str = stderr.decode("utf-8", errors="replace")
         METRICS.incr("tools.run_python.calls")
@@ -125,16 +149,26 @@ async def run_python_code(code: str, timeout_sec: float = 10.0) -> str:
         if proc.returncode != 0:
             return f"EXIT_FAILURE ({proc.returncode}):\nSTDERR:\n{err_str}\nSTDOUT:\n{out_str}"
         return out_str if out_str else "[Process finished with code 0, no output]"
+    except ValueError:
+        return "ERROR: Execution output limit exceeded."
     except asyncio.TimeoutError:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except Exception:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
         METRICS.incr("tools.run_python.timeouts")
         return f"ERROR: Execution timed out after {capped} seconds."
+    finally:
+        # Cancellation and timeout must both kill descendants and reap the child.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Drain without retaining data: asyncio process.wait can otherwise hang
+        # when a killed child left a paused stdout transport after overflow.
+        async def discard(stream):
+            while await stream.read(4096):
+                pass
+        await asyncio.gather(discard(proc.stdout), discard(proc.stderr), proc.wait())
 
 
 def register_default_tools(registry: Any) -> None:

@@ -5,6 +5,9 @@ and keyboard shortcuts in headless Chromium.
 """
 
 import unittest
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from mas.config import REPO_ROOT
 
 try:
@@ -19,7 +22,16 @@ class TestPortalWebUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.portal_path = (REPO_ROOT / "portal" / "index.html").resolve()
-        cls.portal_url = f"file://{cls.portal_path}"
+        cls.http = ThreadingHTTPServer(("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=str(cls.portal_path.parent)))
+        cls.thread = threading.Thread(target=cls.http.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.portal_url = f"http://127.0.0.1:{cls.http.server_port}/index.html"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.http.shutdown()
+        cls.http.server_close()
+        cls.thread.join()
 
     def test_portal_e2e_flow(self):
         with sync_playwright() as p:
@@ -116,6 +128,7 @@ class TestPortalWebUI(unittest.TestCase):
 
             # 4. Verify Cards rendered and clicking opens slide-over drawer
             page.wait_for_selector(".kanban-card")
+            self.assertIn("OFFLINE SNAPSHOT", page.inner_text("#board-flow-health"))
             first_card = page.locator(".kanban-card").first
             card_key = first_card.locator(".card-key").inner_text()
             first_card.click()

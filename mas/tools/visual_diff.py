@@ -20,7 +20,7 @@ PKG_DIR = os.path.join(_REPO_ROOT, "bin", "packages")
 BROWSER_DIR = os.path.join(_REPO_ROOT, "bin", "browsers")
 if PKG_DIR not in sys.path:
     sys.path.insert(0, PKG_DIR)
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = BROWSER_DIR
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", BROWSER_DIR)
 
 try:
     from PIL import Image, ImageChops, ImageEnhance

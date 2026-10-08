@@ -4,6 +4,8 @@ Data Contract Validation, GCS Storage, and Dynamic Multi-Agent Delegation tools.
 """
 
 import unittest
+import subprocess
+from unittest.mock import patch
 from pathlib import Path
 from mas.capabilities import capability_matrix
 from mas.mcp.protocol import MCPRegistry
@@ -29,27 +31,59 @@ from mas.tools.storage_tool import (
 
 
 class TestBigQueryFinOpsTools(unittest.TestCase):
-    def test_bigquery_dry_run_syntax(self):
-        query = "SELECT 1 as id, 'Acinonyx' as name, CURRENT_TIMESTAMP() as ts;"
-        res = bigquery_dry_run_tool(query)
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value=None)
+    def test_missing_cli_never_claims_validation_or_execution(self, _binary):
+        for query in ("SELECT 1", "SELEECT BROKEN FROM NOT_A_TABLE WHERE ;;"):
+            dry = bigquery_dry_run_tool(query)
+            self.assertFalse(dry["success"])
+            self.assertFalse(dry["valid"])
+            self.assertIsNone(dry["bytes_processed"])
+            self.assertIn("error", dry)
+            self.assertFalse(bigquery_query_run_tool(query)["success"])
+
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value="/fixture/bq")
+    @patch("mas.tools.bigquery_tool.subprocess.run")
+    def test_bigquery_dry_run_syntax(self, run, _binary):
+        run.return_value = subprocess.CompletedProcess([], 0, "", "running this query will process 12345 bytes of data")
+        res = bigquery_dry_run_tool("SELECT 1 as id")
         self.assertTrue(res["success"])
         self.assertTrue(res["valid"])
-        self.assertIn("bytes_processed", res)
-        self.assertIn("estimated_cost_usd", res)
+        self.assertEqual(res["bytes_processed"], 12345)
+        self.assertAlmostEqual(res["estimated_cost_usd"], 12345 / (1024 ** 4) * 6.25, places=6)
 
-    def test_bigquery_dry_run_invalid_sql(self):
-        query = "SELEECT BROKEN FROM NOT_A_TABLE WHERE ;;"
-        res = bigquery_dry_run_tool(query)
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value="/fixture/bq")
+    @patch("mas.tools.bigquery_tool.subprocess.run")
+    def test_bigquery_dry_run_invalid_sql(self, run, _binary):
+        run.return_value = subprocess.CompletedProcess([], 1, "", "Syntax error: SELEECT")
+        res = bigquery_dry_run_tool("SELEECT BROKEN FROM NOT_A_TABLE WHERE ;;")
         self.assertFalse(res["valid"])
         self.assertIn("error", res)
 
-    def test_bigquery_query_execution(self):
-        query = "SELECT 100 as num, 'verified' as tag;"
-        res = bigquery_query_run_tool(query, max_rows=10)
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value="/fixture/bq")
+    @patch("mas.tools.bigquery_tool.subprocess.run")
+    def test_bigquery_query_execution(self, run, _binary):
+        run.side_effect = [
+            subprocess.CompletedProcess([], 0, "", "running this query will process 100 bytes of data"),
+            subprocess.CompletedProcess([], 0, '[{"num":"100","tag":"verified"}]', ""),
+        ]
+        res = bigquery_query_run_tool("SELECT 100 as num, 'verified' as tag", max_rows=10, max_bytes_billed=1000)
         self.assertTrue(res["success"])
-        self.assertIn("rows", res)
-        self.assertTrue(len(res["rows"]) >= 1)
         self.assertEqual(res["rows"][0]["num"], "100")
+        self.assertIn("--maximum_bytes_billed=1000", run.call_args.args[0])
+
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value="/fixture/bq")
+    @patch("mas.tools.bigquery_tool.subprocess.run")
+    def test_missing_cost_estimate_rejects_execution(self, run, _binary):
+        run.return_value = subprocess.CompletedProcess([], 0, "", "unexpected response")
+        self.assertFalse(bigquery_query_run_tool("SELECT 1")["success"])
+        self.assertEqual(run.call_count, 1)
+
+    @patch("mas.tools.bigquery_tool._find_bq_binary", return_value="/fixture/bq")
+    @patch("mas.tools.bigquery_tool.subprocess.run")
+    def test_over_budget_query_never_executes(self, run, _binary):
+        run.return_value = subprocess.CompletedProcess([], 0, "", "running this query will process 2000 bytes of data")
+        self.assertFalse(bigquery_query_run_tool("SELECT 1", max_bytes_billed=1000)["success"])
+        self.assertEqual(run.call_count, 1)
 
 
 class TestDataContractValidation(unittest.TestCase):
@@ -122,6 +156,21 @@ class TestGCSStorageTools(unittest.TestCase):
         res = gcs_list_objects_tool("gs://bmm-metro-mz-stage")
         self.assertIn("success", res)
         self.assertIn("items", res)
+
+    @patch("mas.tools.storage_tool._find_gcloud_or_gsutil", return_value=None)
+    def test_missing_gcs_cli_never_synthesizes_data(self, _binary):
+        for result in (gcs_list_objects_tool("gs://fixture-bucket"), gcs_read_text_tool("gs://fixture-bucket/data.txt")):
+            self.assertFalse(result["success"])
+            self.assertEqual(result["mode"], "unavailable")
+            self.assertIn("error", result)
+
+    @patch("mas.tools.storage_tool._find_gcloud_or_gsutil", return_value="/fixture/gcloud")
+    @patch("mas.tools.storage_tool.subprocess.run")
+    def test_nonzero_gcs_listing_never_reports_success(self, run, _binary):
+        run.return_value = subprocess.CompletedProcess([], 1, "", "Permission denied")
+        result = gcs_list_objects_tool("gs://fixture-bucket")
+        self.assertFalse(result["success"])
+        self.assertIn("Permission denied", result["error"])
 
     def test_gcs_read_text_invalid_uri(self):
         res = gcs_read_text_tool("http://not-gcs.com/file.txt")

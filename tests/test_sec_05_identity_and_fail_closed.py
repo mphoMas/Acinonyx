@@ -5,7 +5,6 @@ Regression tests for SEC-05:
 - Rejects invalid or unreadable Git changesets in commit scope verification
 """
 import subprocess
-from pathlib import Path
 import pytest
 
 from mas.security import ExecutionContext, validate_reviewer_authorization

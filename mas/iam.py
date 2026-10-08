@@ -87,10 +87,16 @@ class MultiTenantIAM:
     4. Filesystem workspace jailing per tenant.
     """
 
-    DEFAULT_SECRET = "mas-enterprise-iam-secret-key-prod-001"
-
-    def __init__(self, signing_secret: str = DEFAULT_SECRET) -> None:
-        self.signing_secret = signing_secret.encode("utf-8")
+    def __init__(self, signing_secret: Optional[str] = None) -> None:
+        import secrets
+        # Unconfigured local instances are intentionally process-local. Durable
+        # deployments must supply MAS_IAM_SECRET or an explicit private key.
+        key = signing_secret if signing_secret is not None else os.getenv("MAS_IAM_SECRET")
+        if key is None:
+            key = secrets.token_hex(32)
+        if len(key.encode("utf-8")) < 32:
+            raise ValueError("IAM signing key must contain at least 32 bytes")
+        self.signing_secret = key.encode("utf-8")
         self._tenants: Dict[str, Tenant] = {}
         self._principals: Dict[str, Principal] = {}  # key: f"{tenant_id}:{user_id}"
         self._custom_policies: Dict[str, List[PolicyRule]] = {}  # key: tenant_id
