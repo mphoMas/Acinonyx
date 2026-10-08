@@ -660,6 +660,891 @@
         ".env.*",
         "**/secrets/**"
       ]
+    },
+    {
+      "id": "GOV-02",
+      "title": "Independent reviewer verdict service",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        "mas/pm/",
+        "mas/security.py",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Only authenticated reviewer actions create verdicts; scripts cannot manufacture approvals.",
+        "Provide independently reproducible evidence: Negative authorization tests and signed reviewer decision records",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "GOV-03",
+      "title": "Tamper-evident evidence provenance",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "GOV-02"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/security.py",
+        "tests/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Evidence references verifiable immutable hashes; changes or deletions are blocked or audited.",
+        "Provide independently reproducible evidence: Tamper-injection tests and integrity report",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "GOV-04",
+      "title": "Enforce separation of duties",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "GOV-02",
+        "SEC-05"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/security.py",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Builders cannot approve own work or impersonate reviewers at API, service, or persistence boundaries.",
+        "Provide independently reproducible evidence: Role-matrix and bypass regression tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "GOV-05",
+      "title": "Adversarial judicial-review suite",
+      "priority": "HIGH",
+      "dependencies": [
+        "GOV-03",
+        "GOV-04"
+      ],
+      "scope": [
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "adversarial_red_team",
+      "reviewer_principal": "chief_architect",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Forged verdicts, replayed evidence, missing reviews, and conflicting decisions fail safely.",
+        "Provide independently reproducible evidence: Attack suite and independent findings",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-05",
+      "title": "Close identity and fail-open verification defects",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        "mas/security.py",
+        "mas/pm/guards.py",
+        "tests/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Unverified principals and invalid or unreadable Git changesets are rejected, never accepted.",
+        "Provide independently reproducible evidence: Impersonation and malformed-commit regression tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-06",
+      "title": "Least-privilege agent identity and credentials",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-05"
+      ],
+      "scope": [
+        "mas/security.py",
+        "mas/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Principals authenticate to scoped permissions; credentials are revocable and isolated.",
+        "Provide independently reproducible evidence: Permission matrix, denied-action tests, rotation drill",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-07",
+      "title": "Sandbox and tool execution policy",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-06"
+      ],
+      "scope": [
+        "mas/tools/",
+        "mas/security.py",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Filesystem, shell, browser, and network tools enforce deny-by-default scoped policies.",
+        "Provide independently reproducible evidence: Sandbox escape and network/filesystem denial tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-08",
+      "title": "Supply-chain and secret scanning",
+      "priority": "HIGH",
+      "dependencies": [
+        "SEC-05"
+      ],
+      "scope": [
+        ".github/",
+        "scripts/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "security_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "CI rejects exposed secrets, disallowed vulnerable dependencies, and unapproved artifacts.",
+        "Provide independently reproducible evidence: Negative scanner CI runs and configuration",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-07",
+      "title": "Enforce dependencies and assignment authorization",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-05"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Claims and transitions enforce dependencies; reassignment requires authenticated authorization.",
+        "Provide independently reproducible evidence: Dependency graph and unauthorized reassignment tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-08",
+      "title": "Atomic agent claims leases and heartbeats",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-07"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "backend_engineer",
+      "status": "BACKLOG",
+      "acceptance": [
+        "One active lease per task; expired leases recover without duplicate execution.",
+        "Provide independently reproducible evidence: Concurrent claim and lease expiry tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-09",
+      "title": "Retries timeouts and dead-letter recovery",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-08"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Bounded retries preserve evidence and prevent duplicate side effects; dead letters remain inspectable.",
+        "Provide independently reproducible evidence: Crash, restart, timeout, and retry tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-10",
+      "title": "Capacity-aware scheduling and WIP controls",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-08"
+      ],
+      "scope": [
+        "mas/pm/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "product_lead",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Scheduling respects priority, dependencies, agent capacity, budget, and WIP ceilings.",
+        "Provide independently reproducible evidence: Scheduling simulation and concurrency report",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-11",
+      "title": "Reliable Git-to-board reconciliation",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "PM-07"
+      ],
+      "scope": [
+        "mas/pm/git_queue.py",
+        "mas/pm/db.py",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Imports are idempotent; conflicts detected; existing states and active assignments are not silently overwritten.",
+        "Provide independently reproducible evidence: Import conflict and idempotency tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-12",
+      "title": "Automated Git change detection and agent pickup",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-08",
+        "PM-11"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/dashboard/",
+        "scripts/",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "security_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Authorized Git changes reach board and eligible agents without manual card creation.",
+        "Provide independently reproducible evidence: Git push to board to agent E2E test",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "ARC-01",
+      "title": "Versioned task agent event and tool contracts",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-07"
+      ],
+      "scope": [
+        "mas/",
+        "docs/",
+        "tests/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "backend_engineer",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Contracts include schema versions, compatibility policy, and migration behavior.",
+        "Provide independently reproducible evidence: Versioned specifications and compatibility tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "ARC-02",
+      "title": "Durable event processing and idempotency",
+      "priority": "HIGH",
+      "dependencies": [
+        "ARC-01"
+      ],
+      "scope": [
+        "mas/",
+        "tests/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "platform_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Events survive restart; duplicates are idempotent; failed events replay safely.",
+        "Provide independently reproducible evidence: Persistence, replay, and fault injection tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "ARC-03",
+      "title": "Service boundaries and architectural fitness tests",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "ARC-01",
+        "ARC-02"
+      ],
+      "scope": [
+        "mas/",
+        "docs/",
+        "tests/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Module boundaries documented and prohibited dependencies caught in CI.",
+        "Provide independently reproducible evidence: Architecture decisions and fitness tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-06",
+      "title": "Runtime browser worker isolation verification",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-07"
+      ],
+      "scope": [
+        "mas/tools/computer_use.py",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "security_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Health checks inspect actual isolation and fail when protections are absent.",
+        "Provide independently reproducible evidence: Positive and negative runtime isolation tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "CU-07",
+      "title": "Permissioned browser and desktop action policies",
+      "priority": "HIGH",
+      "dependencies": [
+        "CU-06"
+      ],
+      "scope": [
+        "mas/tools/",
+        "mas/security.py",
+        "tests/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "security_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Computer actions require scoped authorization, bounded execution, audit trails, and sensitive-action approval.",
+        "Provide independently reproducible evidence: Denied action and supervised browser tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UI-05",
+      "title": "Restore Scrum board end-to-end functionality",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "PM-11"
+      ],
+      "scope": [
+        "portal/",
+        "mas/dashboard/",
+        "tests/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Board loads live projects and issues, shows accurate state, and permits authorized transitions without runtime errors.",
+        "Provide independently reproducible evidence: Browser screenshots and API/Playwright tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UI-06",
+      "title": "Live agent task evidence and review visibility",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "UI-05",
+        "PM-08",
+        "GOV-03"
+      ],
+      "scope": [
+        "portal/",
+        "mas/dashboard/",
+        "tests/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "product_lead",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Board shows truthful ownership, blockers, evidence, and review status with accessible navigation.",
+        "Provide independently reproducible evidence: Browser acceptance and accessibility tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "QA-01",
+      "title": "Independent re-audit of all 24 legacy tasks",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "GOV-04",
+        "SEC-05"
+      ],
+      "scope": [
+        "tests/",
+        "docs/",
+        "scripts/"
+      ],
+      "assignee_principal": "qa_critic",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Each legacy ticket gets independently verified disposition; unsupported DONE claims flagged for rework.",
+        "Provide independently reproducible evidence: 24-item audit matrix with verifiable evidence",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "QA-02",
+      "title": "Deterministic integration and end-to-end environments",
+      "priority": "HIGH",
+      "dependencies": [
+        "UI-05"
+      ],
+      "scope": [
+        "tests/",
+        "scripts/",
+        "docs/"
+      ],
+      "assignee_principal": "qa_critic",
+      "reviewer_principal": "platform_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Isolated reproducible tests cover intake through independent acceptance.",
+        "Provide independently reproducible evidence: CI artifacts and reproducibility results",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "QA-03",
+      "title": "Failure concurrency and adversarial regression",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "QA-02",
+        "PM-09"
+      ],
+      "scope": [
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "adversarial_red_team",
+      "reviewer_principal": "chief_architect",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Fault injection catches authorization, corruption, replay, and recovery defects.",
+        "Provide independently reproducible evidence: Reproducible fault matrix and test results",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-05",
+      "title": "Protected CI/CD and artifact provenance",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "GOV-04",
+        "SEC-08"
+      ],
+      "scope": [
+        ".github/",
+        "scripts/",
+        "docs/",
+        "tests/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "security_sre",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Release gates block failing tests, unverifiable artifacts, and missing independent approval.",
+        "Provide independently reproducible evidence: CI policy and negative pipeline tests",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-06",
+      "title": "Monitoring alerts budgets and runbooks",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-09"
+      ],
+      "scope": [
+        "mas/",
+        "docs/",
+        "scripts/",
+        "tests/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "finops_governor",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Agent failure, queue latency, token spend, denials, and stuck tasks have actionable alerts.",
+        "Provide independently reproducible evidence: Alert drills, dashboards, and runbooks",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-07",
+      "title": "Backup recovery rollback and controlled rollout",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "OPS-05",
+        "OPS-06"
+      ],
+      "scope": [
+        "scripts/",
+        "docs/",
+        "tests/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "State restoration, schema rollback, and deployment rollback meet approved recovery objectives.",
+        "Provide independently reproducible evidence: Restore and rollback exercise logs",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-08",
+      "title": "Load soak and resilience qualification",
+      "priority": "MEDIUM",
+      "dependencies": [
+        "PM-10",
+        "OPS-07"
+      ],
+      "scope": [
+        "tests/",
+        "scripts/",
+        "docs/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "chief_architect",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Representative workloads meet agreed throughput, latency, resource, and recovery targets.",
+        "Provide independently reproducible evidence: Benchmarks and resilience report",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "REL-01",
+      "title": "Independent production readiness audit",
+      "priority": "LOW",
+      "dependencies": [
+        "QA-01",
+        "QA-03",
+        "OPS-07",
+        "OPS-08",
+        "ARC-03",
+        "CU-07",
+        "UI-06",
+        "GOV-05"
+      ],
+      "scope": [
+        "docs/",
+        "tests/"
+      ],
+      "assignee_principal": "adversarial_red_team",
+      "reviewer_principal": "product_lead",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Release gates have independently reproducible evidence with no unresolved critical findings.",
+        "Provide independently reproducible evidence: Independent release decision and risk register",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "REL-02",
+      "title": "Controlled autonomous pilot and 10/10 reassessment",
+      "priority": "LOW",
+      "dependencies": [
+        "REL-01",
+        "PM-12"
+      ],
+      "scope": [
+        "docs/",
+        "tests/",
+        "scripts/"
+      ],
+      "assignee_principal": "chief_architect",
+      "reviewer_principal": "adversarial_red_team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Representative tasks complete monitored end-to-end pilot and seven categories meet agreed acceptance criteria.",
+        "Provide independently reproducible evidence: Pilot report, failure analysis, independent scorecard",
+        "Attach actual implementation commit and passing test artifacts; do not generate reviewer PASS verdicts in task execution scripts",
+        "Obtain independently authenticated review and authorized workflow acceptance"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
     }
   ]
 }
