@@ -1548,7 +1548,7 @@
     },
     {
       "id": "PM-13",
-      "title": "Ticket category, agent assignment history and verified token usage on Scrum board",
+      "title": "Ticket category, agent assignment and token tracking for active and DONE tickets",
       "priority": "HIGH",
       "dependencies": [
         "PM-07",
@@ -1571,7 +1571,11 @@
         "Display per-ticket token budget, consumed and remaining tokens, usage by agent and model, and estimated or billed cost with pricing source and currency; avoid double counting on retries",
         "Expose category, assignee, assigned-by and token metrics on the live Scrum board cards and ticket detail drawer with accessible responsive UX",
         "Enforce role-based permissions for category edits and reassignment; usage events must be attributable and tamper-evident",
-        "Include schema migrations, backward-compatible API contracts, automated database/API/UI tests and independently reproduced screenshots; obtain authenticated independent reviewer approval"
+        "Apply category, assignee, assigned-by, assignment history, token metrics and cost views to ALL existing tickets, including DONE, without resetting workflow state, completion timestamps, evidence, verdicts, or audit history",
+        "Backfill historical category and assignment only from authoritative persisted issue records, Git allocation manifests, and attributable audit events; distinguish planned assignee from actual executor and mark unresolved historical attribution as unknown",
+        "Backfill historical input/output/cached token usage and cost only from trustworthy provider usage records, trace IDs, billing exports or existing metering logs with explicit provenance; never infer token totals from budgets, commits or test logs, and never display missing historical usage as zero",
+        "Make DONE ticket details read-only for governance-controlled workflow fields while allowing authorized, auditable metadata enrichment without re-opening or re-certifying tickets",
+        "Include idempotent and reversible schema migrations, historical backfill dry-run and reconciliation reports, backward-compatible APIs, tests covering DONE/active/backlog states, UI screenshots and authenticated independent approval"
       ],
       "appetite_tokens": 50000,
       "appetite_timeout_s": 1800,
