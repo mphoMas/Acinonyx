@@ -731,3 +731,11 @@
   border-color: var(--accent-cyan, #00f0ff);
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 }
+
+/* UX-02: Accessibility and keyboard navigation focus states */
+.ticket-card:focus-visible,
+.board-btn:focus-visible,
+.filter-select:focus-visible {
+  outline: 2px solid var(--accent-cyan, #00f0ff);
+  outline-offset: 3px;
+}
