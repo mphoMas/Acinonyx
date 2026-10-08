@@ -1545,6 +1545,41 @@
         ".env.*",
         "**/secrets/**"
       ]
+    },
+    {
+      "id": "PM-13",
+      "title": "Ticket category, agent assignment history and verified token usage on Scrum board",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-07",
+        "UI-05"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/dashboard/",
+        "portal/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Define and persist a versioned ticket category taxonomy, including Security, Governance, Backend, Frontend, Computer Use, QA, Architecture, Operations and Research; support existing tickets without losing history",
+        "Show current assigned agent principal and authorized assigned-by principal with assignment timestamp; maintain immutable or append-only assignment and reassignment history with actor, time and reason",
+        "Ingest actual model/provider usage per ticket and execution attempt, including input, output, cached and total tokens where available; deduplicate events and never represent unavailable usage as zero",
+        "Display per-ticket token budget, consumed and remaining tokens, usage by agent and model, and estimated or billed cost with pricing source and currency; avoid double counting on retries",
+        "Expose category, assignee, assigned-by and token metrics on the live Scrum board cards and ticket detail drawer with accessible responsive UX",
+        "Enforce role-based permissions for category edits and reassignment; usage events must be attributable and tamper-evident",
+        "Include schema migrations, backward-compatible API contracts, automated database/API/UI tests and independently reproduced screenshots; obtain authenticated independent reviewer approval"
+      ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
     }
   ]
 }
