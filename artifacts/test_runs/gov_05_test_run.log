@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.0.3, pluggy-1.6.0 -- /home/acinonyx/anaconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/acinonyx/Desktop/MAS
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collecting ... collected 6 items
+
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_forged_verdict_signature PASSED [ 16%]
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_missing_critic_reviews PASSED [ 33%]
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_conflicting_decisions PASSED [ 50%]
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_builder_self_review PASSED [ 66%]
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_direct_evidence_tampering PASSED [ 83%]
+tests/test_gov_05_adversarial_judicial_review.py::test_adversarial_attack_stale_verdict_rework_cycle PASSED [100%]
+
+============================== 6 passed in 0.14s ===============================
