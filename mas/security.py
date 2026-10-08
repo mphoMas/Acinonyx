@@ -121,3 +121,15 @@ class ExecutionContext:
             )
         return current
 
+
+def validate_reviewer_authorization(issue_key: str, author_principal: str, reviewer_principal: str) -> None:
+    """
+    SEC-02: Enforces reviewer authorization and separation of builder from reviewer.
+    """
+    if not reviewer_principal or not reviewer_principal.strip():
+        raise PermissionError(f"Reviewer authorization failed for {issue_key}: missing reviewer principal.")
+    if author_principal == reviewer_principal:
+        raise PermissionError(
+            f"Separation of duties violation for {issue_key}: author '{author_principal}' cannot review their own work."
+        )
+
