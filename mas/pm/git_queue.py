@@ -45,7 +45,7 @@ def load_manifest():
     return data
 
 
-def sync(*, dry_run=False, db=None):
+def sync(*, dry_run=False, db=None, reconcile_assignees=True):
     data = load_manifest()
     database = db or get_pm_db()
     project_key = data["project_key"].upper()
@@ -55,15 +55,23 @@ def sync(*, dry_run=False, db=None):
                           "Git-defined agent work queue", db=database)
         project = database.get_project_by_key(project_key)
     issues = database.list_issues(project_id=project.id) if project else []
-    known_ids = {task["id"] for task in data["tasks"]
-                 if any(f"[ALLOCATION_ID:{task['id']}]" in issue.description
-                        for issue in issues)}
-    known_titles = {issue.title.casefold() for issue in issues}
+    by_alloc_id = {}
+    for task in data["tasks"]:
+        for issue in issues:
+            if f"[ALLOCATION_ID:{task['id']}]" in issue.description or issue.title.casefold() == task["title"].casefold():
+                by_alloc_id[task["id"]] = issue
+                break
     created = []
     skipped = []
+    reconciled = []
     for task in data["tasks"]:
-        if task["id"] in known_ids or task["title"].casefold() in known_titles:
+        existing = by_alloc_id.get(task["id"])
+        if existing:
             skipped.append(task["id"])
+            if reconcile_assignees and existing.assignee_principal != task["assignee_principal"]:
+                if not dry_run:
+                    database.update_issue_assignee(existing.id, task["assignee_principal"])
+                reconciled.append(f"{existing.key} -> {task['assignee_principal']}")
             continue
         if dry_run:
             created.append(task["id"])
@@ -89,8 +97,10 @@ def sync(*, dry_run=False, db=None):
             db=database,
         )
         created.append(f"{task['id']} -> {result['issue_key']}")
-        known_titles.add(task["title"].casefold())
-    return {"created": created, "skipped": skipped, "total": len(data["tasks"])}
+    res = {"created": created, "skipped": skipped, "total": len(data["tasks"])}
+    if reconciled:
+        res["reconciled"] = reconciled
+    return res
 
 
 def next_tasks(agent, *, db=None):
@@ -122,13 +132,17 @@ def next_tasks(agent, *, db=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sync", action="store_true", help="Import missing tasks to MAS-PM")
+    parser.add_argument("--assign", "--reconcile", action="store_true", help="Assign tickets to designated agent principals")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes")
     parser.add_argument("--agent", help="List dependency-ready tasks for this agent principal")
     args = parser.parse_args()
     if args.agent:
         print(json.dumps(next_tasks(args.agent), indent=2))
+    elif args.assign:
+        print(json.dumps(sync(dry_run=args.dry_run, reconcile_assignees=True), indent=2))
     else:
         print(json.dumps(sync(dry_run=not args.sync or args.dry_run), indent=2))
+
 
 
 if __name__ == "__main__":

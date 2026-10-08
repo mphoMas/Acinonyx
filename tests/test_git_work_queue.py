@@ -33,3 +33,20 @@ def test_agent_pickup_respects_dependencies(tmp_path):
     assert frontend == []
     platform = next_tasks("platform_sre", db=db)
     assert [task["id"] for task in platform] == ["OPS-01"]
+
+
+def test_sync_reconciles_unassigned_issues(tmp_path):
+    db = PMDatabase(tmp_path / "pm.db")
+    sync(db=db)
+    project = db.get_project_by_key("MAS")
+    issue = db.list_issues(project_id=project.id)[0]
+    # Set assignee to None to simulate unassigned backlog state
+    db.update_issue_assignee(issue.id, None)
+    refreshed = db.get_issue(issue.id)
+    assert refreshed.assignee_principal is None
+
+    # Reconcile via sync
+    result = sync(db=db, reconcile_assignees=True)
+    assert len(result["reconciled"]) >= 1
+    reconciled_issue = db.get_issue(issue.id)
+    assert reconciled_issue.assignee_principal is not None

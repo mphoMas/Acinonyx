@@ -114,6 +114,24 @@ def pm_create_issue(
     }
 
 
+def pm_assign_issue(
+    issue_key: str,
+    assignee_principal: str,
+    db: Optional[PMDatabase] = None,
+) -> Dict[str, Any]:
+    """Assigns an issue to a specific agent principal."""
+    database = db or get_pm_db()
+    issue = database.get_issue(issue_key)
+    if not issue:
+        raise ValueError(f"Issue '{issue_key}' not found.")
+    database.update_issue_assignee(issue.id, assignee_principal)
+    return {
+        "status": "ASSIGNED",
+        "issue_key": issue.key,
+        "assignee_principal": assignee_principal,
+    }
+
+
 def pm_transition_issue(
     issue_key: str,
     target_state: str,

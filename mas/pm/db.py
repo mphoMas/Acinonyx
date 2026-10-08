@@ -480,6 +480,30 @@ class PMDatabase:
             with self.atomic_transaction() as c:
                 _execute_update(c)
 
+    def update_issue_assignee(
+        self,
+        issue_id: str,
+        assignee_principal: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
+        """Atomic issue assignee update."""
+        def _execute_update(c: sqlite3.Connection) -> None:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                """
+                UPDATE pm_issues
+                SET assignee_principal = ?, updated_at = ?
+                WHERE id = ? OR key = ?
+                """,
+                (assignee_principal, now, issue_id, issue_id),
+            )
+
+        if conn is not None:
+            _execute_update(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute_update(c)
+
     def next_issue_key(self, project_key: str) -> str:
         """
         PM-DATA-001: Computes the next incremental sequence issue key using atomic transaction.
