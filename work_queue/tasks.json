@@ -1552,7 +1552,8 @@
       "priority": "HIGH",
       "dependencies": [
         "PM-07",
-        "UI-05"
+        "UI-05",
+        "OPS-09"
       ],
       "scope": [
         "mas/pm/",
@@ -1577,6 +1578,204 @@
         "Make DONE ticket details read-only for governance-controlled workflow fields while allowing authorized, auditable metadata enrichment without re-opening or re-certifying tickets",
         "Include idempotent and reversible schema migrations, historical backfill dry-run and reconciliation reports, backward-compatible APIs, tests covering DONE/active/backlog states, UI screenshots and authenticated independent approval"
       ],
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-09",
+      "title": "Eliminate spoofable execution principals and require trusted reviewer authentication",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        "mas/security.py",
+        "mas/pm/",
+        "mas/mcp/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "adversarial_red_team",
+      "acceptance": [
+        "Bind principal identity to verified agent/session credentials at a trusted ingress; application scripts and tool callers cannot self-assert or switch to privileged reviewer identities",
+        "Remove or tightly restrict unauthenticated principal setters and arbitrary ExecutionContext.scope elevation in production code; prove impersonation attempts fail closed",
+        "Test direct database calls, FSM transitions, service endpoints, and adversarial reviewer identity spoofing; preserve valid isolated test harness capabilities",
+        "Provide threat model, implementation commit, reproducible test evidence, and independently authenticated review"
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "GOV-06",
+      "title": "Remove scripted PASS approvals and enforce independently sourced verdicts",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-09",
+        "GOV-02"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/security.py",
+        "scripts/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "adversarial_red_team",
+      "acceptance": [
+        "Remove production execution paths that fabricate PASS verdicts or enter arbitrary reviewer/chief_architect contexts to advance tickets",
+        "Disallow enforce_auth=False and unsigned or sig_-prefixed legacy approvals in production authorization and transition gates; retain historical evidence as unverified rather than silently deleting",
+        "Require independently authenticated reviewer decisions tied to specific reviewed commit, evidence digest, reviewer identity, and current rework cycle",
+        "Add adversarial tests for direct DB bypass, legacy signatures, scripted approvals, and unauthorized DONE transitions",
+        "Do not re-certify historical DONE tickets automatically; produce reconciliation report and independent review evidence"
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "SEC-10",
+      "title": "Harden verdict signing keys and fail-closed Git changeset scope verification",
+      "priority": "CRITICAL",
+      "dependencies": [
+        "SEC-05"
+      ],
+      "scope": [
+        "mas/security.py",
+        "mas/pm/guards.py",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "security_sre",
+      "reviewer_principal": "qa_critic",
+      "acceptance": [
+        "Remove hard-coded default verdict signing key; require secret from protected configuration or dedicated signing service, with explicit missing-key failure",
+        "Ensure signing/verifying keys cannot be overridden by untrusted callers; document rotation and provenance",
+        "Reject empty or unverifiable changesets when a code-change commit is mandatory; reject broad wildcard scope bypasses and validate all changed files against forbidden paths",
+        "Test malformed SHAs, empty commits, merge commits, root commits, symlink/path traversal, and restricted path globs as applicable",
+        "Provide independent security review and reproducible test artifacts"
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "OPS-09",
+      "title": "Stabilize Ruff lint and reproducible GitHub Actions CI",
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "scope": [
+        "mas/",
+        "tests/",
+        "scripts/",
+        ".github/",
+        "pyproject.toml",
+        "ruff.toml",
+        "requirements*.txt",
+        "docs/"
+      ],
+      "assignee_principal": "platform_sre",
+      "reviewer_principal": "qa_critic",
+      "acceptance": [
+        "Fix Ruff violations using the exact pinned configuration and Python version used in GitHub Actions; do not disable rules or globally suppress findings to achieve green CI",
+        "Use safe autofixes selectively and manually review security-sensitive exception handling, async I/O, subprocess handling and permission checks",
+        "Run targeted security and PM tests plus full regression suite; record exact commands, dependency lock/version, exit codes and logs",
+        "GitHub Actions produces reproducible lint and test artifacts tied to immutable commit SHA; report actual pass/fail status and remaining exceptions",
+        "Obtain independent QA review of CI workflow and artifacts"
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "PM-14",
+      "title": "Phase 3 autonomous ticket execution integration and audited end-to-end pickup",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-07",
+        "PM-08",
+        "PM-11",
+        "PM-12",
+        "GOV-06",
+        "SEC-10",
+        "OPS-09"
+      ],
+      "scope": [
+        "mas/pm/",
+        "mas/",
+        "scripts/",
+        "tests/",
+        ".github/",
+        "docs/"
+      ],
+      "assignee_principal": "agent_workflow_engineer",
+      "reviewer_principal": "security_sre",
+      "acceptance": [
+        "Demonstrate dependency-gated, authorized assignment and atomic agent claim with lease/heartbeat and crash recovery",
+        "Demonstrate Git-to-board reconciliation and automatic pickup of eligible tickets without changing historical DONE records",
+        "Enforce independently authenticated review, evidence provenance and verified token budgets during execution",
+        "Provide repeatable integration tests for concurrency, duplicate delivery, interrupted workers, unauthorized claims and failed CI",
+        "Attach end-to-end trace, commit SHA, logs and independent review; do not mark DONE from orchestration scripts"
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 50000,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**"
+      ]
+    },
+    {
+      "id": "UI-07",
+      "title": "Phase 4 Scrum board rollout and historical DONE ticket metadata verification",
+      "priority": "HIGH",
+      "dependencies": [
+        "PM-13",
+        "PM-14"
+      ],
+      "scope": [
+        "mas/dashboard/",
+        "mas/pm/",
+        "portal/",
+        "tests/",
+        "docs/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "acceptance": [
+        "Verify category, current assignee, assigned-by and append-only assignment history on live board for BACKLOG, active and DONE tickets",
+        "Display actual per-agent/per-model token usage and cost with provenance; unavailable historical values must be shown as unknown, never zero",
+        "Run idempotent dry-run and backfill reconciliation against historical DONE tickets without rewriting completion dates, evidence, approvals or status",
+        "Validate accessible responsive card/detail UI, authorization boundaries and automated API/UI regression tests",
+        "Provide screenshots, test evidence, migration report and independent QA acceptance"
+      ],
+      "status": "BACKLOG",
       "appetite_tokens": 50000,
       "appetite_timeout_s": 1800,
       "forbidden_paths": [
