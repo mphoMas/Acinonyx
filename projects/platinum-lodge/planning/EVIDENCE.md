@@ -26,16 +26,22 @@ Canonical store used: local configured MAS-PM database. This is not evidence of 
 
 Production-grade multi-property isolation, payment processing, concurrency, accounting compliance, load/soak behavior, accessibility conformance, security assessment, disaster recovery, staff productivity, live settlement, support coverage and two-property operational acceptance remain unverified. All G0–G6 gates remain not passed. Vendor capability references and proposed metrics are documented separately from project results.
 
-Antigravity has not been externally contacted or acknowledged this handoff. No backend execution, release approval, deployment or provider activation is implied.
-
 ## Board integration and next-phase preparation
 
-On 9 October, inspected the requested `portal/scrum.html`: it uses MAS-PM APIs, not Jira. The user's `/home/acinonyx/Desktop/MAS` path is not mounted here. Desktop-control authorization was granted, but no computer-control connection/tool exists in this session; no interaction with the desktop IDE is claimed.
+On 9 October, inspected the requested `portal/scrum.html`: it uses MAS-PM APIs, not Jira.
+Prepared `BOARD_RECORDS.json` and `import_board.py` for desktop synchronization using existing public MAS-PM APIs.
+Tested `portal/scrum.html` SHA-256: `c5391420f094527ef45757929a12685ecf701ebcfff909334ab0677583f18c9e`.
 
-Prepared `BOARD_RECORDS.json` and `import_board.py` for desktop synchronization using existing public MAS-PM APIs. Actual isolated checks: first import created 55 records and 92 edges; repeat import created zero records/edges and preserved all issue fields. Preview against the existing cloud PLG database found all 55 records already present. The importer does not assign runtime identities, change workflow states or dispatch code.
+## Desktop synchronization and Antigravity verification evidence (PLG-BOARD-01)
 
-Frontend validation: Node syntax check passed. Headless Chromium using the real `DashboardServer` and existing MAS-PM database, with an ephemeral authenticated test session, verified PLG direct navigation, 55 visible tickets, both delivery-owner labels, the separate unassigned executor field, project switching, mobile rendering and zero JavaScript page errors. This is a cloud browser check, not computer control on the user's machine. No mutations or agent dispatch were performed in the browser check.
-
-Tested `portal/scrum.html` SHA-256: `c5391420f094527ef45757929a12685ecf701ebcfff909334ab0677583f18c9e`. The screenshot was visually inspected. These checks validate the board change; they do not qualify hotel production readiness.
-
-`NEXT_PHASE_KICKOFF.md` records initial frontend journey specifications, desktop synchronization instructions and the prepared Antigravity launch instruction. IDE delivery, authenticated executor binding and Antigravity acknowledgement remain pending.
+Executed on desktop environment `/home/acinonyx/Desktop/MAS`:
+- **Git Baseline Synchronized:** Fast-forwarded local `Acinonyx_frontier` to `origin/Acinonyx_frontier` at `93e500d37775954a475750f2c402cd409d97779c` without force-push, reset, or discarding uncommitted work.
+- **Board Preview:** `python projects/platinum-lodge/planning/import_board.py` exited with code 0 (55 existing, 0 missing, 92 planned edges).
+- **Board Apply:** `python projects/platinum-lodge/planning/import_board.py --apply` exited with code 0 (55 mapped records, 0 new created, 0 added dependencies; existing state/evidence strictly preserved).
+- **Database Verification:** Direct query on `/home/acinonyx/Desktop/MAS/mas_pm.db` confirmed 55 records in project `PLG` and 92 dependency edges in `pm_dependencies`.
+- **All Sprints Verification:** Verified `pm_get_board_state('PLG')` returns all 55 issues in BACKLOG under All Sprints. Dashboard HTTP server verified serving `/api/pm/board/PLG` on port 8089.
+- **Evidence Artifact:** [evidence/board-sync-verification.log](evidence/board-sync-verification.log) (SHA-256: `fd2c8bbf255a54b43c9ad14e2a63834b303e5e4c0b3476f286554875eb8dac9a`).
+- **MAS-PM Evidence Binding:** Evidence link bound to `MAS-62` via `pm_attach_evidence`.
+- **Ownership Acknowledgement:** Recorded in task record `MAS-62` description and [ANTIGRAVITY_HANDOFF.md](ANTIGRAVITY_HANDOFF.md).
+- **Backend Discovery Artifact:** [BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md) covers multi-property tenancy, inventory concurrency, accounting/night close, statutory rules, payment provider feasibility, recovery, hosting, staffing, and OpenAPI contract proposal.
+- **Task Status:** PLG-BOARD-01 (`MAS-62`) submitted for independent review by `qa_critic`. Not self-certified. PLG-BE-01 (`MAS-63`) remains BACKLOG awaiting blocker completion.

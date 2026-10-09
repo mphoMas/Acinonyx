@@ -1,0 +1,94 @@
+=== PLATINUM LODGE BOARD IMPORT & VERIFICATION EVIDENCE ===
+Timestamp: 2026-10-09T12:55:00Z
+Database: /home/acinonyx/Desktop/MAS/mas_pm.db
+Baseline Commit: 93e500d37775954a475750f2c402cd409d97779c
+Branch: Acinonyx_frontier
+
+--- Step 1: Preview Board Import ---
+Exit Code: 0
+{
+  "mode": "PREVIEW",
+  "project": "PLG",
+  "missing_records": [],
+  "existing_records": 55,
+  "planned_edges": 92
+}
+
+--- Step 2: Apply Board Import ---
+Exit Code: 0
+{
+  "mode": "APPLIED",
+  "project": "PLG",
+  "created": [],
+  "added_dependencies": 0,
+  "mapped_records": 55,
+  "key_mapping": {
+    "PLG-1": "PLG-1",
+    "PLG-2": "PLG-2",
+    "PLG-3": "PLG-3",
+    "PLG-4": "PLG-4",
+    "PLG-5": "PLG-5",
+    "PLG-6": "PLG-6",
+    "PLG-7": "PLG-7",
+    "PLG-8": "PLG-8",
+    "PLG-9": "PLG-9",
+    "PLG-10": "PLG-10",
+    "PLG-11": "PLG-11",
+    "PLG-12": "PLG-12",
+    "PLG-13": "PLG-13",
+    "PLG-14": "PLG-14",
+    "PLG-15": "PLG-15",
+    "PLG-16": "PLG-16",
+    "PLG-17": "PLG-17",
+    "PLG-18": "PLG-18",
+    "PLG-19": "PLG-19",
+    "PLG-20": "PLG-20",
+    "PLG-21": "PLG-21",
+    "PLG-22": "PLG-22",
+    "PLG-23": "PLG-23",
+    "PLG-24": "PLG-24",
+    "PLG-25": "PLG-25",
+    "PLG-26": "PLG-26",
+    "PLG-27": "PLG-27",
+    "PLG-28": "PLG-28",
+    "PLG-29": "PLG-29",
+    "PLG-30": "PLG-30",
+    "PLG-31": "PLG-31",
+    "PLG-32": "PLG-32",
+    "PLG-33": "PLG-33",
+    "PLG-34": "PLG-34",
+    "PLG-35": "PLG-35",
+    "PLG-36": "PLG-36",
+    "PLG-37": "PLG-37",
+    "PLG-38": "PLG-38",
+    "PLG-39": "PLG-39",
+    "PLG-40": "PLG-40",
+    "PLG-41": "PLG-41",
+    "PLG-42": "PLG-42",
+    "PLG-43": "PLG-43",
+    "PLG-44": "PLG-44",
+    "PLG-45": "PLG-45",
+    "PLG-46": "PLG-46",
+    "PLG-47": "PLG-47",
+    "PLG-48": "PLG-48",
+    "PLG-49": "PLG-49",
+    "PLG-50": "PLG-50",
+    "PLG-51": "PLG-51",
+    "PLG-52": "PLG-52",
+    "PLG-53": "PLG-53",
+    "PLG-54": "PLG-54",
+    "PLG-55": "PLG-55"
+  },
+  "preserved_existing_state_assignees_evidence": true,
+  "new_records": "BACKLOG, no runtime assignee, zero execution appetite"
+}
+
+--- Step 3: Database Verification ---
+PLG Records in DB: 55
+PLG Dependency Edges in DB: 92
+
+--- Step 4: Verification Result ---
+55 mapped PLG records confirmed: TRUE
+92 dependency edges confirmed: TRUE
+All Sprints view verified: TRUE
+Status: SUCCESS
