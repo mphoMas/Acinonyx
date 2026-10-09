@@ -136,7 +136,7 @@ Indicative **14–20 elapsed weeks**, conditional on an available backend team, 
 | 3: finance and payments | Weeks 6–12, after foundations | Ledger, taxes/invoices, provider, webhooks, business-day/shift reconciliation; G3 |
 | 4: housekeeping and management | Weeks 8–13 | Assigned mobile workflow, maintenance exceptions, portfolio reporting, productive task workspace; G4 |
 | 5: qualification and migration | Weeks 13–16 or later | Security/performance/recovery, migration rehearsals, staff UAT, support readiness; G5 |
-| 6: controlled rollout and stabilization | Weeks 17–20 or earlier if qualified | Authorized production rollout, 14 consecutive staffed operational days across at least two participating properties; G6 |
+| 6: controlled rollout and stabilization | Weeks 17–20 or earlier if qualified | Authorized production rollout, 14 consecutive staffed operational days at Platinum Hotel Mozambique, with multi-property technical qualification; G6 |
 
 Windows overlap where dependencies permit; adding them does not produce the elapsed estimate. Procurement and legal integrations may lengthen the path. Finance policy/provider feasibility and tenant-safe foundations are the first critical risks. Backend work can proceed by domain after G1, while Codex builds against agreed contracts.
 
@@ -152,7 +152,7 @@ Weekly product/operations review: scope, real demonstrations, blockers, metric r
 
 ## 10. Operational acceptance and cutover
 
-Qualification uses synthetic data before authorized customer migration. Validate at least two properties in one organization and a separate adversarial organization. Real multi-property operational acceptance needs at least two participating properties; if a second real property is unavailable, synthetic multi-property qualification is valid technical evidence but not full operational acceptance.
+Qualification uses synthetic data before authorized customer migration. Validate at least two properties in one organization and a separate adversarial organization. Owner amended the initial pilot on 9 October 2026 to Platinum Hotel only, in Mozambique. G6 now requires 14 consecutive staffed operational days there plus multi-property technical qualification. Synthetic evidence does not establish live second-property operational acceptance; that remains an expansion gate when another property participates. Multi-property architecture, authorization and correctness are release-one requirements.
 
 Migration rehearsals map property inventories, guests, reservations, opening balances, deposits and users; deduplicate deliberately; reconcile source/target totals and preserve provenance. No customer passwords or sessions are copied blindly. Take verified backups, establish a write freeze/capture window, obtain operational sign-off, and reconcile before reopening transactions.
 
@@ -166,7 +166,7 @@ Run the first controlled cohort through at least 14 consecutive staffed operatio
 
 | Risk / blind spot | Prevention, decision or test | Owner |
 | --- | --- | --- |
-| Second property not identified | Name two operational partners; separate synthetic and real acceptance | Project owner |
+| One-property pilot cannot prove live multi-property operations | Qualify technical isolation with synthetic organizations/properties; require additional operational qualification before expanding to a second real property | Project owner |
 | Multi-property UI mistaken for isolation | Server-scoped records/files/jobs/exports and adversarial 2-org tests | Antigravity |
 | Wrong property after switch or stale data | Context labels, state invalidation, unsaved-form handling, stale response rejection | Codex |
 | Concurrent booking/move/maintenance conflict | Transactional inventory invariants and fault/concurrency testing | Antigravity |
@@ -198,3 +198,6 @@ Budget separately for engineering/design/review, managed database and backups, a
 Discovery decisions to record: launch organizations/properties/countries; current systems and required channels; legal entities/currencies/timezones/tax/invoice rules; payment provider and merchant readiness; cash/refund/credit policies; inventory scale/room types; guest sharing/privacy; migration scope; support hours and incident decision owner; staffing/budget/date; approved brand assets. Alternatives, owner, deadline, evidence and impact belong in the decision log.
 
 Immediate work: Antigravity reads/acknowledges ownership and validates backend feasibility; Codex inventories frontend journeys and prepares the property/role workspace specification; the owner identifies launch partners and finance/payment decision-makers. Together finalize G0, agree contracts and staged tasks, then begin implementation. This planning handoff does not imply that Antigravity has already accepted or begun work.
+
+
+Owner amendment: [SCOPE_AMENDMENT_2026_10_09.md](SCOPE_AMENDMENT_2026_10_09.md) confirms the one-property initial pilot, Excel baseline, open provider selection and Codex lifecycle coordination with implementation ownership unchanged.

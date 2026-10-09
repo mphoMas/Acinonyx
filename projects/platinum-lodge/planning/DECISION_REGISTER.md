@@ -1,30 +1,27 @@
 # Discovery decision register
 
-Opened 9 October 2026. All decisions below are pending; proposed defaults are planning recommendations. Record evidence, decision maker, date, alternatives and backlog impact when resolved. G0 cannot pass with unresolved feasibility or statutory blockers.
+Opened and reconciled 9 October 2026. Latest owner replies in this delivery conversation govern current scope. Earlier Antigravity decision claims at `f8e74521` conflict with those replies and lack supporting statutory/provider verification; their historical record is retained with a superseded-readiness annotation. A proposal or recorded assertion is not a resolved decision.
 
-| ID | Decision | Accountable decision maker / technical preparer | Needed by | Proposed starting position |
-| --- | --- | --- | --- | --- |
-| DEC01 | Launch organizations, properties and operating countries | Project owner / Codex discovery | G0 | At least two participating properties; multi-organization adversarial fixtures |
-| DEC02 | Required incumbent systems, channels and migration sources | Project owner + hotel manager / Antigravity | G0 | Inventory dependencies before declaring integrations out of scope |
-| DEC03 | Tax, invoice, business-day, guest-registration and privacy rules | Project owner with accountant/legal advisor / Antigravity | G0 | Country-specific signed policy; no assumed universal rules |
-| DEC04 | Payment provider, merchant accounts, currencies and payout/terminal support | Project owner / Antigravity | G0 | One eligible hosted/tokenized provider plus cash/bank/manual tender workflows |
-| DEC05 | Cancellation, deposits, refunds, approvals and credit balances | Project owner + hotel finance / Antigravity | G0 | Explicit policy snapshots and server-enforced limits |
-| DEC06 | Database, hosting, identity and jobs architecture | Antigravity technical lead / separate technical reviewer | G0 | Modular Node 24 application; TypeScript; managed transactional PostgreSQL 16; reviewed identity option (ADR in BACKEND_DISCOVERY.md) |
-| DEC07 | Capacity, budget, target date and provider/infra procurement | Project owner / both teams estimate | G0 | 14–20 week indicative range; pilot infra ~$310/mo; reforecast from confirmed team capacity |
-| DEC08 | Cross-property guest sharing and portfolio permissions | Project owner with privacy advisor / Antigravity + Codex | G1 | Minimum sharing, explicit consent/policy and property-safe navigation |
-| DEC09 | Brand, imagery and language coverage | Project owner / Codex | G1 | Evolve forest-green/cream identity; licensed/owned assets; EN/PT core journeys |
-| DEC10 | Support hours, incident rota and cutover authority | Project owner / Antigravity operations | Before G5 | Coverage must match hotel operating risk; no assumed unsupported 24/7 promise |
-| DEC11 | Shared MAS-PM instance and real executor/reviewer identities | Authorized PM administrator / Antigravity with Codex | Before staging | Synchronize local planning records and bind actual authorized principals |
+| ID | Decision | Accountable decision maker / preparer | Needed by | Current status and next evidence |
+|---|---|---|---|---|
+| DEC01 | Launch organizations, properties and country | Owner / Codex | G0 | PARTIAL: Platinum Hotel only, Mozambique. Legal entity, room count, memberships and scope details outstanding. Multi-property technical capability remains release-one; live second-property acceptance deferred. |
+| DEC02 | Incumbent systems, channels and migration | Owner + operations / Antigravity | G0 | PARTIAL: Excel confirmed; no daily workflow measurement. Inventory columns, sources, channels and migration boundaries. No OTA exclusion approved. |
+| DEC03 | Fiscal, guest registration, privacy and business-day rules | Owner + qualified local accountant/legal advisor / Antigravity | G0 | OPEN: obtain applicable Mozambique policies and validated examples. Tax rates, exemptions, numbering, identification and retention not signed off by this conversation. |
+| DEC04 | Payment provider, merchant and settlement | Owner / Antigravity | G0 | OPEN: no existing provider/account. Assess eligible Mozambique options with real merchant, currency, refund, webhook and settlement evidence. DPO/Peach and mobile money integrations are candidates, not selected/verified. |
+| DEC05 | Deposits, cancellation, refund and approval policies | Owner + finance / Antigravity | G0 | OPEN: obtain explicit policy snapshots and limits. No 48-hour cancellation/refund rule or deposit requirement approved. |
+| DEC06 | Database, hosting, identity and jobs | Antigravity technical lead + separate reviewer | G0 | PROPOSED: modular Node/TypeScript/PostgreSQL and transactional outbox. Resolve CODEX_CONTRACT_REVIEW.md and obtain reviewed architecture/capacity decision. |
+| DEC07 | Capacity, budget, procurement and forecast | Owner / both teams | G0 | PROPOSED: indicative 14–20 weeks; funding, available staff and actual infrastructure/provider quote unconfirmed. |
+| DEC08 | Guest sharing and portfolio permissions | Owner + privacy advisor / both teams | G1 | OPEN: property isolation by default proposed; define any sharing and consent/access basis. |
+| DEC09 | Brand/assets/languages | Owner / Codex | G1 | PROPOSED: green/cream design candidate, EN/PT journeys. Confirm final trading name and review translations/assets. |
+| DEC10 | Support, incident coverage and cutover | Owner / Antigravity operations | Before G5 | OPEN: named staff, hours, escalation and rehearsal. No unsupported 24/7 promise. |
+| DEC11 | Actual board, principals, allowances and reviewers | Authorized PM administrator / both teams | Before staging | Antigravity reports desktop synchronization/coordination bindings; verify live configured instance. Cloud planning read remains 55 BACKLOG/unassigned records. No inferred credentials or completion. |
 
-## Current readiness
+## Readiness
 
-- Prototype syntax/workflow validation passed; production qualification has not started.
-- Project initiated in local MAS-PM: PLG, 55 records, all BACKLOG.
-- G0–G6: **NOT PASSED**. Documents and backlog are preparation, not gate completion.
-- Antigravity delivery team ownership acknowledgement and backend discovery completed ([BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md)); architecture options and capacity model proposed.
-- Provider feasibility (DEC04), launch-property confirmation (DEC01), incumbent integrations (DEC02), and finance/tax policies (DEC03) remain open blockers for G0.
-- No production deployment, provider activation, customer-data migration or operational acceptance has occurred under this plan.
+G0–G6 are **NOT PASSED**. Antigravity acknowledgement and backend discovery are recorded; Codex frontend/design and measurement/training candidates exist. The endpoint summary is not a jointly agreed full contract. Current backend proposal review is CODEX_CONTRACT_REVIEW.md; full epic/package sequence and readiness command are DELIVERY_LIFECYCLE.md.
 
-## First discovery agenda
+Owner confirmed Codex lifecycle coordination with implementation split unchanged. Pilot amendment is SCOPE_AMENDMENT_2026_10_09.md. Measure Excel workflows before claiming improvement. No production deployment, provider activation, customer-data migration or operational acceptance is claimed.
 
-Review DEC01–DEC07 with the project owner, hotel operations/finance representatives and Antigravity. Use real workflows to validate scope, confirm regulatory/provider blockers and produce a costed capacity plan. Codex starts frontend journey inventory and productivity measurement planning; Antigravity starts backend feasibility and contract proposals. Record actual decisions in MAS-PM; update this snapshot at the next gate.
+## Evidence provenance conflict
+
+`evidence/d1-launch-scope-decision.md` at `f8e74521` asserts two properties and resolved tax/provider rules as owner decisions. Latest explicit replies here name one Platinum Hotel and request eligible provider assessment. Its unverified assertions must not clear PLG-13/14/15 or G0. Retain the historical record, attach this reconciliation and resolve with the owner and qualified validators rather than implementing those assertions as approved policy.

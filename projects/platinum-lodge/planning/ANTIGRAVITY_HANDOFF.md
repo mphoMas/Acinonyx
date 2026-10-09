@@ -20,7 +20,7 @@ Return: acknowledgement, backend estimates/capacity, ADR proposals, first contra
 
 Recorded 9 October 2026. Allocation: PLG-BOARD-01 (`MAS-62`).
 
-The Antigravity development team has read [DELIVERY_OWNERSHIP.md](../../company/DELIVERY_OWNERSHIP.md), [PROJECT_PLAN.md](PROJECT_PLAN.md), and [BENCHMARKS_AND_ACCEPTANCE.md](BENCHMARKS_AND_ACCEPTANCE.md) and formally confirms:
+The Antigravity development team has read [DELIVERY_OWNERSHIP.md](../../../company/DELIVERY_OWNERSHIP.md), [PROJECT_PLAN.md](PROJECT_PLAN.md), and [BENCHMARKS_AND_ACCEPTANCE.md](BENCHMARKS_AND_ACCEPTANCE.md) and formally confirms:
 
 1. **Codex Ownership:** Codex owns frontend development, UX/UI, navigation, responsive design, visual identity, typography, imagery, and art direction.
 2. **Antigravity Ownership:** The Antigravity development team owns backend architecture, domain logic, APIs, data/migrations, tenancy enforcement, inventory concurrency, financial journals, payment integrations, infrastructure, CI/CD, and operational observability/recovery.
@@ -29,3 +29,10 @@ The Antigravity development team has read [DELIVERY_OWNERSHIP.md](../../company/
 5. **Release & Credential Authority:** Ownership does not grant runtime credentials or release authority. G0–G6 gates require independent review and project owner authorization.
 6. **Discovery Artifacts:** Detailed architecture findings, ADR recommendations, cost/capacity models, decision blockers, and the versioned API contract proposal are documented in [BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md).
 7. **Status:** PLG-BOARD-01 submitted for independent review with verification evidence ([evidence/board-sync-verification.log](evidence/board-sync-verification.log)). Unresolved statutory and provider decisions remain open blockers for G0.
+
+
+## Lifecycle coordination and contract review
+
+Owner confirmed Codex coordinates all nine epics with the implementation split unchanged. Read [DELIVERY_LIFECYCLE.md](DELIVERY_LIFECYCLE.md) and [CODEX_CONTRACT_REVIEW.md](CODEX_CONTRACT_REVIEW.md). Resolve the contract review into the versioned schema/fixture packet before frontend integration. Mozambique and Excel are now confirmed; Platinum Hotel is now the sole initial pilot; staff observations, room count, fiscal/privacy policy, provider and funded capacity remain open. Do not treat provider examples, PCI eligibility or indicative infrastructure fees as verified facts.
+
+Owner confirmed no existing payment provider. Assess eligible Mozambique merchant/settlement options, not presumed Stripe availability. Read [SCOPE_AMENDMENT_2026_10_09.md](SCOPE_AMENDMENT_2026_10_09.md) before sizing or applying revised acceptance.

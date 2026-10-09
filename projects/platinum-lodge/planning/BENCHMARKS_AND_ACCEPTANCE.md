@@ -18,7 +18,7 @@ Use these references to evaluate our original workflows and measured outcomes. P
 
 ## Measurement protocol
 
-Before implementation, record current hotel task baselines using the same role, data complexity and hardware/connectivity as candidate tests. Aim for at least five representative staff per core role and 20 matched repetitions per task distributed across at least two properties; report actual sample, failures, learning effects, median and p95. This is a practical initial study, not a statistically universal industry comparison. Increase sample if outcomes are uncertain. Separate routine tasks from exceptions; do not hide errors by excluding failed attempts. Use synthetic guests for recorded tests, consented staff participation and anonymized timing data.
+Before implementation, record current hotel task baselines using the same role, data complexity and hardware/connectivity as candidate tests. Aim for at least five representative staff per core role and 20 matched repetitions per task at Platinum Hotel for the initial pilot; repeat across another real property before multi-property operational expansion; report actual sample, failures, learning effects, median and p95. This is a practical initial study, not a statistically universal industry comparison. Increase sample if outcomes are uncertain. Separate routine tasks from exceptions; do not hide errors by excluding failed attempts. Use synthetic guests for recorded tests, consented staff participation and anonymized timing data.
 
 Baseline task set: make/amend a reservation, check in a ready prepaid guest, resolve an unready room, settle/checkout a guest, record/refund/reconcile payment, assign cleaning, update/inspect a room and investigate a management exception. External ID checks and provider waits are timed separately and reported. Measure full end-to-end time as well as interface-only time.
 
@@ -40,7 +40,7 @@ Baseline task set: make/amend a reservation, check in a ready prepaid guest, res
 | M12 | WCAG 2.2 AA for scoped journeys; no unresolved critical/high security findings | Automated plus keyboard/screen-reader/zoom checks; ASVS mapping, dependency/config review and separate security assessment; scoped exceptions documented | Codex accessibility / Antigravity security; separate reviewers |
 | M13 | Staff can complete ≥95% scripted core tasks after ≤60min role-specific training | Training trial with actual hotel staff; disclose previous familiarity | Codex training UX + hotel supervisor; operations reviewer |
 | M14 | 100% of priority exceptions show source, owner, age, next action; acknowledgement ≤5min during staffed shifts | Replay late cleaning, unpaid departure, room failure, uncertain payment; staffed rota and audit metrics | Codex workspace / Antigravity event logic; manager |
-| M15 | 14 consecutive staffed operational days across ≥2 real properties without unresolved critical safety defects | Daily inventory, cash/provider and business-day reconciliations; staff issue log; signed exit review | Antigravity rollout integration; owner + independent operational review |
+| M15 | 14 consecutive staffed operational days at Platinum Hotel Mozambique without unresolved critical safety defects; multi-property technical qualification required, live second-property acceptance deferred | Daily inventory, cash/provider and business-day reconciliations; staff issue log; signed exit review | Antigravity rollout integration; owner + independent operational review |
 
 These are bounded test claims, not promises of zero possible future defects. Performance and reliability targets are deliberate initial service objectives, not values inferred from marketing. The 99.9% objective is below Cloudbeds' advertised figure; improve only with evidence and viable operating cost. A short soak or pilot cannot prove a monthly production availability result.
 
@@ -59,3 +59,6 @@ Management reporting must define and reconcile occupancy, ADR and RevPAR with fi
 | G6 Operational acceptance | M01–M04/M13/M15; completed reconciliations, known-issue disposition, support handover and expansion decision | Hotel operators/finance and project owner |
 
 Each evidence packet records candidate commit, deployment/environment, fixture/suite version, actual commands/results, timestamps, artifacts, reviewer identity and decision. A builder cannot solely certify its own work. Proposed tests, mocks, model assertions, screenshots alone and a six-test prototype pass do not satisfy these gates. Real merchant tests require the applicable authorization and cannot be simulated into a live acceptance claim.
+
+
+Pilot scope amended by the owner on 9 October 2026: [SCOPE_AMENDMENT_2026_10_09.md](SCOPE_AMENDMENT_2026_10_09.md). M05 multi-organization/property isolation and other multi-property technical targets remain unchanged. The smaller pilot does not establish real second-property performance, adoption or operational safety.

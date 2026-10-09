@@ -2,7 +2,7 @@
 
 Effective: 9 October 2026. Authority: the project owner's assignment in this conversation.
 
-Codex owns frontend development, UX/UI design, design direction and art direction. The Antigravity development team owns backend development, the engine and the remaining technical implementation. Both work against agreed interfaces and measured acceptance criteria. The project owner sets priorities and makes final product and release decisions.
+Codex owns frontend development, UX/UI design, design direction and art direction. The Antigravity development team owns backend development, the engine and the remaining technical implementation. Both work against agreed interfaces and measured acceptance criteria. The project owner sets priorities and makes final product and release decisions. On 9 October 2026 the owner additionally assigned Codex coordination of the full hotel delivery lifecycle across all nine epics, explicitly retaining this implementation split.
 
 This agreement supersedes the earlier proposal that Codex should initially implement backend contracts, IAM and coordinator changes. Those implementations now belong to Antigravity. Codex remains available for architecture critique, acceptance definition and review, especially where engine behavior affects the product experience.
 
@@ -10,6 +10,7 @@ This agreement supersedes the earlier proposal that Codex should initially imple
 
 | Area | Accountable delivery owner | Collaboration |
 | --- | --- | --- |
+| Hotel delivery lifecycle coordination, dependency/readiness reconciliation and cross-epic acceptance tracking | Codex | Antigravity supplies backend delivery evidence; the owner resolves product decisions and approves release. Coordination does not confer backend implementation or runtime authority. |
 | Frontend implementation | Codex | Antigravity supplies documented APIs and integration support. |
 | UX, navigation, interaction and product-facing information architecture | Codex | The project owner sets product goals; Antigravity confirms technical constraints. |
 | UI design, design system, accessibility, responsive behavior and frontend performance | Codex | Antigravity reviews backend assumptions and independently checks integration where appropriate. |
@@ -59,6 +60,6 @@ This document changes development responsibilities. It does not provision creden
 
 ## Acknowledgement
 
-The project owner assigned this split. Codex has recorded and adopted it. Antigravity acknowledgement is pending: it has not been contacted through an external messaging channel, and no receipt or acceptance is claimed.
+The project owner assigned this split. Codex has recorded and adopted it. Antigravity recorded formal acknowledgement on 9 October 2026 in [the project handoff](../projects/platinum-lodge/planning/ANTIGRAVITY_HANDOFF.md#formal-antigravity-delivery-team-acknowledgement) and [backend discovery](../projects/platinum-lodge/planning/BACKEND_DISCOVERY.md), published at commit `5e96bf95`. This replaces the earlier pending-acknowledgement status. The acknowledgement and reported desktop board-sync evidence do not themselves certify backend implementation, task completion, authenticated cloud assignment or any release gate.
 
-At Antigravity's next task, it should read this agreement and record acknowledgement with the task or a reviewed documentation change. Shared repository visibility is the handoff mechanism; it is not proof of acknowledgement. Until then, do not assume Antigravity is actively executing assigned backend work.
+Codex coordinates the full multi-property hotel delivery lifecycle. Antigravity retains backend/engine implementation. Git remains the shared handoff mechanism; runtime task state, reviewers and permissions must be verified in the actual configured MAS-PM instance.

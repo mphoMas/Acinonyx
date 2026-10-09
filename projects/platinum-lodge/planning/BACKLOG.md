@@ -72,7 +72,7 @@ Initiative: **PLG-1**.
 
 ### PLG-11: Confirm launch properties, countries and scope
 
-Owner-reviewed launch list, two real pilot-property candidates, required integrations and exclusions; no implied legal/provider eligibility.
+Owner-reviewed Platinum Hotel Mozambique pilot scope, room/role inventory, required integrations and exclusions; multi-property technical qualification remains required; no implied legal/provider eligibility.
 
 Reviewer: Antigravity integration review + independent hotel/UX reviewer. Planning file bounds: projects/platinum-lodge/planning/. Forbidden: projects/platinum-lodge/public/, projects/platinum-lodge/server.js. Refine actual file allowlist before staging.
 
@@ -336,7 +336,7 @@ Reviewer: Codex contract review + separate technical/domain reviewer. Planning f
 
 ### PLG-55: Complete operational acceptance and support handover
 
-M15 two-real-property 14-day evidence, daily inventory/finance close, M01–M04/M13 reports, known issues and owner expansion decision.
+M15 14-day evidence at Platinum Hotel Mozambique, daily inventory/finance close, M01–M04/M13 reports, multi-property synthetic qualification, known issues and owner expansion decision; live second-property acceptance deferred.
 
 Reviewer: Codex contract review + separate technical/domain reviewer. Planning file bounds: projects/platinum-lodge/server.js, projects/platinum-lodge/server/, projects/platinum-lodge/migrations/, projects/platinum-lodge/scripts/, projects/platinum-lodge/test/, .github/workflows/platinum-lodge.yml. Forbidden: projects/platinum-lodge/public/. Refine actual file allowlist before staging.
 

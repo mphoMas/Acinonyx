@@ -76,7 +76,7 @@
       "title": "Confirm launch properties, countries and scope",
       "owner": "Codex",
       "gate": "G0",
-      "acceptance": "Owner-reviewed launch list, two real pilot-property candidates, required integrations and exclusions; no implied legal/provider eligibility.",
+      "acceptance": "Owner-reviewed Platinum Hotel Mozambique pilot scope, room/role inventory, required integrations and exclusions; multi-property technical qualification remains required; no implied legal/provider eligibility.",
       "deps": [],
       "priority": "HIGH",
       "key": "PLG-11",
@@ -1304,7 +1304,7 @@
       "title": "Complete operational acceptance and support handover",
       "owner": "Antigravity development team",
       "gate": "G6",
-      "acceptance": "M15 two-real-property 14-day evidence, daily inventory/finance close, M01–M04/M13 reports, known issues and owner expansion decision.",
+      "acceptance": "M15 14-day evidence at Platinum Hotel Mozambique, daily inventory/finance close, M01–M04/M13 reports, multi-property synthetic qualification, known issues and owner expansion decision; live second-property acceptance deferred.",
       "deps": [
         "L4"
       ],
