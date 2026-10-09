@@ -1,5 +1,7 @@
 # Tenant boundary review
 
+Historical assessment of `7624d83f`. The subsequent [durable identity review](DURABLE_IDENTITY_REVIEW.md) closes its process-local identity/session blocker for the documented single-host pilot. Other deployment restrictions remain.
+
 Baseline: `3a373990e1cdd5d8cc1269d41dce4bdd48efa52b`. This review covers the new tenant-bound PM HTTP and MCP request paths. See [deployment contract](../architecture/TENANT_BOUNDARY.md).
 
 ### 1. Verdict & Executive Summary

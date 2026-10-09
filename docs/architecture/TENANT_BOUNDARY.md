@@ -15,9 +15,12 @@ from mas.pm.tools import register_pm_tools
 from mas.tools.filesystem import register_filesystem_tools
 
 # Trusted provisioning code only. Never give provisioning or IAM objects to agents.
-iam = MultiTenantIAM()  # Reads MAS_IAM_SECRET; otherwise process-local random key.
-iam.create_tenant("acme", "Acme")
-iam.register_principal("acme", "operator", roles={StandardRole.TENANT_ADMIN.value})
+iam = MultiTenantIAM(db_path=Path("/srv/mas-identity/iam.sqlite"))  # Requires MAS_IAM_SECRET.
+# Enrollment is a one-time trusted operation. Do not overwrite roles on restart.
+if iam.get_tenant("acme") is None:
+    iam.create_tenant("acme", "Acme")
+if iam.get_principal("acme", "operator") is None:
+    iam.register_principal("acme", "operator", roles={StandardRole.TENANT_ADMIN.value})
 credential = iam.issue_token("acme", "operator", ttl_seconds=3600)
 registry = MCPRegistry(iam=iam, tenant_id="acme", tenant_root=Path("/srv/mas-tenants"))
 register_filesystem_tools(registry)
@@ -39,7 +42,7 @@ server = DashboardServer(
 server.start_background()
 ```
 
-HTTP tenant mode serves authenticated `/api/pm/` routes only. It denies the shared portal, events, model gateway, enterprise dispatch and dashboard UI routes. Place a supported authenticated TLS gateway in front of a deployed API; this built-in server does not implement TLS. Supplying a legacy dashboard token does not authorize tenant requests. Provisioning remains a trusted host operation, not an HTTP enrollment endpoint.
+HTTP tenant mode serves authenticated `/api/pm/` routes and the two identity revocation endpoints described below. It denies the shared portal, events, model gateway, enterprise dispatch and dashboard UI routes. Place a supported authenticated TLS gateway in front of a deployed API; this built-in server does not implement TLS. Supplying a legacy dashboard token does not authorize tenant requests. Provisioning remains a trusted host operation, not an HTTP enrollment endpoint.
 
 ## Enforcement
 
@@ -54,7 +57,7 @@ HTTP tenant mode serves authenticated `/api/pm/` routes only. It denies the shar
 
 ## Deployment limits
 
-IAM tenant/principal provisioning is currently in memory. A signing key alone does not restore that registry after restart: trusted provisioning must recreate the current registry, or authentication fails closed. There is no durable per-token revocation ledger in this IAM module; tenant suspension and permission reduction are enforced, but stronger session revocation and durable identity storage remain required.
+Durable IAM is available with `MultiTenantIAM(..., db_path=...)` or `MAS_IAM_DB_PATH` plus `MAS_IAM_SECRET`. It restores tenants, principals, issued sessions and revocations from a private SQLite authority. Omitting the database path preserves the process-local development mode. See [identity storage and recovery](DURABLE_IDENTITY.md) for enrollment, revocation, concurrency and backup rules. The supported durable store is a single-host POSIX filesystem implementation, not a distributed identity provider.
 
 The coordinator, its Python code, configuration and storage parent directories are trusted. This is not a boundary against malicious host code, privileged host users or a compromised kernel. SQLite access outside tenant request scope is a trusted internal API. Do not run unrelated tenant workloads through legacy orchestration, shared memory or the general model gateway. The supervised swarm has its own separately verified store boundary.
 

@@ -1,8 +1,12 @@
 # Independent Reviewer & Chief Architect — Assigned Tasks
 
+## Durable identity milestone
+
+Private SQLite tenants/principals/sessions now survive restart; authenticated self/admin revocation persists across instances. Full gate: 394 passed, zero failures/skips; 27 dedicated identity cases include process death, atomic audit failure and safe offline restore fencing. See [durable identity review](DURABLE_IDENTITY_REVIEW.md). Next blockers remain tenant-aware runtime services and externally anchored authority freshness.
+
 ## Tenant-boundary pilot milestone
 
-Authenticated tenant-bound MCP and PM HTTP paths now isolate workspaces and SQLite state; 18 tenant adversarial/integration cases and the full 367-test suite pass. Unsupported shared services remain denied in tenant mode. See [tenant boundary review](TENANT_BOUNDARY_REVIEW.md). Durable identity/session revocation and tenant-aware memory/model/orchestration remain required before whole-platform multi-tenant deployment.
+Authenticated tenant-bound MCP and PM HTTP paths now isolate workspaces and SQLite state; 18 tenant adversarial/integration cases and the full 367-test suite pass. Unsupported shared services remain denied in tenant mode. See [tenant boundary review](TENANT_BOUNDARY_REVIEW.md). The subsequent [durable identity milestone](DURABLE_IDENTITY_REVIEW.md) provides private single-host identity/session persistence and revocation. Tenant-aware memory/model/orchestration and external audit anchoring remain required before whole-platform multi-tenant deployment.
 
 
 Owner: Codex, acting as Independent Reviewer & Chief Architect for Platform, AI & Data.

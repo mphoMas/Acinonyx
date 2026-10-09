@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import threading
+import sqlite3
 from dataclasses import asdict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, List, Optional
@@ -580,9 +581,26 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
         token = auth[7:].strip() if auth.startswith("Bearer ") else None
         try:
             with tenant_scope(self.iam, token, self.tenant_id, self.tenant_root) as binding:
+                path = urlparse(self.path).path
+                if method == "POST" and path in {"/api/identity/sessions/revoke", "/api/identity/principals/revoke-sessions"}:
+                    try:
+                        length = int(self.headers.get("Content-Length", "0"))
+                        if not 0 <= length <= 8192:
+                            raise ValueError("Invalid revocation request size")
+                        body = self.rfile.read(length)
+                        payload = json.loads(body) if body else {}
+                        if not isinstance(payload, dict):
+                            raise ValueError("Expected a JSON object")
+                        if path == "/api/identity/sessions/revoke":
+                            result = self.iam.revoke_session(token, payload.get("session_id", binding.identity.token_id))
+                        else:
+                            result = self.iam.revoke_principal_sessions(token, payload.get("user_id"))
+                        self._send_json({"success": True, "result": result})
+                    except (ValueError, TypeError):
+                        self._send_json({"error": "Malformed revocation request"}, status=400)
+                    return
                 action = "storage:read" if method == "GET" else "storage:write"
                 binding.require(action)
-                path = urlparse(self.path).path
                 if not path.startswith("/api/pm/"):
                     self._send_json({"error": "Endpoint lacks tenant isolation"}, status=403)
                     return
@@ -594,6 +612,8 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
                     super().do_POST()
         except PermissionError:
             self._send_json({"error": "Missing, invalid or unauthorized tenant credential"}, status=403)
+        except (OSError, sqlite3.Error):
+            self._send_json({"error": "Identity authority unavailable"}, status=503)
 
     def do_GET(self):
         self._tenant_request("GET")

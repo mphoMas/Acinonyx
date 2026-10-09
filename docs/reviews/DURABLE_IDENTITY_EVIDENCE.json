@@ -1,0 +1,32 @@
+{
+  "baseline": "7624d83f5780f404e2413fc25bc1173df73a8a8e",
+  "command": "bash scripts/run_quality_gate.sh",
+  "results": {
+    "tests": 394,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 394,
+    "durable_identity_cases": 27,
+    "duration_seconds": 73.76
+  },
+  "source_sha256": {
+    "mas/identity_store.py": "86d6bc5ef843e4cef093f38b4de443271f4d2cbf4ab1963de21d0008bd4cf8b0",
+    "mas/iam.py": "22dd652265f4377b622241c8811fee57886a8b1d510422a9056d41d79933ca60",
+    "mas/tenancy.py": "6c4ecbfc7617c2f8cf24cb21d1c0023c806e32515b8afa21871cc802cc3801b5",
+    "mas/dashboard/server.py": "6e6afd30b63634eb90ad04b6b8d1076952a9785f1303acf757267006b6d2ea44",
+    "mas/mcp/protocol.py": "f5521c880ab696fb83c5207555b8512e870d1ce7a264eefae248fc27de7e2770",
+    "mas/capabilities.py": "414c94c50a9d4fb0cfe2271072daae12f46f7fc5eea07253fda8bb9a53781d96",
+    "tests/test_durable_identity.py": "9dd0b61bed1aeac0b42f06e865c660f7128073624be78625f64f6b523ab5288d"
+  },
+  "artifacts_sha256": {
+    "/workspace/review-evidence/durable-identity-gate.log": "da286b56da1345c854d7c50daa63c69e297e42238951188ff967112715abb382",
+    "/workspace/review-evidence/durable-identity-tests.xml": "dd4700e0d35e68d13aba87e55a0040328e63d150ed0369f3787e21bfae25deec",
+    "/workspace/review-evidence/durable-identity-wheel/mas_core-0.2.0-py3-none-any.whl": "88a7b1319fcc740b4b757e35ced76038d5574900ebcceba5a75343b48e88592d"
+  },
+  "installed_wheel_acceptance": "Persistent identity and restart-safe logout passed outside checkout; all packaged mas Python source bytes match checkout",
+  "recovery": "Real process death rolled back an uncommitted authority change; backup restore and offline all-session invalidation passed",
+  "scope": "Single-host POSIX tenant-bound PM/MCP pilot; whole-platform enterprise multi-tenancy remains rejected",
+  "external_rollback_anchor": false,
+  "new_live_model_evaluation": false
+}

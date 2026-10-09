@@ -5,6 +5,7 @@ Architect: Acinonyx
 
 from __future__ import annotations
 import inspect
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
@@ -213,6 +214,8 @@ class MCPRegistry:
                         return await self.handle_request(request, principal=principal)
                 except PermissionError as exc:
                     return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, str(exc))
+                except (OSError, sqlite3.Error):
+                    return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, "Identity authority unavailable")
             if binding.iam is not self.iam or binding.identity.tenant_id != self.tenant_id or binding.workspace != self.tenant_root / "workspaces" / "tenants" / self.tenant_id:
                 return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, "Cross-tenant dispatch denied")
             try:

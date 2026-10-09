@@ -30,6 +30,8 @@ def current_binding() -> TenantBinding | None:
 
 @contextmanager
 def tenant_scope(iam: MultiTenantIAM, token: str, tenant: str, root: Path):
+    if iam.database_path is not None and iam.database_path.is_relative_to((root / "workspaces").resolve()):
+        raise PermissionError("Identity authority must be outside tenant workspaces")
     identity = iam.verify_token(token)
     if identity.tenant_id != tenant:
         raise PermissionError("Credential belongs to another tenant")
