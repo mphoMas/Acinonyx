@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "project": "PLG",
+  "note": "Planning/candidate links only; not test-run verification, reviewer approval or task completion.",
+  "entries": [
+    {
+      "source_key": "PLG-1",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-2",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-3",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-4",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-5",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-6",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-7",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-8",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-9",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-10",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/DELIVERY_LIFECYCLE.md",
+      "payload": {
+        "kind": "coordination_plan",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-11",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-12",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-22",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-23",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-24",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-25",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-29",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-36",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-40",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-43",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-44",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-49",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-52",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/076f012d5e27e528fa749ea3d4a64d073b0ea5a0/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md",
+      "payload": {
+        "kind": "partial_delivery_candidate",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "076f012d5e27e528fa749ea3d4a64d073b0ea5a0"
+      }
+    },
+    {
+      "source_key": "PLG-11",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/SCOPE_AMENDMENT_2026_10_09.md",
+      "payload": {
+        "kind": "owner_scope_amendment",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-55",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/SCOPE_AMENDMENT_2026_10_09.md",
+      "payload": {
+        "kind": "owner_scope_amendment",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    },
+    {
+      "source_key": "PLG-20",
+      "evidence_type": "GIT_COMMIT",
+      "content_hash": "58fc01da3d436537cfdfe591e3835c10911674a8",
+      "uri": "https://github.com/mphoMas/Acinonyx/blob/58fc01da3d436537cfdfe591e3835c10911674a8/projects/platinum-lodge/planning/CODEX_CONTRACT_REVIEW.md",
+      "payload": {
+        "kind": "contract_review_not_approval",
+        "acceptance_complete": false,
+        "independent_review": "PENDING",
+        "release_gate_passed": false,
+        "commit_sha": "58fc01da3d436537cfdfe591e3835c10911674a8"
+      }
+    }
+  ]
+}

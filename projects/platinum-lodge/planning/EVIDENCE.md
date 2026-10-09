@@ -56,3 +56,5 @@ Read-only lifecycle reporter executed through public MAS-PM APIs: nine epics, 45
 Frontend candidate `b239cb93` on `feat/platinum-lodge-codex-delivery`: six Node unit tests and 36 Chromium browser checks passed; actual mobile/desktop screenshots published in planning/codex/evidence on that branch. No integrated API, provider, staff measurement, Portuguese qualification, independent QA or production gate pass is claimed.
 
 Readiness correction: the `f8e74521` launch-scope record is retained but annotated as superseded/unverified. Latest owner replies confirm one Platinum Hotel and no existing provider; fiscal/provider claims do not clear G0. See DECISION_REGISTER.md for current state.
+
+Published reference linking preview: 26 pinned references resolve to existing PLG identities. Signed apply blocked before the first attachment by missing private governance signing configuration; zero references attached. No task states, assignments or allowances changed. `link_delivery_evidence.py` preserves those boundaries and is preview-first; authorized runtime configuration is required to attach. This is not an automatic approval-review rejection.

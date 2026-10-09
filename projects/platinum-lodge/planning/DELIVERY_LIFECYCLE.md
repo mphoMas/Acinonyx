@@ -104,3 +104,16 @@ Verified in the cloud planning instance: nine epics, 45 work packages, 55 total 
 
 
 See [owner scope amendment](SCOPE_AMENDMENT_2026_10_09.md): initial pilot is Platinum Hotel only; backend assesses eligible Mozambique providers from scratch. The published frontend candidate is `feat/platinum-lodge-codex-delivery` at `b239cb93`, with six unit tests and 36 browser checks plus mobile/desktop screenshots. These are frontend-specific results, not an integrated gate pass.
+
+## Bind published references to the existing board
+
+`DELIVERY_EVIDENCE_LINKS.json` holds 26 pinned references for initiative/epic coordination, 13 Codex candidates, the owner scope amendment (D1/L5), and contract review. They are explicitly partial/planning evidence, not approvals or verified test-run links.
+
+```sh
+python projects/platinum-lodge/planning/link_delivery_evidence.py
+python projects/platinum-lodge/planning/link_delivery_evidence.py --apply
+```
+
+Use `--database` only with the actual configured dashboard path if needed. Default is preview; apply uses public MAS-PM evidence APIs, maps stable planning references/titles rather than assuming numeric keys, deduplicates references, and does not transition, assign, approve or alter allowances. Errors stop processing; retry safely skips previously attached references.
+
+Cloud preview resolved all 26 references. Apply stopped before the first attachment because the configured governance signing key is absent. No links, task states, assignments or allowances were changed. Do not paste keys into chat or introduce a development signing key to simulate approval. Antigravity/authorized runtime administration must use the normal configured governance environment. Git publication is available even while signed board binding remains blocked.
