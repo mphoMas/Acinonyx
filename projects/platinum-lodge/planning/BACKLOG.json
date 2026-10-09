@@ -1,0 +1,1333 @@
+{
+  "project_key": "PLG",
+  "project_name": "Platinum Lodge — multi-property hotel management",
+  "created_date": "2026-10-09",
+  "source": "Local MAS-PM via public Python API; static snapshot, not a second live board",
+  "initiative": "PLG-1",
+  "epics": [
+    {
+      "code": "D",
+      "title": "Discovery, feasibility and operating policies",
+      "owner": "Codex",
+      "gate": "G0",
+      "key": "PLG-2"
+    },
+    {
+      "code": "F",
+      "title": "Multi-property backend foundations",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "key": "PLG-3"
+    },
+    {
+      "code": "U",
+      "title": "Frontend system and property-aware navigation",
+      "owner": "Codex",
+      "gate": "G1",
+      "key": "PLG-4"
+    },
+    {
+      "code": "R",
+      "title": "Reservations and front desk",
+      "owner": "Antigravity development team",
+      "gate": "G2",
+      "key": "PLG-5"
+    },
+    {
+      "code": "B",
+      "title": "Billing, payments and business-day close",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "key": "PLG-6"
+    },
+    {
+      "code": "H",
+      "title": "Housekeeping and room readiness",
+      "owner": "Antigravity development team",
+      "gate": "G4",
+      "key": "PLG-7"
+    },
+    {
+      "code": "M",
+      "title": "Management visibility and productivity",
+      "owner": "Codex",
+      "gate": "G4",
+      "key": "PLG-8"
+    },
+    {
+      "code": "Q",
+      "title": "Production qualification and recovery",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "key": "PLG-9"
+    },
+    {
+      "code": "L",
+      "title": "Migration, training and operational acceptance",
+      "owner": "Antigravity development team",
+      "gate": "G6",
+      "key": "PLG-10"
+    }
+  ],
+  "tasks": [
+    {
+      "code": "D1",
+      "epic": "D",
+      "title": "Confirm launch properties, countries and scope",
+      "owner": "Codex",
+      "gate": "G0",
+      "acceptance": "Owner-reviewed launch list, two real pilot-property candidates, required integrations and exclusions; no implied legal/provider eligibility.",
+      "deps": [],
+      "priority": "HIGH",
+      "key": "PLG-11",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "D2",
+      "epic": "D",
+      "title": "Measure current staff workflow baseline",
+      "owner": "Codex",
+      "gate": "G0",
+      "acceptance": "M01/M02 protocol, role journey inventory and consented/anonymized matched task timings at participating hotels.",
+      "deps": [
+        "D1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-12",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "D3",
+      "epic": "D",
+      "title": "Validate financial, guest-registration and privacy policies",
+      "owner": "Antigravity development team",
+      "gate": "G0",
+      "acceptance": "Accountant/legal-reviewed taxes, invoice numbering, deposits, cancellation/no-show, refunds, credit balance, guest reporting and retention per jurisdiction.",
+      "deps": [
+        "D1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-13",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "D4",
+      "epic": "D",
+      "title": "Validate regional payment provider and merchant readiness",
+      "owner": "Antigravity development team",
+      "gate": "G0",
+      "acceptance": "Country/currency/payout/refund/terminal eligibility, sandbox access, hosted capture and merchant obligations documented; owner procurement decision.",
+      "deps": [
+        "D1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-14",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "D5",
+      "epic": "D",
+      "title": "Agree backend architecture, capacity and cost model",
+      "owner": "Antigravity development team",
+      "gate": "G0",
+      "acceptance": "ADRs for database/identity/hosting/job boundaries; capacity estimate and engineering/operating cost categories reviewed, no invented approvals.",
+      "deps": [
+        "D3",
+        "D4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-15",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "D6",
+      "epic": "D",
+      "title": "Acknowledge ownership and synchronize execution planning",
+      "owner": "Antigravity development team",
+      "gate": "G0",
+      "acceptance": "Antigravity acknowledges agreement; shared MAS-PM synchronization/principals validated; precise scopes and task splits proposed without granting permissions.",
+      "deps": [
+        "D1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-16",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "F1",
+      "epic": "F",
+      "title": "Plan selective prototype/frontier integration",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "acceptance": "Reviewed branch divergence and selective integration plan preserves frontier security/ownership; legacy modules inventoried and disabled unless qualified.",
+      "deps": [
+        "D5",
+        "D6"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-17",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "F2",
+      "epic": "F",
+      "title": "Implement organization/property data model and migrations",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "acceptance": "Versioned reversible-or-recoverable migrations, membership model and two-org/two-property fixtures; property-local config, room numbering and timezone/currency.",
+      "deps": [
+        "F1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-18",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "F3",
+      "epic": "F",
+      "title": "Implement production authentication and scoped authorization",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "acceptance": "Privileged MFA, revocation/recovery, secure session behavior and server checks for every resource/file/export/job; negative tests M05.",
+      "deps": [
+        "F2"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-19",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "F4",
+      "epic": "F",
+      "title": "Publish versioned API and operation contract",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "acceptance": "Jointly reviewed OpenAPI, pagination, capabilities, record versions, errors, correlation IDs, durable retry semantics and fixtures.",
+      "deps": [
+        "F2",
+        "F3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-20",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "F5",
+      "epic": "F",
+      "title": "Provision staging, CI and deployment/migration skeleton",
+      "owner": "Antigravity development team",
+      "gate": "G1",
+      "acceptance": "Separated environments/secrets, candidate-bound CI, smoke checks and reviewed migration rollout; no production activation.",
+      "deps": [
+        "D5",
+        "F1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-21",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "U1",
+      "epic": "U",
+      "title": "Inventory frontend gaps and specify role journeys",
+      "owner": "Codex",
+      "gate": "G1",
+      "acceptance": "Core journeys with all loading/error/stale/conflict/permission states and role/property navigation mapped to required APIs.",
+      "deps": [
+        "D1",
+        "D2"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-22",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "U2",
+      "epic": "U",
+      "title": "Define design system and approved art direction",
+      "owner": "Codex",
+      "gate": "G1",
+      "acceptance": "Accessible component/token specifications, readable typography, semantic status design, EN/PT guidance and image-rights register.",
+      "deps": [
+        "U1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-23",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "U3",
+      "epic": "U",
+      "title": "Implement property/role-aware shell and safe switching",
+      "owner": "Codex",
+      "gate": "G1",
+      "acceptance": "Property identity visible, stale responses rejected, scoped caches cleared, unsaved input handled; group actions require explicit property.",
+      "deps": [
+        "U2",
+        "F4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-24",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "U4",
+      "epic": "U",
+      "title": "Implement accessible components and resilient API client",
+      "owner": "Codex",
+      "gate": "G1",
+      "acceptance": "Keyboard/dialog/form states, input preservation, retained operation keys, pagination and version-conflict handling; browser checks at target sizes/zoom.",
+      "deps": [
+        "U2",
+        "F4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-25",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "R1",
+      "epic": "R",
+      "title": "Implement inventory, rates and reservation policy snapshots",
+      "owner": "Antigravity development team",
+      "gate": "G2",
+      "acceptance": "Room types/sellable inventory, rate/capacity/deposit/cancellation snapshots and business-date semantics tested.",
+      "deps": [
+        "F4",
+        "D3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-26",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "R2",
+      "epic": "R",
+      "title": "Implement concurrent-safe reservation lifecycle and room moves",
+      "owner": "Antigravity development team",
+      "gate": "G2",
+      "acceptance": "Creation/amend/cancel/no-show/move invariants; M06 races, version conflicts and idempotent commands verified.",
+      "deps": [
+        "R1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-27",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "R3",
+      "epic": "R",
+      "title": "Implement check-in/out eligibility and exception APIs",
+      "owner": "Antigravity development team",
+      "gate": "G2",
+      "acceptance": "Clean/unblocked/available room enforcement, dates/occupancy, settlement/credit policy and audited overrides; no client-only policy.",
+      "deps": [
+        "R2",
+        "D3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-28",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "R4",
+      "epic": "R",
+      "title": "Build reservations/calendar and front-desk workspaces",
+      "owner": "Codex",
+      "gate": "G2",
+      "acceptance": "Scoped availability/create/amend/arrivals/departures/in-house flows integrate real APIs with retained input and clear property context.",
+      "deps": [
+        "U3",
+        "U4",
+        "R2",
+        "R3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-29",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "R5",
+      "epic": "R",
+      "title": "Verify reservation/front-desk integration and regression",
+      "owner": "Antigravity development team",
+      "gate": "G2",
+      "acceptance": "Actual candidate-bound lifecycle/browser/concurrency evidence; hotel supervisor signs scenarios, Codex reviews UI contract.",
+      "deps": [
+        "R4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-30",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B1",
+      "epic": "B",
+      "title": "Implement immutable property/legal-entity journal and folios",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Balanced currency-aware journal, deposits/receivables/earned revenue separation, split folios/routing, reversals and audit golden fixtures.",
+      "deps": [
+        "F4",
+        "D3"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-31",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B2",
+      "epic": "B",
+      "title": "Implement taxes, invoice/receipt rules and financial exports",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Accountant-approved rounding/numbering/tax examples reconcile; permission-safe/formula-safe exports and no destructive financial edits.",
+      "deps": [
+        "B1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-32",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B3",
+      "epic": "B",
+      "title": "Implement nightly posting and resumable business-day close",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Timezone/DST/late posting fixtures; idempotent nightly close, restart-safe checkpoints and explicit failed/partial close status.",
+      "deps": [
+        "B1",
+        "R2"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-33",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B4",
+      "epic": "B",
+      "title": "Integrate provider capture/refunds and verified webhooks",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Hosted/tokenized flows, signed/deduplicated/out-of-order events, lost acknowledgement and unknown states; no PAN/CVV storage.",
+      "deps": [
+        "B1",
+        "D4",
+        "F5"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-34",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B5",
+      "epic": "B",
+      "title": "Implement tender, shift and provider settlement reconciliation",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Cash/bank/manual/provider tenders, refund limits and discrepancy workflow; M07 replay/fault fixtures and settlement totals reconcile.",
+      "deps": [
+        "B2",
+        "B3",
+        "B4"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-35",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B6",
+      "epic": "B",
+      "title": "Build billing, checkout and reconciliation frontend",
+      "owner": "Codex",
+      "gate": "G3",
+      "acceptance": "Folios/invoices/tenders/refunds/shift close/uncertain payments integrate actual APIs; high-risk confirmations and role-safe details.",
+      "deps": [
+        "U4",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "R4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-36",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "B7",
+      "epic": "B",
+      "title": "Qualify finance and payment acceptance",
+      "owner": "Antigravity development team",
+      "gate": "G3",
+      "acceptance": "Finance independent review, M07, sandbox proof and separately authorized live smoke/settlement evidence; operational runbooks accepted.",
+      "deps": [
+        "B6"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-37",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "H1",
+      "epic": "H",
+      "title": "Implement housekeeping assignment and inspection workflow",
+      "owner": "Antigravity development team",
+      "gate": "G4",
+      "acceptance": "Distinct occupancy/cleaning/readiness, assignments/priorities and supervisor inspection with audit/version conflicts.",
+      "deps": [
+        "F4",
+        "R3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-38",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "H2",
+      "epic": "H",
+      "title": "Implement emergency maintenance and inventory relocation",
+      "owner": "Antigravity development team",
+      "gate": "G4",
+      "acceptance": "Out-of-service with current/future stays creates accountable relocation workflow; availability and guest communication states remain safe.",
+      "deps": [
+        "H1",
+        "R2"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-39",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "H3",
+      "epic": "H",
+      "title": "Build mobile housekeeping and supervisor workspace",
+      "owner": "Codex",
+      "gate": "G4",
+      "acceptance": "Assigned rooms/priorities, safe bulk actions, quick updates and inspection; stale/offline state explicit; M04 task checks.",
+      "deps": [
+        "U4",
+        "H1",
+        "H2"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-40",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "H4",
+      "epic": "H",
+      "title": "Verify readiness propagation and handover",
+      "owner": "Antigravity development team",
+      "gate": "G4",
+      "acceptance": "M04 server propagation and browser integration; back-to-back arrivals, room failure and staff handover scenarios reviewed.",
+      "deps": [
+        "H3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-41",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "M1",
+      "epic": "M",
+      "title": "Implement property/group metrics and actionable exception APIs",
+      "owner": "Antigravity development team",
+      "gate": "G4",
+      "acceptance": "Reviewed occupancy/ADR/RevPAR definitions, separate currencies, safe drill-down and source/owner/age/next action for every priority exception.",
+      "deps": [
+        "B5",
+        "H2",
+        "R3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-42",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "M2",
+      "epic": "M",
+      "title": "Build Today workspace and portfolio management views",
+      "owner": "Codex",
+      "gate": "G4",
+      "acceptance": "Role-focused tasks, arrival/payment/cleaning exceptions, scoped portfolio and drill-down with freshness and action accountability.",
+      "deps": [
+        "U3",
+        "M1",
+        "B6",
+        "H3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-43",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "M3",
+      "epic": "M",
+      "title": "Measure and refine staff productivity",
+      "owner": "Codex",
+      "gate": "G4",
+      "acceptance": "Matched M01–M04/M14 study; disclose sample and failures, record improvements and remeasure changed candidate.",
+      "deps": [
+        "M2",
+        "D2"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-44",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q1",
+      "epic": "Q",
+      "title": "Implement monitoring, audit retention and incident runbooks",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "Redacted logs, critical synthetic checks, correlation IDs, protected audit retention, alert routing and staffed escalation proposal.",
+      "deps": [
+        "F5",
+        "B5",
+        "H4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-45",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q2",
+      "epic": "Q",
+      "title": "Implement off-site recovery and conduct two restore drills",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "Coordinated DB/files/jobs/keys recovery, independent encrypted backups, witnessed M11 and transaction/provider reconciliation.",
+      "deps": [
+        "Q1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-46",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q3",
+      "epic": "Q",
+      "title": "Run independent security and tenant isolation qualification",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "ASVS 5.0 applicable Level 2 mapping, M05, upload/CSRF/session/dependency/config checks; no unresolved critical/high findings.",
+      "deps": [
+        "B7",
+        "H4",
+        "M1"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-47",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q4",
+      "epic": "Q",
+      "title": "Run backend load, soak and fault qualification",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "M06–M08 scenario dataset, 8h soak, restart/provider faults and correctness/performance results tied to candidate.",
+      "deps": [
+        "B7",
+        "H4",
+        "M1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-48",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q5",
+      "epic": "Q",
+      "title": "Qualify accessibility, frontend performance and localization",
+      "owner": "Codex",
+      "gate": "G5",
+      "acceptance": "M09/M12 manual keyboard/screen-reader/zoom checks plus browser traces; EN/PT and property currency/timezone examples reviewed.",
+      "deps": [
+        "M3"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-49",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "Q6",
+      "epic": "Q",
+      "title": "Prepare qualification packet and release recommendation",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "Candidate-specific evidence, independent reviews, known risks, monitoring/support and gate decisions; owner decides production release.",
+      "deps": [
+        "Q2",
+        "Q3",
+        "Q4",
+        "Q5"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-50",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "L1",
+      "epic": "L",
+      "title": "Develop and rehearse migration with opening-balance reconciliation",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "Two-property mapping/dedup/import rehearsals; inventory, deposits, balances and guest provenance reconcile; no blind password/session copies.",
+      "deps": [
+        "B7",
+        "H4",
+        "M1"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-51",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "L2",
+      "epic": "L",
+      "title": "Prepare role training and safe manual continuity guides",
+      "owner": "Codex",
+      "gate": "G5",
+      "acceptance": "Role guides, emergency property-safe procedures and training trial M13; hotel staff and Antigravity review correctness.",
+      "deps": [
+        "M3",
+        "B7",
+        "H4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-52",
+      "state": "BACKLOG",
+      "reviewer": "Antigravity integration review + independent hotel/UX reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "L3",
+      "epic": "L",
+      "title": "Approve cutover, rollback and support coverage",
+      "owner": "Antigravity development team",
+      "gate": "G5",
+      "acceptance": "Write fence, backup verification, forward recovery/payment limits and escalation rehearsed; owner-approved staffing and cutover decision.",
+      "deps": [
+        "L1",
+        "L2",
+        "Q6"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-53",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "L4",
+      "epic": "L",
+      "title": "Execute authorized staged multi-property rollout",
+      "owner": "Antigravity development team",
+      "gate": "G6",
+      "acceptance": "Only after release authorization: candidate deployment, opening totals verified, monitored cohort and documented stop/rollback conditions.",
+      "deps": [
+        "L3"
+      ],
+      "priority": "CRITICAL",
+      "key": "PLG-54",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    },
+    {
+      "code": "L5",
+      "epic": "L",
+      "title": "Complete operational acceptance and support handover",
+      "owner": "Antigravity development team",
+      "gate": "G6",
+      "acceptance": "M15 two-real-property 14-day evidence, daily inventory/finance close, M01–M04/M13 reports, known issues and owner expansion decision.",
+      "deps": [
+        "L4"
+      ],
+      "priority": "HIGH",
+      "key": "PLG-55",
+      "state": "BACKLOG",
+      "reviewer": "Codex contract review + separate technical/domain reviewer",
+      "allowed_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "assignee_principal": null
+    }
+  ],
+  "issue_count": 55,
+  "execution_token_budget": 0,
+  "prototype_commit": "2c1f063b4fd8369ccb0f89cf1ed4dd45864f465b"
+}

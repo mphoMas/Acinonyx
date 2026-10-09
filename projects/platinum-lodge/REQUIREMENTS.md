@@ -1,5 +1,7 @@
 # Platinum Lodge system requirements and delivery status
 
+**Baseline note — 9 October 2026:** the delivered requirements below describe the prototype. The [multi-property first-release plan](planning/PROJECT_PLAN.md) supersedes the previous release scope. Production status is determined by the new [acceptance gates](planning/BENCHMARKS_AND_ACCEPTANCE.md), not by this historical delivery table.
+
 ## Context
 
 Platinum Lodge is in Tchumene II, Matola, Mozambique. A UN workshop information note confirms the property as an event venue and provides its address and telephone numbers:

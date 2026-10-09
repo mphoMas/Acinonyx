@@ -1,5 +1,7 @@
 # Platinum Lodge Hotel Management System
 
+**Project status — 9 October 2026:** this code is the single-property prototype. Release one is now planned as a production-ready **multi-property** system. The [project plan](planning/PROJECT_PLAN.md), [benchmarks and gates](planning/BENCHMARKS_AND_ACCEPTANCE.md), [initiated MAS-PM backlog](planning/BACKLOG.md) and [Antigravity handoff](planning/ANTIGRAVITY_HANDOFF.md) govern the next delivery. The implementation descriptions below describe the prototype; they are not production qualification.
+
 A working local web application for Platinum Lodge, Matola, Mozambique. Node.js 24 serves the interface and API; SQLite stores hotel records. No package installation, external account, or default password is required.
 
 ## Start
