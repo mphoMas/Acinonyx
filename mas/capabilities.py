@@ -43,6 +43,7 @@ CAPABILITIES: List[Capability] = [
     Capability("eval_harness", CapabilityStatus.IMPLEMENTED, "Golden missions + structural/quality scoring", "mas.eval"),
     Capability("cli_doctor", CapabilityStatus.IMPLEMENTED, "Runtime health / mode report", "mas.cli"),
     Capability("multi_tenant_iam", CapabilityStatus.IMPLEMENTED, "HMAC/RBAC tenant-bound MCP/PM APIs; optional durable identity and revocation; isolated SQLite/workspaces; legacy endpoints remain single-tenant", "mas.iam"),
+    Capability("external_identity_audit_anchor", CapabilityStatus.IMPLEMENTED, "HTTPS forward-only witness checkpoint protocol; independent deployment and restore boundary required", "mas.audit_anchor"),
     Capability("managed_vector_saas", CapabilityStatus.DEMO_ONLY, "Local in-memory cloud adapter simulations; no remote persistence", "mas.memory.vector_saas"),
     Capability("computer_use", CapabilityStatus.IMPLEMENTED, "Virtual Xvfb display + discrete OS mouse/keyboard actions + SoM grounding + Scope Jail", "mas.tools.computer_use"),
     Capability("bigquery_finops_sql", CapabilityStatus.IMPLEMENTED, "Native Google Cloud BigQuery execution + dry-run cost estimation + mandatory labeling", "mas.tools.bigquery_tool"),

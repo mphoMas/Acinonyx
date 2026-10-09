@@ -46,7 +46,7 @@ The store uses SQLite transactions, FULL synchronization, a five-second busy tim
 
 Authorization reads current tenant/principal/session state from a database snapshot on every check, including checks on previously verified request contexts. Separate coordinator processes on the same host observe committed revocation without a local credential cache. Checks ordered after the revocation commit deny access. A previously authorized side effect can already be in progress; revocation does not retroactively undo work or automatically kill running workers. Workload cancellation remains a separate runtime responsibility.
 
-Record HMACs, a signed audit chain/head and current record digests reject modified records, selective old-session replay and truncated audit tails when the current authority head remains intact. They cannot distinguish restoration of an older authentic authority snapshot. External audit anchoring remains a production blocker.
+Record HMACs, a signed audit chain/head and current record digests reject modified records, selective old-session replay and truncated audit tails when the current authority head remains intact. Without external anchoring, they cannot distinguish restoration of an older authentic authority snapshot. The [external HTTPS witness](EXTERNAL_AUDIT_ANCHOR.md) adds live, forward-only checkpoints; it must be deployed outside the coordinator's administration and restore boundary. An anchored store rejects stale snapshots and missing witness configuration.
 
 ## Backup and recovery
 
@@ -54,7 +54,7 @@ Use the SQLite backup API through `iam.backup(destination)` from trusted host ad
 
 For a normal restart, reopen the existing database with its original key. This retains committed session revocations.
 
-For backup restoration, keep all request servers offline. Restore into a private directory, reopen with the original key, and **invalidate every session before allowing traffic**, especially when the backup predates recent revocations:
+For an **unanchored** backup restoration, keep all request servers offline. Restore into a private directory, reopen with the original key, and **invalidate every session before allowing traffic**, especially when the backup predates recent revocations:
 
 ```python
 restored = MultiTenantIAM(db_path=restored_database_path)
@@ -62,10 +62,10 @@ restored.invalidate_all_sessions()  # Trusted host operation; not an HTTP/agent 
 # Issue fresh credentials through trusted provisioning, then start request servers.
 ```
 
-The invalidation is transactional and remains effective after restart. Restoring an old backup and serving it immediately with the original key can revive old credentials; local signatures cannot detect that replay. The offline fence mitigates deliberate restore operations and does not detect hostile rollback. Do not advertise it as an external audit anchor.
+The invalidation is transactional and remains effective after restart. Restoring an old backup and serving it immediately with the original key can revive old credentials; local signatures cannot detect that replay. The offline fence mitigates deliberate restores of unanchored stores. For an anchored store, an older snapshot is rejected before session invalidation is possible: follow [external anchor recovery](EXTERNAL_AUDIT_ANCHOR.md) and never rewind the witness to accept it.
 
 ## Limits and follow-up
 
-Use one trusted POSIX host and a local SQLite filesystem. Multi-host/NFS authority, external identity federation, online signing-key rotation and production-scale authentication load have not been qualified. The current integrity check scans the audit history on each read; its cost grows with retained history. Measure and design bounded authenticated indexing/retention before high-volume use without weakening freshness or integrity checks.
+Use one trusted POSIX host and a local SQLite filesystem. Multi-host/NFS authority, external identity federation, online signing-key rotation and production-scale authentication load have not been qualified. External anchoring is implemented and tested against a separate TLS process; production witness deployment and its independent retention policy must still be verified. The current integrity check scans the audit history on each read; its cost grows with retained history. Measure and design bounded authenticated indexing/retention before high-volume use without weakening freshness or integrity checks.
 
 Durable identity does not isolate shared memory, the model gateway, Git/browser/cloud-data tools, general orchestration or legacy APIs. Those services still require explicit tenant-aware integration and adversarial acceptance.

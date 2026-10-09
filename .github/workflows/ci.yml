@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install system deps (virtual display + input)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xdotool bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xdotool bubblewrap openssl
       - name: Install package
         run: pip install -e ".[dev,browser]"
       - name: Install pinned browser and worker image

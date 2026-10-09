@@ -1,12 +1,16 @@
 # Independent Reviewer & Chief Architect — Assigned Tasks
 
+## External identity anchoring milestone
+
+The separately deployable HTTPS witness now enforces forward-only identity checkpoints. Full gate: 424 passed, zero failures/errors/skips; 30 anchoring cases cover authentic rollback, outage, TLS/transport attacks, concurrent forks, uncertain commits and real process death. Clean installed-wheel checks pass. See [external anchor review](EXTERNAL_AUDIT_ANCHOR_REVIEW.md). **Production activation remains pending independent witness hosting, credentials and restore/retention qualification.** Runtime tenant ownership and sustained capacity remain separate blockers.
+
 ## Durable identity milestone
 
-Private SQLite tenants/principals/sessions now survive restart; authenticated self/admin revocation persists across instances. Full gate: 394 passed, zero failures/skips; 27 dedicated identity cases include process death, atomic audit failure and safe offline restore fencing. See [durable identity review](DURABLE_IDENTITY_REVIEW.md). Next blockers remain tenant-aware runtime services and externally anchored authority freshness.
+Private SQLite tenants/principals/sessions now survive restart; authenticated self/admin revocation persists across instances. Full gate: 394 passed, zero failures/skips; 27 dedicated identity cases include process death, atomic audit failure and safe offline restore fencing. See [durable identity review](DURABLE_IDENTITY_REVIEW.md). The subsequent external anchoring milestone implements authority freshness for explicitly configured stores; independent production activation and tenant-aware runtime services remain required.
 
 ## Tenant-boundary pilot milestone
 
-Authenticated tenant-bound MCP and PM HTTP paths now isolate workspaces and SQLite state; 18 tenant adversarial/integration cases and the full 367-test suite pass. Unsupported shared services remain denied in tenant mode. See [tenant boundary review](TENANT_BOUNDARY_REVIEW.md). The subsequent [durable identity milestone](DURABLE_IDENTITY_REVIEW.md) provides private single-host identity/session persistence and revocation. Tenant-aware memory/model/orchestration and external audit anchoring remain required before whole-platform multi-tenant deployment.
+Authenticated tenant-bound MCP and PM HTTP paths now isolate workspaces and SQLite state; 18 tenant adversarial/integration cases and the full 367-test suite pass. Unsupported shared services remain denied in tenant mode. See [tenant boundary review](TENANT_BOUNDARY_REVIEW.md). The subsequent [durable identity milestone](DURABLE_IDENTITY_REVIEW.md) provides private single-host identity/session persistence and revocation. Tenant-aware memory/model/orchestration and independent production witness activation remain required before whole-platform multi-tenant deployment.
 
 
 Owner: Codex, acting as Independent Reviewer & Chief Architect for Platform, AI & Data.
@@ -17,7 +21,7 @@ This is a review backlog, not a production approval. Initial observations are fr
 
 ## Latest remediation
 
-The baseline failures, full integration prerequisites and bounded recovery/adversarial checks have now been addressed. See [revision verification](REVISION_VERIFICATION_2026_10_08.md) and its evidence manifest for actual results. Enterprise tenant enforcement, external audit anchoring, real data-service integration and sustained multi-host/load assurance remain deployment blockers. Earlier checked items below describe the historical assessment, not current production approval.
+The baseline failures, full integration prerequisites and bounded recovery/adversarial checks have now been addressed. See [revision verification](REVISION_VERIFICATION_2026_10_08.md) and its evidence manifest for actual results. Enterprise tenant enforcement, independent production witness activation, real data-service integration and sustained multi-host/load assurance remain deployment blockers. Earlier checked items below describe the historical assessment, not current production approval.
 
 ## Review status
 

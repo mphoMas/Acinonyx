@@ -1,0 +1,44 @@
+{
+  "baseline_revision": "22ddde03a97e558efb7488ab462dc627bde5609b",
+  "scope": "Explicitly anchored durable identity pilot; independent HTTPS witness protocol",
+  "verdict": "APPROVED WITH CONDITIONS",
+  "full_gate": {
+    "command": "bash scripts/run_quality_gate.sh",
+    "gates_passed": 5,
+    "tests": 424,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 121.021
+  },
+  "external_anchor_acceptance_cases": 30,
+  "wheel_smoke": {
+    "installed_package_tls_rollback": "passed",
+    "packaged_python_files_matched": 96,
+    "witness_process_separate": true
+  },
+  "source_sha256": {
+    "mas/audit_anchor.py": "8d836042bd516a1fe637a74ff9240a9d8e0e2b76af3cfd97c69ed1d441ef563b",
+    "mas/anchor_http_worker.py": "f5e265b39e091a61a650f54e3c7c1c01be9b27a75a4e01bac92b4db8030b6c05",
+    "mas/audit_witness.py": "8af28d57dd3e8f96c5557089a0df62866d8e97a76f514ba9e7f328ab7861452f",
+    "mas/identity_store.py": "27f7afa0cf324218c27fff30cc62835fb15b3d68348011d1a16daa35fb0e35df",
+    "mas/iam.py": "e0f72353185495050b814adc0adada9ff4302e97a2da589a5f1d50095447dde4",
+    "mas/capabilities.py": "8d83790e3821f1d015f2ee76ce5482ad2010ae5ec2e0ec51bff9275dfd0df0ce",
+    "tests/test_external_audit_anchor.py": "b24d23bf5820f004bed8d570ebccbaf9a4d9d1f388132d32efd373cc3271864a",
+    ".github/workflows/ci.yml": "ecdbe8644ab1a5c32885f4d5a3ff88a3009b38ccdd558fba2a3b25155207d8ce"
+  },
+  "artifact_sha256": {
+    "/workspace/review-evidence/external-anchor-gate.log": "3c5776e53b1e8aea07c48516a87f69d3714b3247ca8bac1c23debfb7e6ca5560",
+    "/workspace/review-evidence/external-anchor-tests.xml": "44a403f83475bea96e998983c4c266830c104bb9986c929c67408fc9d28c7567",
+    "/workspace/review-evidence/external-anchor-build.log": "049f2c563f2897935cd5ab5e01b5c756960227766c2a0a4df955891abd0839b6",
+    "/workspace/review-evidence/external-anchor-wheel-smoke.log": "3f375038af2a50dd17a229e6be87515520636f5df7d28f63d3d3e94628ec091a",
+    "/workspace/review-evidence/external-anchor-wheel/mas_core-0.2.0-py3-none-any.whl": "b01148e16bdb9ed9098a11bcd06dc7f124624de32ece68bb27d27ddeb9133189"
+  },
+  "limitations": [
+    "Production independently administered HTTPS witness endpoint not deployed or configured",
+    "Witness and coordinator must have independent administration, storage, keys and restore policies",
+    "Identity authority only; no whole-platform tenancy or model-quality certification",
+    "Witness outage and uncertain commit deliberately deny authentication",
+    "Production rate limiting, capacity, key rotation, retention and high availability unqualified"
+  ]
+}

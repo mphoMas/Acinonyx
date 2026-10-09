@@ -21,6 +21,7 @@ from weakref import WeakValueDictionary
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from mas.identity_store import IdentityStore
+from mas.audit_anchor import HTTPAuditAnchor
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
@@ -92,7 +93,7 @@ class MultiTenantIAM:
     4. Filesystem workspace jailing per tenant.
     """
 
-    def __init__(self, signing_secret: Optional[str] = None, *, db_path: Optional[str | Path] = None) -> None:
+    def __init__(self, signing_secret: Optional[str] = None, *, db_path: Optional[str | Path] = None, anchor: Optional[HTTPAuditAnchor] = None) -> None:
         import secrets
         # Unconfigured local instances are intentionally process-local. Durable
         # deployments must supply MAS_IAM_SECRET or an explicit private key.
@@ -105,7 +106,14 @@ class MultiTenantIAM:
         if len(key.encode("utf-8")) < 32:
             raise ValueError("IAM signing key must contain at least 32 bytes")
         self.signing_secret = key.encode("utf-8")
-        self._store = IdentityStore(path, self.signing_secret) if path is not None else None
+        configured = [os.getenv(name) for name in ("MAS_IAM_ANCHOR_URL", "MAS_IAM_ANCHOR_NAMESPACE", "MAS_IAM_ANCHOR_TOKEN")]
+        if anchor is None and any(value is not None for value in configured):
+            if not all(configured):
+                raise ValueError("External audit anchor requires URL, namespace and bearer credential")
+            anchor = HTTPAuditAnchor(*configured)
+        if anchor is not None and path is None:
+            raise ValueError("External audit anchoring requires durable identity storage")
+        self._store = IdentityStore(path, self.signing_secret, anchor=anchor) if path is not None else None
         self._sessions: Dict[str, Dict[str, Any]] = {}
         self._contexts = WeakValueDictionary()
         self._tenants: Dict[str, Tenant] = {}
@@ -156,6 +164,12 @@ class MultiTenantIAM:
                 "agents:dispatch",
             },
         }
+
+    def audit_checkpoint(self) -> Dict[str, Any]:
+        """Trusted non-secret checkpoint export for reviewed witness enrollment."""
+        if not self._store:
+            raise ValueError("Checkpoint export requires durable identity storage")
+        return self._store.export_checkpoint()
 
     @property
     def database_path(self) -> Optional[Path]:

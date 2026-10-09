@@ -15,17 +15,21 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from mas.audit_anchor import AnchorError
+
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 class IdentityStore:
-    def __init__(self, path: str | Path, key: bytes):
+    def __init__(self, path: str | Path, key: bytes, *, anchor=None):
         if os.name != "posix":
             raise RuntimeError("Durable identity storage requires a POSIX host")
         self.path = Path(path).absolute()
         self._key = key
+        self._anchor = anchor
+        self._initializing = True
         if self.path.parent.is_symlink() or self.path.is_symlink():
             raise PermissionError("Identity storage cannot be a symlink")
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -56,11 +60,41 @@ class IdentityStore:
                     db.execute("CREATE TABLE audit(seq INTEGER PRIMARY KEY, kind TEXT NOT NULL, entity_id TEXT NOT NULL, digest TEXT NOT NULL, previous TEXT NOT NULL, signature TEXT NOT NULL)")
                     db.execute("INSERT INTO metadata VALUES(1,1,?)", (self.sign("identity-schema:1"),))
                 else:
-                    if tables != {"metadata", "records", "audit"}:
+                    if tables not in ({"metadata", "records", "audit"}, {"metadata", "records", "audit", "anchor_binding"}):
                         raise PermissionError("Unsupported identity database schema")
                     if db.execute("SELECT id,version FROM metadata").fetchall() != [(1, 1)]:
                         raise PermissionError("Identity database key or schema mismatch")
                     self.validate_audit(db)
+                self._bind_anchor(db)
+        self._initializing = False
+
+    def _bind_anchor(self, db):
+        exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='anchor_binding'").fetchone()
+        if exists:
+            rows = db.execute("SELECT document,signature FROM anchor_binding").fetchall()
+            if self._anchor is None or len(rows) != 1:
+                raise AnchorError("An anchored authority requires its configured external witness")
+            raw, signature = rows[0]
+            if not hmac.compare_digest(self.sign("anchor-binding:" + raw), signature) or json.loads(raw) != self._anchor.binding:
+                raise AnchorError("External audit witness binding mismatch")
+            self._anchor.verify(self.audit_checkpoint(db))
+        elif self._anchor is not None:
+            # Attaching never publishes the local history automatically. A witness
+            # administrator must enroll this namespace at the reviewed checkpoint.
+            self._anchor.verify(self.audit_checkpoint(db))
+            db.execute("CREATE TABLE anchor_binding(document TEXT NOT NULL, signature TEXT NOT NULL)")
+            raw = canonical(self._anchor.binding)
+            db.execute("INSERT INTO anchor_binding VALUES(?,?)", (raw, self.sign("anchor-binding:" + raw)))
+
+    @staticmethod
+    def audit_checkpoint(db):
+        row = db.execute("SELECT seq,signature FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+        return {"sequence": row[0], "hash": row[1]} if row else {"sequence": 0, "hash": ""}
+
+    def export_checkpoint(self):
+        with self.transaction(write=False) as db:
+            self.validate_audit(db)
+            return self.audit_checkpoint(db)
 
     @contextmanager
     def _initialization(self):
@@ -101,7 +135,20 @@ class IdentityStore:
             db.execute("PRAGMA synchronous=FULL")
             db.execute("PRAGMA busy_timeout=5000")
             db.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            before = None
+            if not self._initializing:
+                self._bind_anchor(db)
+                if self._anchor is not None:
+                    self.validate_audit(db)
+                    before = self.audit_checkpoint(db)
             yield db
+            if before is not None:
+                after = self.audit_checkpoint(db)
+                if after != before:
+                    # Advance the independently retained head BEFORE commit. If
+                    # commit crashes/fails, the witness stays ahead and all reads
+                    # deny authority. Never rewind the witness to repair a lag.
+                    self._anchor.advance(before, after)
             db.commit()
         except BaseException:
             db.rollback()
@@ -126,6 +173,8 @@ class IdentityStore:
         expected = self.sign(canonical(["identity-head", count, previous])) if count else self.sign("identity-schema:1")
         if proof is None or not hmac.compare_digest(proof[0], expected):
             raise PermissionError("Identity audit head mismatch")
+        if self._anchor is not None:
+            self._anchor.verify(self.audit_checkpoint(db))
         return latest
 
     def read(self, db, kind, entity, latest):

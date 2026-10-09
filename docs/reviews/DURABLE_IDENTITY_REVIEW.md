@@ -1,5 +1,7 @@
 # Durable identity and session revocation review
 
+Historical assessment of `22ddde03`. The subsequent [external audit anchor review](EXTERNAL_AUDIT_ANCHOR_REVIEW.md) adds forward-only witness enforcement for explicitly configured stores. Production deployment of that independent witness remains a separate requirement.
+
 Baseline: `7624d83f5780f404e2413fc25bc1173df73a8a8e`. Scope: durable local identity authority and session revocation for the supported tenant-bound PM HTTP/MCP pilot. See [operational contract](../architecture/DURABLE_IDENTITY.md).
 
 ### 1. Verdict & Executive Summary
