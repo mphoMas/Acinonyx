@@ -54,4 +54,4 @@ and remaining limitations.
 
 ## Proposed consolidation
 
-Consolidation is a draft, not the current runtime. See the [architecture decision](MAS_CONSOLIDATION_ADR.md), [component migration map](MAS_CONSOLIDATION_MIGRATION.md), and [acceptance checklist](MAS_CONSOLIDATION_ACCEPTANCE.md).
+The consolidation design remains a draft. The [first shared evidence contract integration](MAS_CONSOLIDATION_STATUS.md) now runs in the coding verifier; shared authority and interface cutover remain pending. See the [architecture decision](MAS_CONSOLIDATION_ADR.md), [component migration map](MAS_CONSOLIDATION_MIGRATION.md), and [acceptance checklist](MAS_CONSOLIDATION_ACCEPTANCE.md).

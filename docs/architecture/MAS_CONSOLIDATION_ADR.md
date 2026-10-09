@@ -1,6 +1,6 @@
 # ADR: consolidate MAS onto a controlled execution platform
 
-Status: **DRAFT — proposed design; consolidation is not implemented.**
+Status: **DRAFT design — implementation has started with the [shared evidence contract slice](MAS_CONSOLIDATION_STATUS.md); consolidation and cutover are incomplete.**
 Source baseline: `119ca57ac000058f485dc1a33f62aafd722a3931`.
 Owner: Independent Reviewer & Chief Architect, with implementation owned by AcinonyxLabs engineering.
 Related documents: [component migration map](MAS_CONSOLIDATION_MIGRATION.md), [acceptance checklist](MAS_CONSOLIDATION_ACCEPTANCE.md), [current architecture](MAS_ARCHITECTURE.md).

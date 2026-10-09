@@ -1,0 +1,42 @@
+{
+  "baseline_revision": "645067c673f4221cfcaf8959a49be266ea38911d",
+  "scope": "First shared task identity/evidence contract slice integrated into the coding verifier; no authority or interface cutover",
+  "verdict": "APPROVED WITH CONDITIONS",
+  "full_gate": {
+    "gates_passed": 5,
+    "tests": 454,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 116.027
+  },
+  "new_contract_cases": 30,
+  "wheel_smoke": {
+    "installed_evidence_bridge": "passed",
+    "signed_store_reopen": "passed",
+    "packaged_python_files_matched": 99,
+    "model_or_candidate_execution": "not_claimed"
+  },
+  "source_sha256": {
+    "mas/platform/__init__.py": "b138d6c46c309d3c6069e03bb646f9498f7642182a95a21e119c10c3cbb614e1",
+    "mas/platform/contracts.py": "8511f0bf99f02f56c0e97a43c2538b43a12a7a52ea4f4b8afcd2fff4303a4023",
+    "mas/platform/coding.py": "6c1fcece574b0ac38a78e52038f7d46b2c8810054f7bcb55a3730639d7c96bb9",
+    "mas/swarm/runtime.py": "6f15bc06770babbc89a368b16aeb57ab549864af7eee8601974e818d594561c4",
+    "tests/test_platform_contracts.py": "e111197dde89256c0a0d50619e8098d22b6a50b85099c82c17e7ce4c01761664"
+  },
+  "artifact_sha256": {
+    "/workspace/review-evidence/consolidation-contract-gate.log": "d0e39328073f9509ab19fea279e2df2eb3d987d84ebc1ae533284a2e6afbc6df",
+    "/workspace/review-evidence/consolidation-contract-tests.xml": "bbd563cdfdb166800842ed71790e1e72b5766687ffbb05ddda76c52b34d84031",
+    "/workspace/review-evidence/consolidation-contract-build.log": "340bf8e062e4ec4ac77a9410bce587cf320cdf5249b819e0706fa9734bd311b1",
+    "/workspace/review-evidence/consolidation-contract-wheel-smoke.log": "c7532acf7f00cbff476fb412ddce1165a607448e940ec9bd809da50fa1be458c",
+    "/workspace/review-evidence/consolidation-contract-wheel/mas_core-0.2.0-py3-none-any.whl": "62e2bbed4584175c81760c2c409933c0ccd8f5f0feea633e29655774a857df89"
+  },
+  "remaining": [
+    "P0 inventory and complete shared schemas",
+    "Shared platform/swarm identity and credential migration",
+    "Shared coordinator/capability broker and tenant PM vertical slice",
+    "Independent production witness activation; swarm history not externally anchored",
+    "Interface cutover and per-capability/load/recovery qualification"
+  ],
+  "live_model_reevaluation": "not performed; provider and prompts unchanged"
+}

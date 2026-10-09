@@ -1,5 +1,9 @@
 # Independent Reviewer & Chief Architect — Assigned Tasks
 
+## Consolidation first contract milestone
+
+Shared immutable task identity and verification evidence contracts now run in the coding verifier without changing signed storage schema 2. Full gate: 454 passed, zero failures/errors/skips; 30 new negative/compatibility cases and clean-wheel checks pass. See [contract-slice review](CONSOLIDATION_CONTRACT_REVIEW.md) and [implementation status](../architecture/MAS_CONSOLIDATION_STATUS.md). P0/P2 remain in progress; shared identity, broker and interface/data cutover are pending.
+
 ## External identity anchoring milestone
 
 The separately deployable HTTPS witness now enforces forward-only identity checkpoints. Full gate: 424 passed, zero failures/errors/skips; 30 anchoring cases cover authentic rollback, outage, TLS/transport attacks, concurrent forks, uncertain commits and real process death. Clean installed-wheel checks pass. See [external anchor review](EXTERNAL_AUDIT_ANCHOR_REVIEW.md). **Production activation remains pending independent witness hosting, credentials and restore/retention qualification.** Runtime tenant ownership and sustained capacity remain separate blockers.

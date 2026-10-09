@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+from mas.platform.coding import validate_coding_evidence
+
 from .contracts import CandidateError, Limits, SwarmError, canonical, digest, exact_keys, strict_json, text
 from .provider import LiveProvider
 from .store import ACTIVE, Store
@@ -76,6 +78,7 @@ class CodingSwarm:
             "results": results,
             "finished": time.time(),
         }
+        validate_coding_evidence(doc, evidence, self.worker.image)
         if not all(r["passed"] for r in results):
             return self.store.transition(token, doc["id"], doc["lease"], "rejected", evidence=evidence)
         doc = self.store.transition(token, doc["id"], doc["lease"], "reviewing", evidence=evidence)
