@@ -1,0 +1,1235 @@
+{
+  "schema_version": 1,
+  "project_key": "PLG",
+  "project_name": "Platinum Lodge — multi-property hotel management",
+  "project_description": "Planning initiation: production reservations/check-in, billing/payments and housekeeping. Codex frontend/design/art; Antigravity development team backend. No active execution.",
+  "records": [
+    {
+      "source_key": "PLG-1",
+      "title": "Release one: production-ready multi-property hotel operations",
+      "description": "Delivery/integration owner: Codex (planning coordination). Backend implementation: Antigravity development team. Review: separate technical/operational reviewers; project owner final release decision. Acceptance: G0–G6 in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md. Planning only; no execution credentials or budget.",
+      "issue_type": "INITIATIVE",
+      "priority": "HIGH",
+      "parent_source_key": null,
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-2",
+      "title": "Discovery, feasibility and operating policies",
+      "description": "Delivery/integration owner: Codex. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G0. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-3",
+      "title": "Multi-property backend foundations",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G1. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-4",
+      "title": "Frontend system and property-aware navigation",
+      "description": "Delivery/integration owner: Codex. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G1. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-5",
+      "title": "Reservations and front desk",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G2. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-6",
+      "title": "Billing, payments and business-day close",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G3. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-7",
+      "title": "Housekeeping and room readiness",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G4. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-8",
+      "title": "Management visibility and productivity",
+      "description": "Delivery/integration owner: Codex. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G4. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-9",
+      "title": "Production qualification and recovery",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G5. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-10",
+      "title": "Migration, training and operational acceptance",
+      "description": "Delivery/integration owner: Antigravity development team. Review: other team plus independent domain reviewer. Acceptance: constituent tasks and G6. Planning only; refine exact file scopes before staging.",
+      "issue_type": "EPIC",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-1",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-11",
+      "title": "[D1] Confirm launch properties, countries and scope",
+      "description": "WBS: D1\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G0\nDependencies (WBS): none\nAcceptance: Owner-reviewed launch list, two real pilot-property candidates, required integrations and exclusions; no implied legal/provider eligibility.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-2",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-12",
+      "title": "[D2] Measure current staff workflow baseline",
+      "description": "WBS: D2\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G0\nDependencies (WBS): D1\nAcceptance: M01/M02 protocol, role journey inventory and consented/anonymized matched task timings at participating hotels.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-2",
+      "dependencies": [
+        "PLG-11"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-13",
+      "title": "[D3] Validate financial, guest-registration and privacy policies",
+      "description": "WBS: D3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G0\nDependencies (WBS): D1\nAcceptance: Accountant/legal-reviewed taxes, invoice numbering, deposits, cancellation/no-show, refunds, credit balance, guest reporting and retention per jurisdiction.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-2",
+      "dependencies": [
+        "PLG-11"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-14",
+      "title": "[D4] Validate regional payment provider and merchant readiness",
+      "description": "WBS: D4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G0\nDependencies (WBS): D1\nAcceptance: Country/currency/payout/refund/terminal eligibility, sandbox access, hosted capture and merchant obligations documented; owner procurement decision.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-2",
+      "dependencies": [
+        "PLG-11"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-15",
+      "title": "[D5] Agree backend architecture, capacity and cost model",
+      "description": "WBS: D5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G0\nDependencies (WBS): D3, D4\nAcceptance: ADRs for database/identity/hosting/job boundaries; capacity estimate and engineering/operating cost categories reviewed, no invented approvals.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-2",
+      "dependencies": [
+        "PLG-13",
+        "PLG-14"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-16",
+      "title": "[D6] Acknowledge ownership and synchronize execution planning",
+      "description": "WBS: D6\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G0\nDependencies (WBS): D1\nAcceptance: Antigravity acknowledges agreement; shared MAS-PM synchronization/principals validated; precise scopes and task splits proposed without granting permissions.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-2",
+      "dependencies": [
+        "PLG-11"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-17",
+      "title": "[F1] Plan selective prototype/frontier integration",
+      "description": "WBS: F1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G1\nDependencies (WBS): D5, D6\nAcceptance: Reviewed branch divergence and selective integration plan preserves frontier security/ownership; legacy modules inventoried and disabled unless qualified.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-3",
+      "dependencies": [
+        "PLG-15",
+        "PLG-16"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/server.js"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-18",
+      "title": "[F2] Implement organization/property data model and migrations",
+      "description": "WBS: F2\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G1\nDependencies (WBS): F1\nAcceptance: Versioned reversible-or-recoverable migrations, membership model and two-org/two-property fixtures; property-local config, room numbering and timezone/currency.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-3",
+      "dependencies": [
+        "PLG-17"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-19",
+      "title": "[F3] Implement production authentication and scoped authorization",
+      "description": "WBS: F3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G1\nDependencies (WBS): F2\nAcceptance: Privileged MFA, revocation/recovery, secure session behavior and server checks for every resource/file/export/job; negative tests M05.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-3",
+      "dependencies": [
+        "PLG-18"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-20",
+      "title": "[F4] Publish versioned API and operation contract",
+      "description": "WBS: F4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G1\nDependencies (WBS): F2, F3\nAcceptance: Jointly reviewed OpenAPI, pagination, capabilities, record versions, errors, correlation IDs, durable retry semantics and fixtures.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-3",
+      "dependencies": [
+        "PLG-18",
+        "PLG-19"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-21",
+      "title": "[F5] Provision staging, CI and deployment/migration skeleton",
+      "description": "WBS: F5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G1\nDependencies (WBS): D5, F1\nAcceptance: Separated environments/secrets, candidate-bound CI, smoke checks and reviewed migration rollout; no production activation.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-3",
+      "dependencies": [
+        "PLG-15",
+        "PLG-17"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-22",
+      "title": "[U1] Inventory frontend gaps and specify role journeys",
+      "description": "WBS: U1\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G1\nDependencies (WBS): D1, D2\nAcceptance: Core journeys with all loading/error/stale/conflict/permission states and role/property navigation mapped to required APIs.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-4",
+      "dependencies": [
+        "PLG-11",
+        "PLG-12"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-23",
+      "title": "[U2] Define design system and approved art direction",
+      "description": "WBS: U2\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G1\nDependencies (WBS): U1\nAcceptance: Accessible component/token specifications, readable typography, semantic status design, EN/PT guidance and image-rights register.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-4",
+      "dependencies": [
+        "PLG-22"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-24",
+      "title": "[U3] Implement property/role-aware shell and safe switching",
+      "description": "WBS: U3\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G1\nDependencies (WBS): U2, F4\nAcceptance: Property identity visible, stale responses rejected, scoped caches cleared, unsaved input handled; group actions require explicit property.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-4",
+      "dependencies": [
+        "PLG-20",
+        "PLG-23"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-25",
+      "title": "[U4] Implement accessible components and resilient API client",
+      "description": "WBS: U4\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G1\nDependencies (WBS): U2, F4\nAcceptance: Keyboard/dialog/form states, input preservation, retained operation keys, pagination and version-conflict handling; browser checks at target sizes/zoom.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-4",
+      "dependencies": [
+        "PLG-20",
+        "PLG-23"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-26",
+      "title": "[R1] Implement inventory, rates and reservation policy snapshots",
+      "description": "WBS: R1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G2\nDependencies (WBS): F4, D3\nAcceptance: Room types/sellable inventory, rate/capacity/deposit/cancellation snapshots and business-date semantics tested.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-5",
+      "dependencies": [
+        "PLG-13",
+        "PLG-20"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-27",
+      "title": "[R2] Implement concurrent-safe reservation lifecycle and room moves",
+      "description": "WBS: R2\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G2\nDependencies (WBS): R1\nAcceptance: Creation/amend/cancel/no-show/move invariants; M06 races, version conflicts and idempotent commands verified.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-5",
+      "dependencies": [
+        "PLG-26"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-28",
+      "title": "[R3] Implement check-in/out eligibility and exception APIs",
+      "description": "WBS: R3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G2\nDependencies (WBS): R2, D3\nAcceptance: Clean/unblocked/available room enforcement, dates/occupancy, settlement/credit policy and audited overrides; no client-only policy.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-5",
+      "dependencies": [
+        "PLG-13",
+        "PLG-27"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-29",
+      "title": "[R4] Build reservations/calendar and front-desk workspaces",
+      "description": "WBS: R4\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G2\nDependencies (WBS): U3, U4, R2, R3\nAcceptance: Scoped availability/create/amend/arrivals/departures/in-house flows integrate real APIs with retained input and clear property context.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-5",
+      "dependencies": [
+        "PLG-24",
+        "PLG-25",
+        "PLG-27",
+        "PLG-28"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-30",
+      "title": "[R5] Verify reservation/front-desk integration and regression",
+      "description": "WBS: R5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G2\nDependencies (WBS): R4\nAcceptance: Actual candidate-bound lifecycle/browser/concurrency evidence; hotel supervisor signs scenarios, Codex reviews UI contract.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-5",
+      "dependencies": [
+        "PLG-29"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-31",
+      "title": "[B1] Implement immutable property/legal-entity journal and folios",
+      "description": "WBS: B1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): F4, D3\nAcceptance: Balanced currency-aware journal, deposits/receivables/earned revenue separation, split folios/routing, reversals and audit golden fixtures.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-13",
+        "PLG-20"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-32",
+      "title": "[B2] Implement taxes, invoice/receipt rules and financial exports",
+      "description": "WBS: B2\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): B1\nAcceptance: Accountant-approved rounding/numbering/tax examples reconcile; permission-safe/formula-safe exports and no destructive financial edits.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-31"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-33",
+      "title": "[B3] Implement nightly posting and resumable business-day close",
+      "description": "WBS: B3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): B1, R2\nAcceptance: Timezone/DST/late posting fixtures; idempotent nightly close, restart-safe checkpoints and explicit failed/partial close status.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-27",
+        "PLG-31"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-34",
+      "title": "[B4] Integrate provider capture/refunds and verified webhooks",
+      "description": "WBS: B4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): B1, D4, F5\nAcceptance: Hosted/tokenized flows, signed/deduplicated/out-of-order events, lost acknowledgement and unknown states; no PAN/CVV storage.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-14",
+        "PLG-21",
+        "PLG-31"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-35",
+      "title": "[B5] Implement tender, shift and provider settlement reconciliation",
+      "description": "WBS: B5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): B2, B3, B4\nAcceptance: Cash/bank/manual/provider tenders, refund limits and discrepancy workflow; M07 replay/fault fixtures and settlement totals reconcile.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-32",
+        "PLG-33",
+        "PLG-34"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-36",
+      "title": "[B6] Build billing, checkout and reconciliation frontend",
+      "description": "WBS: B6\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G3\nDependencies (WBS): U4, B2, B3, B4, B5, R4\nAcceptance: Folios/invoices/tenders/refunds/shift close/uncertain payments integrate actual APIs; high-risk confirmations and role-safe details.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-25",
+        "PLG-29",
+        "PLG-32",
+        "PLG-33",
+        "PLG-34",
+        "PLG-35"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-37",
+      "title": "[B7] Qualify finance and payment acceptance",
+      "description": "WBS: B7\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G3\nDependencies (WBS): B6\nAcceptance: Finance independent review, M07, sandbox proof and separately authorized live smoke/settlement evidence; operational runbooks accepted.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-6",
+      "dependencies": [
+        "PLG-36"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-38",
+      "title": "[H1] Implement housekeeping assignment and inspection workflow",
+      "description": "WBS: H1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G4\nDependencies (WBS): F4, R3\nAcceptance: Distinct occupancy/cleaning/readiness, assignments/priorities and supervisor inspection with audit/version conflicts.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-7",
+      "dependencies": [
+        "PLG-20",
+        "PLG-28"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-39",
+      "title": "[H2] Implement emergency maintenance and inventory relocation",
+      "description": "WBS: H2\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G4\nDependencies (WBS): H1, R2\nAcceptance: Out-of-service with current/future stays creates accountable relocation workflow; availability and guest communication states remain safe.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-7",
+      "dependencies": [
+        "PLG-27",
+        "PLG-38"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-40",
+      "title": "[H3] Build mobile housekeeping and supervisor workspace",
+      "description": "WBS: H3\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G4\nDependencies (WBS): U4, H1, H2\nAcceptance: Assigned rooms/priorities, safe bulk actions, quick updates and inspection; stale/offline state explicit; M04 task checks.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-7",
+      "dependencies": [
+        "PLG-25",
+        "PLG-38",
+        "PLG-39"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-41",
+      "title": "[H4] Verify readiness propagation and handover",
+      "description": "WBS: H4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G4\nDependencies (WBS): H3\nAcceptance: M04 server propagation and browser integration; back-to-back arrivals, room failure and staff handover scenarios reviewed.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-7",
+      "dependencies": [
+        "PLG-40"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-42",
+      "title": "[M1] Implement property/group metrics and actionable exception APIs",
+      "description": "WBS: M1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G4\nDependencies (WBS): B5, H2, R3\nAcceptance: Reviewed occupancy/ADR/RevPAR definitions, separate currencies, safe drill-down and source/owner/age/next action for every priority exception.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-8",
+      "dependencies": [
+        "PLG-28",
+        "PLG-35",
+        "PLG-39"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-43",
+      "title": "[M2] Build Today workspace and portfolio management views",
+      "description": "WBS: M2\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G4\nDependencies (WBS): U3, M1, B6, H3\nAcceptance: Role-focused tasks, arrival/payment/cleaning exceptions, scoped portfolio and drill-down with freshness and action accountability.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-8",
+      "dependencies": [
+        "PLG-24",
+        "PLG-36",
+        "PLG-40",
+        "PLG-42"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-44",
+      "title": "[M3] Measure and refine staff productivity",
+      "description": "WBS: M3\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G4\nDependencies (WBS): M2, D2\nAcceptance: Matched M01–M04/M14 study; disclose sample and failures, record improvements and remeasure changed candidate.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-8",
+      "dependencies": [
+        "PLG-12",
+        "PLG-43"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-45",
+      "title": "[Q1] Implement monitoring, audit retention and incident runbooks",
+      "description": "WBS: Q1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): F5, B5, H4\nAcceptance: Redacted logs, critical synthetic checks, correlation IDs, protected audit retention, alert routing and staffed escalation proposal.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-21",
+        "PLG-35",
+        "PLG-41"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-46",
+      "title": "[Q2] Implement off-site recovery and conduct two restore drills",
+      "description": "WBS: Q2\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): Q1\nAcceptance: Coordinated DB/files/jobs/keys recovery, independent encrypted backups, witnessed M11 and transaction/provider reconciliation.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-45"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-47",
+      "title": "[Q3] Run independent security and tenant isolation qualification",
+      "description": "WBS: Q3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): B7, H4, M1\nAcceptance: ASVS 5.0 applicable Level 2 mapping, M05, upload/CSRF/session/dependency/config checks; no unresolved critical/high findings.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-37",
+        "PLG-41",
+        "PLG-42"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-48",
+      "title": "[Q4] Run backend load, soak and fault qualification",
+      "description": "WBS: Q4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): B7, H4, M1\nAcceptance: M06–M08 scenario dataset, 8h soak, restart/provider faults and correctness/performance results tied to candidate.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-37",
+        "PLG-41",
+        "PLG-42"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-49",
+      "title": "[Q5] Qualify accessibility, frontend performance and localization",
+      "description": "WBS: Q5\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G5\nDependencies (WBS): M3\nAcceptance: M09/M12 manual keyboard/screen-reader/zoom checks plus browser traces; EN/PT and property currency/timezone examples reviewed.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-44"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-50",
+      "title": "[Q6] Prepare qualification packet and release recommendation",
+      "description": "WBS: Q6\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): Q2, Q3, Q4, Q5\nAcceptance: Candidate-specific evidence, independent reviews, known risks, monitoring/support and gate decisions; owner decides production release.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-9",
+      "dependencies": [
+        "PLG-46",
+        "PLG-47",
+        "PLG-48",
+        "PLG-49"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-51",
+      "title": "[L1] Develop and rehearse migration with opening-balance reconciliation",
+      "description": "WBS: L1\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): B7, H4, M1\nAcceptance: Two-property mapping/dedup/import rehearsals; inventory, deposits, balances and guest provenance reconcile; no blind password/session copies.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-10",
+      "dependencies": [
+        "PLG-37",
+        "PLG-41",
+        "PLG-42"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-52",
+      "title": "[L2] Prepare role training and safe manual continuity guides",
+      "description": "WBS: L2\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G5\nDependencies (WBS): M3, B7, H4\nAcceptance: Role guides, emergency property-safe procedures and training trial M13; hotel staff and Antigravity review correctness.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-10",
+      "dependencies": [
+        "PLG-37",
+        "PLG-41",
+        "PLG-44"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/public/",
+        "projects/platinum-lodge/planning/",
+        "projects/platinum-lodge/test/browser/"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/migrations/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-53",
+      "title": "[L3] Approve cutover, rollback and support coverage",
+      "description": "WBS: L3\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G5\nDependencies (WBS): L1, L2, Q6\nAcceptance: Write fence, backup verification, forward recovery/payment limits and escalation rehearsed; owner-approved staffing and cutover decision.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-10",
+      "dependencies": [
+        "PLG-50",
+        "PLG-51",
+        "PLG-52"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-54",
+      "title": "[L4] Execute authorized staged multi-property rollout",
+      "description": "WBS: L4\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G6\nDependencies (WBS): L3\nAcceptance: Only after release authorization: candidate deployment, opening totals verified, monitored cohort and documented stop/rollback conditions.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "CRITICAL",
+      "parent_source_key": "PLG-10",
+      "dependencies": [
+        "PLG-53"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    },
+    {
+      "source_key": "PLG-55",
+      "title": "[L5] Complete operational acceptance and support handover",
+      "description": "WBS: L5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G6\nDependencies (WBS): L4\nAcceptance: M15 two-real-property 14-day evidence, daily inventory/finance close, M01–M04/M13 reports, known issues and owner expansion decision.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "issue_type": "TASK",
+      "priority": "HIGH",
+      "parent_source_key": "PLG-10",
+      "dependencies": [
+        "PLG-54"
+      ],
+      "path_whitelist": [
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/server/",
+        "projects/platinum-lodge/migrations/",
+        "projects/platinum-lodge/scripts/",
+        "projects/platinum-lodge/test/",
+        ".github/workflows/platinum-lodge.yml"
+      ],
+      "forbidden_paths": [
+        "projects/platinum-lodge/public/"
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800
+    }
+  ],
+  "note": "Portable planned records. Runtime state, evidence, credentials and actual assignees are never exported or overwritten."
+}

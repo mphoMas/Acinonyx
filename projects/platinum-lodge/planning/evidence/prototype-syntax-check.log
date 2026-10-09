@@ -1,0 +1,4 @@
+
+> platinum-lodge-management@1.0.0 check
+> node --check server.js && node --check public/app.js
+

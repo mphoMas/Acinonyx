@@ -1,0 +1,18 @@
+
+> platinum-lodge-management@1.0.0 test
+> node --test test/*.test.js
+
+✔ first-use account, isolation, booking conflicts, payments, housekeeping, events, and permissions (693.515509ms)
+✔ rejects cross-origin mutations and HTML injection stays data (12.464534ms)
+✔ financial retries, amendments, refunds, and atomic validation (188.550307ms)
+✔ SQLite data survives a process restart and sessions require fresh sign-in (227.037797ms)
+✔ a consistent backup restores records and staff authentication (297.66254ms)
+✔ dining staff receive only the in-house guest details needed for room charges (109.370648ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1616.956858
