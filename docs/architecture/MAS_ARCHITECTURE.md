@@ -51,3 +51,7 @@ results outside that container.
 See the [supervised swarm design](SUPERVISED_SWARM.md) for the exact controls and
 the [independent review](../reviews/SUPERVISED_SWARM_REVIEW.md) for tested evidence
 and remaining limitations.
+
+## Proposed consolidation
+
+Consolidation is a draft, not the current runtime. See the [architecture decision](MAS_CONSOLIDATION_ADR.md), [component migration map](MAS_CONSOLIDATION_MIGRATION.md), and [acceptance checklist](MAS_CONSOLIDATION_ACCEPTANCE.md).
