@@ -142,3 +142,5 @@ Exhaustive theoretical, architectural, and benchmark studies supporting Project 
 - [**Master AI Encyclopedia (8 Volumes)**](research/ai_encyclopedia/README.md): 70+ year comprehensive history, mathematical foundations, frontier labs, university curricula, and future horizons.
 - [**Google Cloud Agentic Infrastructure**](research/google_cloud_agentic_infra/README.md): Cloud-native agent deployment on Vertex AI Reasoning Engine and Cloud Run.
 
+
+The coding swarm can explicitly share durable platform IAM sessions with tenant-bound PM interfaces. See [shared identity setup](docs/architecture/SHARED_SWARM_IDENTITY.md) for permissions, persisted binding and revocation recovery. Historical local stores are not automatically migrated.

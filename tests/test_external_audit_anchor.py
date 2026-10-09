@@ -406,3 +406,48 @@ def test_stalled_tls_handshake_does_not_block_other_clients(witness):
         client.verify({"sequence": 0, "hash": ""})
         stalled.settimeout(5)
         assert stalled.recv(1) == b""
+
+
+def test_shared_swarm_rejects_identity_rollback_against_independent_witness(witness):
+    from mas.platform.identity import PlatformAuthority
+    from mas.swarm.store import Store
+    iam, path, admin, _ = populated(witness)
+    iam.register_principal("alpha", "swarm-writer", roles={StandardRole.SWARM_REQUESTER.value})
+    token = iam.issue_token("alpha", "swarm-writer")
+    store = Store(witness["root"] / "runs.sqlite", secrets.token_bytes(32), authority=PlatformAuthority(iam))
+    doc = store.submit(token, "anchored-shared", "Return input", [{"id": "identity", "input": 1, "expected": 1}])
+    old = witness["root"] / "old-authority.sqlite"
+    iam.backup(old)
+    iam.revoke_session(admin, iam.verify_token(token).token_id)
+    shutil.copyfile(old, path)
+    with pytest.raises(PermissionError):
+        store.get(token, doc["id"])
+    with pytest.raises(PermissionError):
+        store.claim(token, doc["id"], "sha256:" + "a" * 64)
+
+
+def test_shared_swarm_guard_blocks_external_revocation_publication(witness):
+    from threading import Event
+    from mas.platform.identity import PlatformAuthority
+    from mas.swarm.store import Store
+    iam, _, admin, _ = populated(witness)
+    iam.register_principal("alpha", "writer", roles={StandardRole.SWARM_REQUESTER.value})
+    token = iam.issue_token("alpha", "writer")
+    sid = iam.verify_token(token).token_id
+    store = Store(witness["root"] / "guarded-runs.sqlite", secrets.token_bytes(32), authority=PlatformAuthority(iam))
+    started = Event()
+    def revoke():
+        started.set()
+        iam.revoke_session(admin, sid)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with store._tx() as db:
+            store._auth(db, token, {"requester"})
+            head = iam.audit_checkpoint()
+            future = pool.submit(revoke)
+            assert started.wait(2)
+            time.sleep(.15)
+            assert not future.done()
+            witness["anchor"].verify(head)
+        future.result(timeout=5)
+    with pytest.raises(PermissionError):
+        store.require_role(token, {"requester"})

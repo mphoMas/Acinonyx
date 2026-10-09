@@ -10,6 +10,9 @@ import stat
 import sys
 from pathlib import Path
 
+from mas.iam import MultiTenantIAM
+from mas.platform.identity import PlatformAuthority
+
 from .contracts import Limits, SwarmError, canonical, strict_json
 from .provider import LiveProvider
 from .runtime import CodingSwarm
@@ -41,6 +44,7 @@ def parser():
     result = argparse.ArgumentParser(prog="mas-swarm", description="Supervised Python-function coding swarm")
     result.add_argument("--state-dir", type=Path, default=Path("workspace/scratch/swarm"))
     result.add_argument("--token-file", type=Path)
+    result.add_argument("--identity", choices=["local", "platform"], default="local", help="Persisted authority mode; platform requires durable IAM and --token-file")
     sub = result.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init")
     init.add_argument("--tenant", required=True)
@@ -75,6 +79,11 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         root = args.state_dir
+        authority = None
+        if args.identity == "platform":
+            if args.token_file is None or args.command in {"enroll", "revoke"}:
+                raise SwarmError("Platform mode requires a token file; enrollment/revocation belongs to IAM")
+            authority = PlatformAuthority(MultiTenantIAM())
         if args.command == "provider-check":
             provider = LiveProvider(
                 os.environ.get("MAS_SWARM_PROVIDER_URL", ""), os.environ.get("MAS_SWARM_MODEL", ""), os.environ.get("MAS_SWARM_API_KEY", "")
@@ -82,9 +91,16 @@ def main(argv=None):
             print(canonical(asyncio.run(provider.check_model())))
             return 0
         if args.command == "init":
+            if authority:
+                actor = authority.authenticate(private_read(args.token_file).decode().strip(), {"owner"})
+                if actor["tenant"] != args.tenant or actor["subject"] != args.subject:
+                    raise SwarmError("Platform initialization must match authenticated tenant and subject")
             root.mkdir(parents=True, mode=0o700, exist_ok=False)
             private_write(root / "signing.key", secrets.token_bytes(32))
-            store = Store(root / "state.db", private_read(root / "signing.key"))
+            store = Store(root / "state.db", private_read(root / "signing.key"), authority=authority)
+            if authority:
+                print("Initialized platform-bound state. Use existing platform token files; no local credential issued.")
+                return 0
             token = store.provision(args.tenant, args.subject, "owner")
             private_write(root / "owner.token", token.encode())
             print("Initialized. Private owner credential: " + str(root / "owner.token"))
@@ -92,7 +108,7 @@ def main(argv=None):
         info = root.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise SwarmError("State directory must be owner-only and cannot be a symlink")
-        store = Store(root / "state.db", private_read(root / "signing.key"))
+        store = Store(root / "state.db", private_read(root / "signing.key"), authority=authority)
         token = private_read(args.token_file or root / "owner.token").decode().strip()
         if args.command == "enroll":
             with store._tx() as db:
@@ -164,18 +180,19 @@ def main(argv=None):
             store.approve(token, args.run_id, args.candidate_hash)
             print("Human approval recorded for exact candidate; nothing deployed")
         elif args.command == "export":
-            doc = store.get(token, args.run_id)
-            store.verify_audit()
-            if doc["state"] != "approved":
-                raise SwarmError("Only human-approved candidates can be exported")
-            store._validate_evidence(doc)
-            private_write(args.out, doc["source"].encode())
+            with store._tx() as db:
+                actor = store._auth(db, token, {"owner", "requester", "approver"})
+                doc = store._load(db, args.run_id, actor)
+                if doc["state"] != "approved":
+                    raise SwarmError("Only human-approved candidates can be exported")
+                store._validate_evidence(doc)
+                private_write(args.out, doc["source"].encode())
             print("Approved source exported. Execute only in an appropriate sandbox.")
         elif args.command == "backup":
             with store._tx() as db:
                 store._auth(db, token, {"owner"})
-            private_write(args.out, b"")
-            store.backup(args.out)
+                private_write(args.out, b"")
+                store.backup(args.out)
             print("State backed up; protect and back up signing.key separately")
         elif args.command == "audit":
             with store._tx() as db:

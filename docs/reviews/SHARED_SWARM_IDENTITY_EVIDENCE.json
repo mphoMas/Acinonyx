@@ -1,0 +1,46 @@
+{
+  "baseline_revision": "aa79cdcbeba1778dc7204fe73314b10893011c9c",
+  "scope": "Explicit platform IAM authority for fresh platform-bound coding stores; no automatic historical migration or legacy interface cutover",
+  "verdict": "APPROVED WITH CONDITIONS",
+  "full_gate": {
+    "gates_passed": 5,
+    "tests": 478,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 128.378
+  },
+  "shared_identity_acceptance_cases": 24,
+  "wheel_smoke": {
+    "installed_cli_shared_identity": "passed",
+    "same_session_real_pm_mcp": "passed",
+    "revocation_after_authority_and_swarm_reopen": "passed",
+    "packaged_python_files_matched": 100,
+    "live_model_quality": "not_claimed"
+  },
+  "source_sha256": {
+    "mas/platform/identity.py": "4bdbd94cef7b269d416bdafb47a29a673ea0d364624da326a9c4a6876bb7026a",
+    "mas/iam.py": "2370e5ee5f53f8f5079a6ccdf7cc3a3f1ac5654d20fa553da92c5248827aaedf",
+    "mas/swarm/store.py": "452ccc9caf435093edd214ae9a63f1149fda90d840ec9c902a2df77a06b8153e",
+    "mas/swarm/runtime.py": "2427d85557a9f5c399d6544e1f71eb8b1bbecc6d6e81868c23aa04d7d84f67c7",
+    "mas/swarm/cli.py": "d143ce0baf3de3923a720ddc2810d4758b773e9e6b484e570b56186d714513b1",
+    "tests/test_shared_swarm_identity.py": "3b61ca6be9223954752b5208f8cc1174a9da733920487edf55f6b98bcd08cf37",
+    "tests/test_secure_swarm.py": "774fb2794d8812ff38b7f2e6c9f6bec69001e8531b90f1edb82a9d1acd6b7897",
+    "tests/test_external_audit_anchor.py": "9f362b71730159043d9cfb5e7b9fb4d198e1126fd745cf8ceb47f3c9b4ddc539"
+  },
+  "artifact_sha256": {
+    "/workspace/review-evidence/shared-identity-gate.log": "dd3735298eefe75ceecfe6c553a8552c4ef615d9bf86fc20bb3daa7c4bc9a7af",
+    "/workspace/review-evidence/shared-identity-tests.xml": "5345ecc28a8edb5b6c5bf86a1797e67e8f8598e9e27bf863f09b264b4859cd67",
+    "/workspace/review-evidence/shared-identity-build.log": "750b3b2bd383c565ef78f708d44a2355b4f5246410e6362c4de3b9c0c9fa42f5",
+    "/workspace/review-evidence/shared-identity-wheel-smoke.log": "fa59ab25a7097ac9b465afba8bf5e995899fa17f10ab56419e5d5eb64e7de9fe",
+    "/workspace/review-evidence/shared-identity-wheel/mas_core-0.2.0-py3-none-any.whl": "ad61f2e5b8d4270bbed83258404c8f3c45778de0705a257772407181f1101d10"
+  },
+  "remaining": [
+    "Independent production witness deployment/activation",
+    "Reviewed historical tenant/subject/run mapping and credential reissue",
+    "Shared task/capability broker and wider interface cutover",
+    "Production load/authority latency and cancellation qualification",
+    "Swarm run audit history is not externally anchored"
+  ],
+  "live_model_reevaluation": "not performed; real TLS model fixtures are clearly identified"
+}

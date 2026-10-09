@@ -164,3 +164,7 @@ correctness. Full MAS/enterprise readiness additionally requires resolving the
 legacy review blockers, multi-host recovery/load evidence, external audit,
 identity integration and stronger hostile-tenant isolation. These remain explicit
 gates, not an automatic 10/10 certificate.
+
+## Shared platform identity
+
+The optional, persisted `--identity platform` mode uses durable platform IAM sessions and explicit swarm permissions. Local mode remains isolated for compatibility. See [shared identity setup and recovery](SHARED_SWARM_IDENTITY.md); existing local state requires reviewed migration rather than automatic rebinding.

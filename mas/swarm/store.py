@@ -12,8 +12,10 @@ import secrets
 import sqlite3
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+
+from mas.platform.identity import PlatformAuthority
 
 from .contracts import Limits, SwarmError, canonical, cases_contract, digest, identifier, strict_json, text
 
@@ -29,9 +31,14 @@ TRANSITIONS = {
 
 
 class Store:
-    def __init__(self, path: str | Path, signing_key: bytes):
+    def __init__(self, path: str | Path, signing_key: bytes, *, authority: PlatformAuthority | None = None):
         if not isinstance(signing_key, bytes) or len(signing_key) < 32:
             raise SwarmError("A private signing key of at least 32 bytes is required")
+        if authority is not None and type(authority) is not PlatformAuthority:
+            raise SwarmError("Unsupported swarm identity authority")
+        if authority and Path(path).absolute() == authority.iam.database_path:
+            raise SwarmError("Identity and swarm state require separate databases")
+        self._authority = authority
         self.path, self._key = str(path), signing_key
         with self._reading() as db:
             db.executescript("""
@@ -51,6 +58,8 @@ class Store:
             """)
             if db.execute("SELECT version FROM metadata").fetchall() != [(2,)]:
                 raise SwarmError("Unsupported state schema version")
+        with self._tx() as db:
+            pass
 
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
@@ -68,16 +77,44 @@ class Store:
 
     @contextmanager
     def _tx(self):
-        db = self._connect()
-        try:
-            db.execute("BEGIN IMMEDIATE")
-            yield db
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+        with self._authority.guard() if self._authority else nullcontext():
+            db = self._connect()
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                self._check_authority(db)
+                yield db
+                db.commit()
+            except BaseException:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+    def _check_authority(self, db):
+        exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='authority_binding'").fetchone()
+        expected = self._authority.binding if self._authority else {"mode": "local", "version": 1}
+        self._check_audit(db)
+        binding_events = [strict_json(raw) for (raw,) in db.execute("SELECT event FROM audit ORDER BY seq")
+                          if strict_json(raw).get("action") == "bind_authority"]
+        if exists:
+            rows = db.execute("SELECT document,signature FROM authority_binding").fetchall()
+            if len(rows) != 1:
+                raise SwarmError("Missing swarm authority binding")
+            raw, signature = rows[0]
+            if not hmac.compare_digest(self._sign("authority-binding:" + raw), signature) or strict_json(raw) != expected:
+                raise SwarmError("Swarm identity authority differs from persisted binding")
+            if not binding_events or binding_events[-1].get("binding_hash") != digest(expected):
+                raise SwarmError("Swarm authority binding history mismatch")
+        else:
+            if binding_events:
+                raise SwarmError("Swarm authority binding was removed")
+            if self._authority and (db.execute("SELECT 1 FROM principals LIMIT 1").fetchone() or db.execute("SELECT 1 FROM runs LIMIT 1").fetchone()):
+                raise SwarmError("Existing local identity requires reviewed migration; use fresh platform-bound state")
+            db.execute("CREATE TABLE authority_binding(document TEXT NOT NULL, signature TEXT NOT NULL)")
+            raw = canonical(expected)
+            db.execute("INSERT INTO authority_binding VALUES(?,?)", (raw, self._sign("authority-binding:" + raw)))
+            self._audit(db, {"action": "bind_authority", "binding_hash": digest(expected)})
+
 
     def _sign(self, value: str):
         return hmac.new(self._key, value.encode(), hashlib.sha256).hexdigest()
@@ -89,6 +126,10 @@ class Store:
         return hashlib.sha256(token.encode()).hexdigest()
 
     def _auth(self, db, token: str, roles: set[str]):
+        self._check_authority(db)
+        if self._authority:
+            self._check_audit(db)
+            return self._authority.authenticate(token, roles)
         token_hash = self._token_hash(token)
         row = db.execute(
             "SELECT tenant,subject,role,expires,revoked,signature FROM principals WHERE token_hash=?", (token_hash,)
@@ -113,6 +154,8 @@ class Store:
 
     def provision(self, tenant: str, subject: str, role: str, *, ttl: float = 86400) -> str:
         """Trusted OS administrator only; intentionally not an agent/API tool."""
+        if self._authority:
+            raise SwarmError("Provision credentials through platform IAM")
         identifier(tenant)
         identifier(subject)
         if role not in {"owner", "requester", "approver"} or type(ttl) not in (int, float) or not 0 < ttl <= 604800:
@@ -145,6 +188,8 @@ class Store:
         return token
 
     def revoke(self, owner_token: str, subject: str):
+        if self._authority:
+            raise SwarmError("Revoke platform sessions through platform IAM")
         with self._tx() as db:
             actor = self._auth(db, owner_token, {"owner"})
             rows = db.execute(

@@ -2,6 +2,10 @@
 
 Baseline: `645067c673f4221cfcaf8959a49be266ea38911d`. Scope: first contract/compatibility slice; P0 and P2 are **in progress**, not complete. Design: [ADR](MAS_CONSOLIDATION_ADR.md), [migration map](MAS_CONSOLIDATION_MIGRATION.md), [acceptance gates](MAS_CONSOLIDATION_ACCEPTANCE.md).
 
+## Shared identity slice
+
+Explicitly platform-bound stores now use durable platform IAM sessions with dedicated owner/requester/approver permissions, a persisted signed authority binding and IAM-before-swarm transaction guard. The same session is exercised through tenant-bound PM MCP and the coding swarm; revocation blocks both. See [shared identity design and recovery](SHARED_SWARM_IDENTITY.md). Existing local stores are not automatically migrated; witness activation and a reviewed historical import remain pending. P1 is in progress, not complete.
+
 ## Implemented first slice
 
 `mas/platform/contracts.py` defines strict, immutable version-one `TaskIdentity`, `CaseOutcome` and `VerificationEvidence` models. They reject unknown fields, unsupported versions, malformed identifiers/hashes, inconsistent pass/status claims, duplicate/empty/excessive case sets and non-finite timestamps. The JSON boundary rejects duplicate keys, non-finite constants and documents over 64 KiB. The workflow identifier is deliberately restricted to `coding.solve.v1`; no arbitrary adapter admission exists.
@@ -41,7 +45,7 @@ This inventory covers identified executable surfaces and state owners. It is not
 ## Next implementation sequence
 
 1. Complete P0 caller/effect inventory and versioned task/message/capability/approval/audit contracts, including migration fixtures and resource ceilings. This slice supplies evidence contract requirements, not all of A0–A2.
-2. Build the explicit swarm-to-platform identity adapter and mapping/reissue procedure. Keep legacy credentials active only under their current isolated path until cutover is reviewed; do not pretend authority is already shared.
+2. The explicit swarm-to-platform identity adapter is implemented for new platform-bound state. Complete reviewed identity/history mapping and credential reissue for existing deployments; keep their legacy credentials confined to the isolated old path until cutover.
 3. Extract shared lifecycle/budget/capability controls, preserving coding adapter behavior and signed storage compatibility. Qualify cancellation/revocation at active effect boundaries.
 4. Admit the first PM-to-coding vertical slice. Gate memory/research and every additional interface independently.
 

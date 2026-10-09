@@ -117,9 +117,14 @@ class CodingSwarm:
             async with asyncio.timeout(self.worker.limits.deadline_seconds):
                 return await self._pipeline(token, doc)
         except asyncio.CancelledError:
-            state = self.store.get(token, run_id)["state"]
-            if state in ACTIVE:
-                self.store.transition(token, run_id, doc["lease"], "cancelled", error="Execution cancelled")
+            try:
+                state = self.store.get(token, run_id)["state"]
+                if state in ACTIVE:
+                    self.store.transition(token, run_id, doc["lease"], "cancelled", error="Execution cancelled")
+            except (PermissionError, SwarmError):
+                # Revoked authority cannot mutate state. Retain its lease and
+                # uncertain usage for authorized owner recovery; never bypass IAM.
+                pass
             raise
         except Exception as exc:
             # Store only a stable diagnostic: upstream messages can contain secrets.

@@ -1,5 +1,9 @@
 # Independent Reviewer & Chief Architect — Assigned Tasks
 
+## Shared swarm/platform identity milestone
+
+New explicitly platform-bound swarm stores now use durable platform sessions with dedicated permissions, signed binding and IAM-before-swarm guards. Full gate: 478 passed, zero failures/errors/skips; 24 shared identity cases and clean-wheel CLI/MCP checks pass. See [shared identity review](SHARED_SWARM_IDENTITY_REVIEW.md). Historical identity/run migration, independent witness activation, shared capability broker and wider interface cutover remain pending; no enterprise approval.
+
 ## Consolidation first contract milestone
 
 Shared immutable task identity and verification evidence contracts now run in the coding verifier without changing signed storage schema 2. Full gate: 454 passed, zero failures/errors/skips; 30 new negative/compatibility cases and clean-wheel checks pass. See [contract-slice review](CONSOLIDATION_CONTRACT_REVIEW.md) and [implementation status](../architecture/MAS_CONSOLIDATION_STATUS.md). P0/P2 remain in progress; shared identity, broker and interface/data cutover are pending.

@@ -437,6 +437,60 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.thread.join()
         self.tmp.cleanup()
 
+    def use_platform_identity(self):
+        from mas.iam import MultiTenantIAM, StandardRole
+        from mas.platform.identity import PlatformAuthority
+        self.iam = MultiTenantIAM("shared-live-fixture-private-identity-key" * 2, db_path=Path(self.tmp.name) / "iam" / "identity.sqlite")
+        self.iam.create_tenant("company", "Company")
+        for subject, role in (("owner", StandardRole.SWARM_OWNER), ("other-human", StandardRole.SWARM_APPROVER),
+                              ("admin", StandardRole.TENANT_ADMIN)):
+            self.iam.register_principal("company", subject, roles={role.value})
+        self.owner = self.iam.issue_token("company", "owner")
+        self.approver = self.iam.issue_token("company", "other-human")
+        self.admin = self.iam.issue_token("company", "admin")
+        self.store = Store(Path(self.tmp.name) / "platform-state.db", secrets.token_bytes(32), authority=PlatformAuthority(self.iam))
+        self.swarm = CodingSwarm(self.store, self.provider, self.worker)
+        self.doc = self.store.submit(self.owner, "shared-sum", "Sum a list of numbers", CASES)
+
+    async def test_platform_identity_runs_real_workers_and_separate_approval(self):
+        self.use_platform_identity()
+        result = await self.swarm.run(self.owner, self.doc["id"])
+        self.assertEqual(result["state"], "awaiting_approval")
+        self.assertEqual(self.store.approve(self.approver, result["id"], result["candidate_hash"])["state"], "approved")
+
+    async def test_platform_revocation_stops_live_request_and_preserves_uncertain_usage(self):
+        self.use_platform_identity()
+        self.delay = 2
+        processes = []
+        original = asyncio.create_subprocess_exec
+        async def track(*args, **kwargs):
+            process = await original(*args, **kwargs)
+            processes.append(process)
+            return process
+        with patch("asyncio.create_subprocess_exec", track):
+            task = asyncio.create_task(self.swarm.run(self.owner, self.doc["id"]))
+            try:
+                async with asyncio.timeout(5):
+                    while not self.seen:
+                        await asyncio.sleep(.02)
+                self.iam.revoke_session(self.admin, self.iam.verify_token(self.owner).token_id)
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, 3)
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+        self.assertTrue(processes)
+        self.assertTrue(all(process.returncode is not None for process in processes))
+        doc = self.store.get(self.approver, self.doc["id"])
+        self.assertIn(doc["state"], {"planning", "coding", "verifying", "reviewing"})
+        self.assertGreater(doc["usage"]["reserved"], 0)
+        self.assertNotIn("evidence", doc)
+        with self.assertRaises(SwarmError):
+            self.store.approve(self.approver, doc["id"], "a" * 64)
+        rc, output, _ = await self.worker._docker("ps", "--all", "--quiet", "--filter", f"label=acinonyx.swarm.run={doc['id']}")
+        self.assertEqual((rc, output), (0, b""))
+
     async def test_workflow_uses_actual_containers_and_separate_human_approval(self):
         start = time.monotonic()
         result = await self.swarm.run(self.owner, self.doc["id"])

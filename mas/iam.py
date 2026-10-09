@@ -45,6 +45,9 @@ class StandardRole(str, Enum):
     ANALYTICS_ENGINEER = "analytics_engineer"
     OPERATOR = "operator"
     READ_ONLY = "read_only"
+    SWARM_OWNER = "swarm_owner"
+    SWARM_REQUESTER = "swarm_requester"
+    SWARM_APPROVER = "swarm_approver"
 
 
 @dataclass
@@ -122,6 +125,9 @@ class MultiTenantIAM:
 
         # Standard default role permissions mapping
         self._role_permissions: Dict[str, Set[str]] = {
+            StandardRole.SWARM_OWNER.value: {"swarm:owner", "swarm:request", "swarm:approve"},
+            StandardRole.SWARM_REQUESTER.value: {"swarm:request"},
+            StandardRole.SWARM_APPROVER.value: {"swarm:approve"},
             StandardRole.TENANT_ADMIN.value: {
                 "tools:*",
                 "storage:*",

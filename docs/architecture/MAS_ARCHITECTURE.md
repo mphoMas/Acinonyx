@@ -26,7 +26,7 @@ flowchart TB
     Tools --> Host[Host services and project workspace]
 
     subgraph Swarm[Supervised coding swarm — bounded pilot]
-        SCLI[mas-swarm CLI] --> Auth[Local tenant, role and token checks]
+        SCLI[mas-swarm CLI] --> Auth[Persisted local or platform IAM authority]
         Auth --> Coord[Trusted coordinator]
         Coord --> Architect[Architect model call]
         Architect --> Engineer[Engineer model call]
@@ -55,3 +55,5 @@ and remaining limitations.
 ## Proposed consolidation
 
 The consolidation design remains a draft. The [first shared evidence contract integration](MAS_CONSOLIDATION_STATUS.md) now runs in the coding verifier; shared authority and interface cutover remain pending. See the [architecture decision](MAS_CONSOLIDATION_ADR.md), [component migration map](MAS_CONSOLIDATION_MIGRATION.md), and [acceptance checklist](MAS_CONSOLIDATION_ACCEPTANCE.md).
+
+Explicit platform mode now shares durable IAM sessions with supported tenant PM interfaces. See [shared identity](SHARED_SWARM_IDENTITY.md); automatic migration and wider interface cutover are still pending.
