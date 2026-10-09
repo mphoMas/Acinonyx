@@ -87,7 +87,8 @@ try:
                 page.set_viewport_size({'width':width,'height':900})
                 page.locator('#role').select_option('manager')
                 page.locator('[data-view="today"]').click()
-                page.evaluate('document.activeElement.blur()')
+                page.evaluate('document.activeElement.blur(); window.scrollTo(0,0)')
+                page.evaluate('new Promise(resolve => requestAnimationFrame(resolve))')
                 page.screenshot(path=str(target / f'today-{width}.png'), full_page=True)
         assert not failures, failures
         browser.close()
