@@ -34,3 +34,9 @@ If the dashboard uses another authorized database, pass its actual path with `--
 The earlier frontend candidate is on `feat/platinum-lodge-frontend-foundations`, commit `920641f42cfc3bf1ad9425a8b1e6bf9294a82bc1`. This queue publication adds planning and board integration to frontier; it does not merge the older hotel prototype or alter backend APIs.
 
 Git publication requires a local fetch/pull before an offline desktop can see it. No IDE delivery, local synchronization, authenticated executor binding or Antigravity execution is claimed from the cloud workspace.
+
+## Codex work available for review
+
+Branch `feat/platinum-lodge-codex-delivery`, commit `836c2721`, now contains a review register for all 13 Codex-owned PLG work packages, an interactive fictional-data frontend preview, design/contract requirements, an Excel baseline observation template and training/continuity drafts. [Delivery register](https://github.com/mphoMas/Acinonyx/blob/feat/platinum-lodge-codex-delivery/projects/platinum-lodge/planning/codex/DELIVERY_REGISTER.md).
+
+Owner confirmed Mozambique as the launch country and Excel as the current workflow baseline; multi-property capability remains release-one scope. A second participating property and real staff measurements remain unconfirmed. Five unit tests and 28 selected browser checks passed. These candidates do not complete backend integration, Portuguese review, staff studies or production qualification. Runtime ticket states and blocker edges remain authoritative and unchanged. Review the candidate for PLG-FE-01 preparation and jointly agree PLG-CONTRACT-01 before production integration.

@@ -9,8 +9,8 @@ Opened 9 October 2026. All decisions below are pending; proposed defaults are pl
 | DEC03 | Tax, invoice, business-day, guest-registration and privacy rules | Project owner with accountant/legal advisor / Antigravity | G0 | Country-specific signed policy; no assumed universal rules |
 | DEC04 | Payment provider, merchant accounts, currencies and payout/terminal support | Project owner / Antigravity | G0 | One eligible hosted/tokenized provider plus cash/bank/manual tender workflows |
 | DEC05 | Cancellation, deposits, refunds, approvals and credit balances | Project owner + hotel finance / Antigravity | G0 | Explicit policy snapshots and server-enforced limits |
-| DEC06 | Database, hosting, identity and jobs architecture | Antigravity technical lead / separate technical reviewer | G0 | Modular Node application; managed transactional PostgreSQL; reviewed identity option |
-| DEC07 | Capacity, budget, target date and provider/infra procurement | Project owner / both teams estimate | G0 | 14–20 week indicative range; reforecast from confirmed team capacity |
+| DEC06 | Database, hosting, identity and jobs architecture | Antigravity technical lead / separate technical reviewer | G0 | Modular Node 24 application; TypeScript; managed transactional PostgreSQL 16; reviewed identity option (ADR in BACKEND_DISCOVERY.md) |
+| DEC07 | Capacity, budget, target date and provider/infra procurement | Project owner / both teams estimate | G0 | 14–20 week indicative range; pilot infra ~$310/mo; reforecast from confirmed team capacity |
 | DEC08 | Cross-property guest sharing and portfolio permissions | Project owner with privacy advisor / Antigravity + Codex | G1 | Minimum sharing, explicit consent/policy and property-safe navigation |
 | DEC09 | Brand, imagery and language coverage | Project owner / Codex | G1 | Evolve forest-green/cream identity; licensed/owned assets; EN/PT core journeys |
 | DEC10 | Support hours, incident rota and cutover authority | Project owner / Antigravity operations | Before G5 | Coverage must match hotel operating risk; no assumed unsupported 24/7 promise |
@@ -21,7 +21,8 @@ Opened 9 October 2026. All decisions below are pending; proposed defaults are pl
 - Prototype syntax/workflow validation passed; production qualification has not started.
 - Project initiated in local MAS-PM: PLG, 55 records, all BACKLOG.
 - G0–G6: **NOT PASSED**. Documents and backlog are preparation, not gate completion.
-- Antigravity acknowledgement, team capacity, provider feasibility, launch-property confirmation, finance policies and owner scope review: pending.
+- Antigravity delivery team ownership acknowledgement and backend discovery completed ([BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md)); architecture options and capacity model proposed.
+- Provider feasibility (DEC04), launch-property confirmation (DEC01), incumbent integrations (DEC02), and finance/tax policies (DEC03) remain open blockers for G0.
 - No production deployment, provider activation, customer-data migration or operational acceptance has occurred under this plan.
 
 ## First discovery agenda

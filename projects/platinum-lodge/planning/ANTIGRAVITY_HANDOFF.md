@@ -15,3 +15,17 @@ The supervised coding swarm is a different actor. It supports bounded Python `so
 MAS-PM records were initiated locally and remain BACKLOG with descriptive delivery ownership, no authenticated executor assignment and zero execution-token appetite. Check synchronization to the shared PM instance and bind actual principals through the authorized workflow before staging work. The export is a static snapshot. No external notification, acknowledgement, sprint activation, procurement, provider account or production authorization is claimed.
 
 Return: acknowledgement, backend estimates/capacity, ADR proposals, first contract draft, decision blockers, task splits and independent-review plan. Codex will proceed with frontend inventory/journeys/design-system specifications against the jointly agreed scope.
+
+## Formal Antigravity Delivery Team Acknowledgement
+
+Recorded 9 October 2026. Allocation: PLG-BOARD-01 (`MAS-62`).
+
+The Antigravity development team has read [DELIVERY_OWNERSHIP.md](../../company/DELIVERY_OWNERSHIP.md), [PROJECT_PLAN.md](PROJECT_PLAN.md), and [BENCHMARKS_AND_ACCEPTANCE.md](BENCHMARKS_AND_ACCEPTANCE.md) and formally confirms:
+
+1. **Codex Ownership:** Codex owns frontend development, UX/UI, navigation, responsive design, visual identity, typography, imagery, and art direction.
+2. **Antigravity Ownership:** The Antigravity development team owns backend architecture, domain logic, APIs, data/migrations, tenancy enforcement, inventory concurrency, financial journals, payment integrations, infrastructure, CI/CD, and operational observability/recovery.
+3. **Supervised Coding Swarm Boundary:** The supervised coding swarm (`mas-swarm`) is a distinct, strictly bounded Python `solve(payload)` workflow without general application-engineering, deployment, or hotel administrative authority.
+4. **Shared Contracts:** Shared API and data contracts require joint agreement between Codex and Antigravity, with exactly one named integration owner per task.
+5. **Release & Credential Authority:** Ownership does not grant runtime credentials or release authority. G0–G6 gates require independent review and project owner authorization.
+6. **Discovery Artifacts:** Detailed architecture findings, ADR recommendations, cost/capacity models, decision blockers, and the versioned API contract proposal are documented in [BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md).
+7. **Status:** PLG-BOARD-01 submitted for independent review with verification evidence ([evidence/board-sync-verification.log](evidence/board-sync-verification.log)). Unresolved statutory and provider decisions remain open blockers for G0.
