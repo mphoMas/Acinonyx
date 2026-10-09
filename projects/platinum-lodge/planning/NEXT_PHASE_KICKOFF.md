@@ -54,3 +54,8 @@ Interaction rules: keyboard first for reception, touch-friendly housekeeping, se
 Art direction: preserve the prototype's forest-green/cream identity, improve readable typography and contrast, minimize decorative imagery in operating screens, and maintain an approved-rights register for actual hotel photography. EN/PT labels and instructions need human operational review.
 
 Next Codex deliverables: interview/task baseline protocol (D2), full journey inventory (U1), tokens/component specifications (U2), then property shell and API client against agreed contracts (U3/U4). API proposals are for joint review; Codex does not implement backend policy. Do not claim measured productivity before staff trials.
+
+
+## Codex delivery candidate — 9 October 2026
+
+Review `planning/codex/DELIVERY_REGISTER.md` on `feat/platinum-lodge-codex-delivery`. It maps all 13 Codex-owned work packages to frontend previews, specifications, discovery/measurement and training drafts, evidence and remaining acceptance gaps. Owner has confirmed Mozambique and Excel as the current workflow baseline. Multi-property release-one scope remains; a second participating property is unconfirmed. No packages are declared DONE and no runtime assignment/dependency was bypassed. Backend/API work remains with the Antigravity development team.

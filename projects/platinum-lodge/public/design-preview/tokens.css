@@ -1,0 +1,30 @@
+:root {
+  --ink: #20332d;
+  --muted: #56675c;
+  --green: #264f40;
+  --green-dark: #173b30;
+  --cream: #f5f6f2;
+  --surface: #ffffff;
+  --line: #d8e0d6;
+  --success: #36582f;
+  --success-bg: #edf3e9;
+  --warning: #7b571d;
+  --warning-bg: #fbf3e2;
+  --danger: #943e2d;
+  --danger-bg: #fbeeea;
+  --info: #345d80;
+  --info-bg: #eaf0f6;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius: 10px;
+  --control-height: 44px;
+  --body-size: 16px;
+  --support-size: 14px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: var(--ink);
+  font-synthesis: none;
+}

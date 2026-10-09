@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Platinum Lodge · Frontend design preview</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="preview.css">
+  <script type="module" src="preview.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#workspace">Skip to workspace</a>
+  <div class="preview-notice" role="note">DESIGN PREVIEW · Fictional properties and records · No connection to hotel services or payment providers</div>
+  <div class="layout">
+    <aside>
+      <div class="brand"><span class="monogram" aria-hidden="true">P</span><div>Platinum Lodge<small>HOTEL OPERATIONS</small></div></div>
+      <nav aria-label="Workspaces" id="navigation"></nav>
+      <p class="aside-note">Role controls preview interface visibility. Production authorization must be enforced by Antigravity’s backend.</p>
+    </aside>
+    <div class="main">
+      <header class="context">
+        <label>Property context<select id="property"></select></label>
+        <label>Role preview<select id="role"><option value="manager">Manager</option><option value="reception">Reception</option><option value="finance">Finance</option><option value="housekeeping">Housekeeping</option></select></label>
+        <label>Interface state<select id="scenario"><option value="ready">Normal</option><option value="loading">Loading</option><option value="empty">Empty</option><option value="error">Error</option><option value="denied">Permission denied</option><option value="stale">Stale / offline read-only</option><option value="conflict">Version conflict</option><option value="pending">Payment pending</option><option value="unknown">Payment outcome unknown</option></select></label>
+      </header>
+      <main id="workspace" tabindex="-1"></main>
+      <footer>All activity in this preview is temporary. Financial figures are fixtures, not earned revenue, received money or reconciled accounts.</footer>
+    </div>
+  </div>
+  <dialog id="switch-dialog" aria-labelledby="switch-title"><h2 id="switch-title">Change property?</h2><p>You have an unfinished draft. Discard it before changing the property context.</p><div class="actions"><button id="keep-draft">Keep editing</button><button id="discard-draft" class="primary">Discard draft and switch</button></div></dialog>
+  <dialog id="reservation-dialog" aria-labelledby="reservation-title"><h2 id="reservation-title">Reservation form preview</h2><p>Fictional draft only. This cannot create a booking.</p><form id="reservation-form"><label>Guest display name<input id="guest" required autocomplete="off" maxlength="100"></label><label>Arrival<input id="arrival" type="date" required></label><label>Departure<input id="departure" type="date" required></label><p id="form-feedback" role="status"></p><div class="actions"><button type="button" id="close-reservation">Close</button><button type="submit" class="primary">Validate preview draft</button></div></form></dialog>
+  <div id="announcement" class="sr-only" aria-live="polite"></div>
+</body>
+</html>
