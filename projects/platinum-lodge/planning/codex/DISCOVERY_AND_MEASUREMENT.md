@@ -4,9 +4,11 @@
 
 Confirmed by owner on 9 October 2026: Mozambique launch, existing Excel workflows, no established daily flow measurement. Release one supports multiple properties, reservations/check-in, billing/payments and housekeeping. Production backend is required; this preview is not the release.
 
-Still needed: second real property and property list; room inventory; legal entity per property; tax/fiscal invoice requirements verified locally; MZN handling/rounding; business-day cutover; payment providers and merchant ownership; connectivity/device profile; Excel files and authoritative fields; migration cutover/rollback; shared guest privacy policy; role memberships; support hours and operational sign-off. Do not request customer Excel sheets in public Git or commit personal data. Use redacted column samples for mapping, and controlled storage for migration inputs.
+Owner confirmed the initial live pilot is Platinum Hotel only and no existing payment provider. Multi-property architecture and synthetic isolation qualification remain release-one requirements; live second-property acceptance is deferred.
 
-D1 acceptance needs owner-approved launch boundaries. A country decision alone does not close D1. Mozambique legal/payment requirements require qualified local verification, not assumptions from the prototype.
+Still needed: room inventory; legal entity per property; tax/fiscal invoice requirements verified locally; MZN handling/rounding; business-day cutover; payment providers and merchant ownership; connectivity/device profile; Excel files and authoritative fields; migration cutover/rollback; shared guest privacy policy; role memberships; support hours and operational sign-off. Do not request customer Excel sheets in public Git or commit personal data. Use redacted column samples for mapping, and controlled storage for migration inputs.
+
+D1 acceptance needs owner-approved launch boundaries. Country and pilot identification alone do not close D1; room/role inventory and explicit integrations/exclusions are still needed. Mozambique legal/payment requirements require qualified local verification, not assumptions from the prototype.
 
 ## Baseline from Excel (D2)
 

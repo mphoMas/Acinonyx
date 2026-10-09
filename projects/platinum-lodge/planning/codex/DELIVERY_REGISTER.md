@@ -2,11 +2,11 @@
 
 These are review artifacts against existing PLG tickets, not a second Scrum board or a declaration of completion. Runtime MAS-PM remains authoritative. No assignments, dependencies or execution states were bypassed. Independent review and the listed integrations/inputs remain required.
 
-User decisions: launch country Mozambique; current operations use Excel, with no established daily workflow measurement. Multi-property capability remains a release-one requirement. Platinum Lodge is known; another participating property has not been identified. Do not assume Portugal, another country, or a single-property release.
+User decisions: launch country Mozambique; current operations use Excel, with no established daily workflow measurement. Multi-property capability remains a release-one requirement. Owner selected Platinum Hotel as the sole initial live pilot and no existing payment provider. Multi-property technical qualification remains required; live second-property acceptance is deferred to expansion. See ../SCOPE_AMENDMENT_2026_10_09.md.
 
 | Ticket | Work delivered in this branch | Remaining acceptance input |
 |---|---|---|
-| PLG-11 D1 | Launch-country and scope intake in DISCOVERY_AND_MEASUREMENT.md | Actual property names, legal entities, owner-approved integrations/exclusions |
+| PLG-11 D1 | Launch-country and scope intake in DISCOVERY_AND_MEASUREMENT.md | Room/role inventory, legal entity, owner-approved integrations/exclusions |
 | PLG-12 D2 | Excel workflow observation protocol and blank measurement CSV | Staff participation and observed baseline; none fabricated |
 | PLG-22 U1 | Role journeys, gap and state inventory in FRONTEND_SPEC.md | Staff validation and backend feasibility |
 | PLG-23 U2 | Implemented tokens, responsive preview and art direction specification | Brand approval, independent contrast/accessibility review and image rights |
