@@ -5,6 +5,8 @@
 **Effective Date:** October 5, 2026  
 **Standard Compliance:** ISO/IEC/IEEE 12207:2026, NIST SP 800-218 (SSDF v1.2), Google Cloud DORA AI Capabilities Model, DataOps Manifesto  
 
+**Current delivery assignment:** [Delivery ownership](DELIVERY_OWNERSHIP.md) governs Codex and Antigravity responsibilities and supersedes conflicting assignment examples below. Codex owns frontend development, UX/UI, design and art direction; Antigravity owns backend/engine implementation. Guild and runtime persona names do not grant development or runtime authority.
+
 ---
 
 ## 1. Company Identity & Architectural Vision

@@ -2,6 +2,10 @@
 
 This repo uses RunQL for SQL workflows and schema exploration.
 
+## Delivery ownership
+
+Read [the delivery ownership agreement](company/DELIVERY_OWNERSHIP.md) before assigning or implementing work. Codex owns frontend development, UX/UI, design and art direction. The Antigravity development team owns backend, engine and remaining technical implementation. Agree shared interface changes and name one owner per task. Antigravity is a development team, distinct from the bounded supervised `mas-swarm` workflow; assignments do not grant runtime permissions. Keep planning in MAS-PM and use the [handoff template](templates/development-handoff.template.md).
+
 <!-- RUNQL:BEGIN -->
 # RunQL Context
 

@@ -3,6 +3,7 @@
 | Area | Start here |
 |---|---|
 | Repository layout and file placement | [Repository structure](REPOSITORY_STRUCTURE.md) |
+| Delivery ownership | [Codex, Antigravity development team and supervised swarm](../company/DELIVERY_OWNERSHIP.md) |
 | Company direction and working practices | [Company index](../company/README.md) |
 | Runtime capabilities | [Capability matrix](CAPABILITIES.md) — implementation scope and admission limits |
 | Release readiness | [Current evidence and deployment blockers](RELEASE_READINESS_CHECKLIST.md) |
