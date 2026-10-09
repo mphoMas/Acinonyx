@@ -1,5 +1,9 @@
 # Acinonyx Git Work Queue — Agent Operating Contract
 
+## Platinum Lodge project pickup
+
+The [Platinum Lodge pickup instructions](PLATINUM_LODGE.md) define four queued coordination tickets, delivery ownership and synchronization of the separate 55-record PLG project. Antigravity starts with `PLG-BOARD-01`; Codex retains frontend/design ownership. All entries remain BACKLOG and require actual identity binding and normal review.
+
 The source of truth for **planned allocations** is [`work_queue/tasks.json`](tasks.json). The MAS-PM SQLite database is the source of truth for **runtime state**, evidence, and review verdicts. The dashboard reads the database; do not write directly to SQLite from an agent.
 
 ## Fully repeatable pipeline

@@ -1783,6 +1783,129 @@
         ".env.*",
         "**/secrets/**"
       ]
+    },
+    {
+      "id": "PLG-BOARD-01",
+      "title": "Platinum Lodge: Antigravity synchronize project board and acknowledge ownership",
+      "priority": "HIGH",
+      "dependencies": [],
+      "scope": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "delivery_owner": "Antigravity development team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Import projects/platinum-lodge/planning/BOARD_RECORDS.json through import_board.py; confirm 55 mapped PLG records and 92 blocker edges without overwriting existing runtime state, assignments or evidence.",
+        "Read company/DELIVERY_OWNERSHIP.md and record Antigravity acknowledgement; distinguish the development team from the supervised coding swarm.",
+        "Validate the actual desktop dashboard database and authenticated executor/reviewer mappings. Proposed role labels do not grant credentials or permissions.",
+        "Attach import/key mapping and actual board-read evidence; leave planned hotel work in BACKLOG until prerequisites and allowances are established."
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**",
+        "mas/",
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/public/"
+      ]
+    },
+    {
+      "id": "PLG-BE-01",
+      "title": "Platinum Lodge: Antigravity production backend discovery and feasibility",
+      "priority": "HIGH",
+      "dependencies": [
+        "PLG-BOARD-01"
+      ],
+      "scope": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "delivery_owner": "Antigravity development team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Assess multi-property tenancy, transactional reservation concurrency, immutable accounting/night close, real payment-provider eligibility and mobile-housekeeping backend requirements.",
+        "Prepare architecture options, staffing/capacity and cost model; capture required country, launch-property, finance and payment decisions with owners and blockers.",
+        "Follow PLG discovery dependencies from the actual imported board. Do not invent launch-country policies, provider availability or owner approvals; G0 cannot pass with unresolved feasibility/statutory blockers.",
+        "Provide reviewed discovery artifacts and a scoped foundations proposal; no production rollout or general supervised-swarm assignment."
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**",
+        "mas/",
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/public/"
+      ]
+    },
+    {
+      "id": "PLG-FE-01",
+      "title": "Platinum Lodge: Codex frontend design and integration preparation",
+      "priority": "HIGH",
+      "dependencies": [
+        "PLG-BOARD-01"
+      ],
+      "scope": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "assignee_principal": "frontend_engineer",
+      "reviewer_principal": "qa_critic",
+      "delivery_owner": "Codex",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Review NEXT_PHASE_KICKOFF.md and the frontend candidate 920641f42cfc3bf1ad9425a8b1e6bf9294a82bc1 on feat/platinum-lodge-frontend-foundations.",
+        "Prepare role/property journeys, design-system specifications and contract requirements; preserve EN/PT, accessibility, responsive and art-direction responsibilities with Codex.",
+        "Collect hotel staff baseline/feedback where available; label design hypotheses and unmeasured productivity explicitly.",
+        "Follow actual PLG dependencies, coordinate exact frontend integration scopes, and obtain separate review; a prototype pass is not full U2 or production acceptance."
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**",
+        "mas/",
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/public/"
+      ]
+    },
+    {
+      "id": "PLG-CONTRACT-01",
+      "title": "Platinum Lodge: agree frontend/backend contracts before foundations",
+      "priority": "HIGH",
+      "dependencies": [
+        "PLG-BE-01",
+        "PLG-FE-01"
+      ],
+      "scope": [
+        "projects/platinum-lodge/planning/"
+      ],
+      "assignee_principal": "backend_engineer",
+      "reviewer_principal": "qa_critic",
+      "delivery_owner": "Antigravity development team",
+      "status": "BACKLOG",
+      "acceptance": [
+        "Produce jointly reviewed versioned API/fixture contracts covering property permissions, pagination, currency/timezone, record versions, durable retry keys, safe errors, financial states and room-readiness freshness.",
+        "Name one integration owner per package; Codex implements frontend/design and Antigravity implements backend/data/security/infrastructure.",
+        "Check G0 discovery decisions and the imported PLG graph before proposing implementation staging; retain unresolved blockers and separate release authority.",
+        "Attach agreed contract version, review record and first scoped foundation task; do not bypass MAS-PM workflow or fabricate DONE evidence."
+      ],
+      "appetite_tokens": 0,
+      "appetite_timeout_s": 1800,
+      "forbidden_paths": [
+        ".env",
+        ".env.*",
+        "**/secrets/**",
+        "mas/",
+        "projects/platinum-lodge/server.js",
+        "projects/platinum-lodge/public/"
+      ]
     }
   ]
 }
