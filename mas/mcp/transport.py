@@ -13,11 +13,15 @@ class MCPClient:
     Client interface for interacting with an MCP server instance or registry.
     """
 
-    def __init__(self, registry: MCPRegistry, default_principal: Optional[str] = None) -> None:
+    def __init__(self, registry: MCPRegistry, default_principal: Optional[str] = None, *, bearer_token: Optional[str] = None) -> None:
         self.registry = registry
+        self.bearer_token = bearer_token
         self.default_principal = default_principal
         self._req_counter = 0
         self._initialized = False
+
+    async def _dispatch(self, request, **kwargs):
+        return await self.registry.handle_request(request, bearer_token=self.bearer_token, **kwargs)
 
     def _next_id(self) -> int:
         self._req_counter += 1
@@ -29,11 +33,11 @@ class MCPClient:
             method="initialize",
             params={"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "mas-client"}},
         )
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"initialize error: {resp.error.message}")
         self._initialized = True
-        await self.registry.handle_request(
+        await self._dispatch(
             JsonRpcRequest(method="notifications/initialized", params={})
         )
         return resp.result if resp else {}
@@ -41,7 +45,7 @@ class MCPClient:
     async def list_tools(self) -> List[Dict[str, Any]]:
         """Query available tools from the server."""
         req = JsonRpcRequest(id=self._next_id(), method="tools/list")
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"tools/list error: {resp.error.message}")
         return resp.result.get("tools", []) if resp and resp.result else []
@@ -62,7 +66,7 @@ class MCPClient:
             method="tools/call",
             params=params,
         )
-        resp = await self.registry.handle_request(req, principal=effective_principal)
+        resp = await self._dispatch(req, principal=effective_principal)
         if resp and resp.error:
             raise RuntimeError(f"Tool '{name}' error: {resp.error.message}")
         if resp and resp.result:
@@ -72,7 +76,7 @@ class MCPClient:
 
     async def list_resources(self) -> List[Dict[str, Any]]:
         req = JsonRpcRequest(id=self._next_id(), method="resources/list")
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"resources/list error: {resp.error.message}")
         return resp.result.get("resources", []) if resp and resp.result else []
@@ -83,7 +87,7 @@ class MCPClient:
             method="resources/read",
             params={"uri": uri},
         )
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"Resource '{uri}' error: {resp.error.message}")
         if resp and resp.result:
@@ -93,7 +97,7 @@ class MCPClient:
 
     async def list_prompts(self) -> List[Dict[str, Any]]:
         req = JsonRpcRequest(id=self._next_id(), method="prompts/list")
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"prompts/list error: {resp.error.message}")
         return resp.result.get("prompts", []) if resp and resp.result else []
@@ -104,7 +108,7 @@ class MCPClient:
             method="prompts/get",
             params={"name": name, "arguments": arguments or {}},
         )
-        resp = await self.registry.handle_request(req)
+        resp = await self._dispatch(req)
         if resp and resp.error:
             raise RuntimeError(f"Prompt '{name}' error: {resp.error.message}")
         if resp and resp.result:

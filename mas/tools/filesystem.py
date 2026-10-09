@@ -6,6 +6,7 @@ Architect: Acinonyx
 from __future__ import annotations
 import glob
 import os
+from contextlib import contextmanager
 from typing import Any, List
 
 from pathlib import Path
@@ -25,14 +26,29 @@ def set_allowed_roots(roots: List[str | Path]) -> None:
     ALLOWED_PROJECT_ROOTS = [Path(r).resolve() for r in roots]
 
 
+def effective_roots() -> List[Path]:
+    from mas.tenancy import current_binding
+    binding = current_binding()
+    if binding:
+        binding.require("storage:read")
+        return [binding.workspace]
+    return ALLOWED_PROJECT_ROOTS
+
+
+def _tenant_path(path: str | Path) -> str:
+    from mas.tenancy import current_binding
+    binding = current_binding()
+    return str(binding.workspace / path) if binding and not Path(path).is_absolute() else str(path)
+
+
 def _is_path_safe(path: str | Path) -> bool:
     """
     Verify that the target path resolves strictly within an authorized project boundary,
     preventing symlink traversal and prefix collisions.
     """
     try:
-        real_path = Path(path).resolve()
-        for root in ALLOWED_PROJECT_ROOTS:
+        real_path = Path(_tenant_path(path)).resolve()
+        for root in effective_roots():
             try:
                 if real_path == root or real_path.is_relative_to(root):
                     return True
@@ -43,13 +59,46 @@ def _is_path_safe(path: str | Path) -> bool:
         return False
 
 
+@contextmanager
+def _tenant_parent(path: str, *, create: bool = False):
+    """Walk directory descriptors without following mutable symlink components."""
+    from mas.tenancy import current_binding
+    binding = current_binding()
+    binding.require("storage:write" if create else "storage:read")
+    relative = Path(path).relative_to(binding.workspace)
+    if ".." in relative.parts:
+        raise PermissionError("Directory traversal denied")
+    parts = relative.parts or (".",)
+    directory = os.open(binding.workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for component in parts[:-1]:
+            if create:
+                try:
+                    os.mkdir(component, mode=0o700, dir_fd=directory)
+                except FileExistsError:
+                    pass
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        yield directory, parts[-1]
+    finally:
+        os.close(directory)
+
+
 async def fs_read_file(path: str, max_bytes: int = 100000) -> str:
     """Read contents of a file at the given path."""
+    path = _tenant_path(path)
     if not _is_path_safe(path):
         return f"ERROR: Access denied. Path '{path}' is outside authorized project boundaries."
     if not os.path.exists(path):
         return f"ERROR: File not found at '{path}'"
     try:
+        from mas.tenancy import current_binding
+        if current_binding():
+            with _tenant_parent(path) as (directory, name):
+                descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+                with os.fdopen(descriptor, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read(max_bytes)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read(max_bytes)
         return content
@@ -59,13 +108,23 @@ async def fs_read_file(path: str, max_bytes: int = 100000) -> str:
 
 async def fs_write_file(path: str, content: str) -> str:
     """Write or overwrite content to a file, creating parent directories if necessary."""
+    from mas.tenancy import current_binding
+    if current_binding():
+        current_binding().require("storage:write")
+    path = _tenant_path(path)
     if not _is_path_safe(path):
         return f"ERROR: Access denied. Path '{path}' is outside authorized project boundaries."
     try:
-        resolved_parent = Path(path).resolve().parent
-        os.makedirs(resolved_parent, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
+        if current_binding():
+            with _tenant_parent(path, create=True) as (directory, name):
+                descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600, dir_fd=directory)
+                with os.fdopen(descriptor, "w", encoding="utf-8") as f:
+                    f.write(content)
+        else:
+            resolved_parent = Path(path).resolve().parent
+            os.makedirs(resolved_parent, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
         return f"SUCCESS: File written to '{path}' ({len(content)} bytes)."
     except Exception as e:
         return f"ERROR: Failed to write '{path}': {str(e)}"
@@ -73,6 +132,7 @@ async def fs_write_file(path: str, content: str) -> str:
 
 async def fs_list_dir(path: str = ".") -> str:
     """List directory contents with file types and sizes."""
+    path = _tenant_path(path)
     if not _is_path_safe(path):
         return f"ERROR: Access denied. Path '{path}' is outside authorized project boundaries."
     if not os.path.exists(path):
@@ -81,6 +141,21 @@ async def fs_list_dir(path: str = ".") -> str:
         return f"ERROR: Path '{path}' is not a directory."
     try:
         entries = []
+        from mas.tenancy import current_binding
+        if current_binding():
+            import stat
+            with _tenant_parent(path) as (parent, name):
+                directory = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                try:
+                    for item in sorted(os.listdir(directory)):
+                        info = os.stat(item, dir_fd=directory, follow_symlinks=False)
+                        if stat.S_ISLNK(info.st_mode):
+                            continue
+                        kind = "DIR" if stat.S_ISDIR(info.st_mode) else f"FILE ({info.st_size}B)"
+                        entries.append(f"{kind.ljust(15)} {item}")
+                    return "\n".join(entries) if entries else "[Empty directory]"
+                finally:
+                    os.close(directory)
         for item in sorted(os.listdir(path)):
             full_path = os.path.join(path, item)
             if not _is_path_safe(full_path):
@@ -96,6 +171,10 @@ async def fs_list_dir(path: str = ".") -> str:
 
 async def fs_glob(pattern: str) -> str:
     """Search files matching a glob pattern within authorized project boundaries."""
+    from mas.tenancy import current_binding
+    if current_binding():
+        return "ERROR: Recursive glob has not been approved for tenant execution."
+    pattern = _tenant_path(pattern)
     # Check base directory if absolute path pattern
     if pattern.startswith("/") and not _is_path_safe(pattern.split("*")[0].rstrip("/")):
         return "ERROR: Access denied. Glob pattern targets path outside authorized boundaries."

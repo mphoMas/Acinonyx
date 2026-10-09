@@ -15,6 +15,8 @@ import json
 import os
 import re
 import time
+import math
+from weakref import WeakValueDictionary
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
@@ -68,7 +70,7 @@ class PolicyRule:
     resources: List[str]  # e.g., ["urn:mas:tenant:*:workspace", "urn:mas:tenant:acme:data:*"]
 
 
-@dataclass
+@dataclass(frozen=True)
 class TenantContext:
     tenant_id: str
     principal_id: str
@@ -97,6 +99,7 @@ class MultiTenantIAM:
         if len(key.encode("utf-8")) < 32:
             raise ValueError("IAM signing key must contain at least 32 bytes")
         self.signing_secret = key.encode("utf-8")
+        self._contexts = WeakValueDictionary()
         self._tenants: Dict[str, Tenant] = {}
         self._principals: Dict[str, Principal] = {}  # key: f"{tenant_id}:{user_id}"
         self._custom_policies: Dict[str, List[PolicyRule]] = {}  # key: tenant_id
@@ -157,7 +160,7 @@ class MultiTenantIAM:
         allowed_scopes: Optional[Set[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Tenant:
-        if not re.match(r"^[a-zA-Z0-9_\-]+$", tenant_id):
+        if not re.fullmatch(r"[a-zA-Z0-9_\-]+", tenant_id):
             raise ValueError(f"Invalid tenant_id '{tenant_id}'. Must be alphanumeric with '-' or '_'.")
         if tenant_id in self._tenants:
             raise ValueError(f"Tenant '{tenant_id}' already exists.")
@@ -197,6 +200,8 @@ class MultiTenantIAM:
         if tenant.status != TenantStatus.ACTIVE:
             raise PermissionError(f"Tenant '{tenant_id}' is not ACTIVE ({tenant.status.value}).")
 
+        if not re.fullmatch(r"[a-zA-Z0-9_\-]+", user_id):
+            raise ValueError("Invalid user_id")
         key = f"{tenant_id}:{user_id}"
         principal = Principal(
             user_id=user_id,
@@ -225,6 +230,11 @@ class MultiTenantIAM:
         if not principal:
             raise ValueError(f"Principal '{user_id}' in tenant '{tenant_id}' does not exist.")
 
+        tenant = self.get_tenant(tenant_id)
+        if not tenant or tenant.status != TenantStatus.ACTIVE:
+            raise PermissionError("Tenant is inactive")
+        if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, (int, float)) or not math.isfinite(ttl_seconds):
+            raise ValueError("Token lifetime must be finite")
         now = time.time()
         payload = {
             "tid": tenant_id,
@@ -243,6 +253,8 @@ class MultiTenantIAM:
         return f"{payload_b64}.{signature}"
 
     def verify_token(self, token: str) -> TenantContext:
+        if not isinstance(token, str) or len(token) > 16384 or not token.isascii():
+            raise PermissionError("Malformed IAM token format.")
         parts = token.split(".")
         if len(parts) != 2:
             raise PermissionError("Malformed IAM token format.")
@@ -260,22 +272,38 @@ class MultiTenantIAM:
             raise PermissionError(f"Corrupted token payload: {e}")
 
         now = time.time()
-        if now > payload.get("exp", 0):
+        if not isinstance(payload, dict):
+            raise PermissionError("Malformed token claims")
+        expiry = payload.get("exp")
+        if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not math.isfinite(expiry):
+            raise PermissionError("Malformed token expiration")
+        if now >= expiry:
             raise PermissionError("Token has expired.")
 
         tenant_id = payload.get("tid", "")
+        if not isinstance(tenant_id, str) or not isinstance(payload.get("uid"), str):
+            raise PermissionError("Malformed tenant identity")
         tenant = self.get_tenant(tenant_id)
         if not tenant or tenant.status != TenantStatus.ACTIVE:
             raise PermissionError(f"Tenant '{tenant_id}' is inactive or does not exist.")
 
-        return TenantContext(
+        if not isinstance(payload.get("nonce"), str) or not payload["nonce"]:
+            raise PermissionError("Malformed token nonce")
+        principal = self.get_principal(tenant_id, payload["uid"])
+        if principal is None:
+            raise PermissionError("Principal no longer exists")
+        if any(not isinstance(payload.get(key), list) or any(not isinstance(value, str) for value in payload[key]) for key in ("roles", "scopes")):
+            raise PermissionError("Malformed token permissions")
+        context = TenantContext(
             tenant_id=tenant_id,
             principal_id=payload.get("uid", ""),
-            roles=set(payload.get("roles", [])),
-            scopes=set(payload.get("scopes", [])),
+            roles=frozenset(payload["roles"]) & frozenset(principal.roles),
+            scopes=frozenset(payload["scopes"]) & frozenset(principal.scopes),
             token_id=payload.get("nonce", ""),
-            expires_at=payload.get("exp", 0),
+            expires_at=expiry,
         )
+        self._contexts[id(context)] = context
+        return context
 
     # -------------------------------------------------------------------------
     # Policy-Based Authorization Engine (PAB)
@@ -293,13 +321,23 @@ class MultiTenantIAM:
         1. Context tenant must match target resource tenant (No cross-tenant bleed).
         2. Context must possess matching scope or role permission.
         """
+        # Only this verifier may establish authority; recheck current lifecycle
+        # and permissions on every action, including already-running requests.
+        if self._contexts.get(id(context)) is not context or time.time() >= context.expires_at:
+            return False
+        tenant = self.get_tenant(context.tenant_id)
+        principal = self.get_principal(context.tenant_id, context.principal_id)
+        if not tenant or tenant.status != TenantStatus.ACTIVE or not principal:
+            return False
+        if not resource_urn.startswith(f"urn:mas:tenant:{resource_tenant_id}:"):
+            return False
         # Hard Rule 1: Multi-tenant boundary isolation
         if context.tenant_id != resource_tenant_id:
             return False
 
         # Gather all permissions from assigned roles
-        all_perms: Set[str] = set(context.scopes)
-        for role in context.roles:
+        all_perms: Set[str] = set(context.scopes) & principal.scopes
+        for role in context.roles & principal.roles:
             role_perms = self._role_permissions.get(role, set())
             all_perms.update(role_perms)
 
@@ -325,18 +363,21 @@ class MultiTenantIAM:
         Returns a canonical isolated directory for the tenant.
         Prevents directory traversal (e.g. '../') and ensures the folder exists.
         """
-        if not re.match(r"^[a-zA-Z0-9_\-]+$", tenant_id):
+        if not re.fullmatch(r"[a-zA-Z0-9_\-]+", tenant_id):
             raise ValueError(f"Dangerous tenant_id containing invalid characters: '{tenant_id}'")
 
-        clean_base = os.path.abspath(base_workspace)
-        tenant_path = os.path.abspath(os.path.join(clean_base, "tenants", tenant_id))
+        from pathlib import Path
+        clean_base = Path(base_workspace).resolve()
+        container = clean_base / "tenants"
+        tenant_path = container / tenant_id
+        # Never follow a pre-existing symlink into another tenant or host path.
+        if container.is_symlink() or tenant_path.is_symlink():
+            raise PermissionError("Tenant workspace cannot be a symlink")
+        tenant_path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if tenant_path.resolve() != tenant_path:
+            raise PermissionError("Tenant workspace escaped its configured root")
+        return str(tenant_path)
 
-        # Verification check: Ensure tenant_path is strictly a subpath of base_workspace
-        if not tenant_path.startswith(clean_base):
-            raise PermissionError(f"Directory traversal detected for tenant '{tenant_id}'")
-
-        os.makedirs(tenant_path, exist_ok=True)
-        return tenant_path
 
 
 # Global default instance for runtime access

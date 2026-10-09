@@ -8,6 +8,8 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
+from pathlib import Path
+
 from mas.config import CONFIG
 from mas.security import DEFAULT_SAFE_TOOLS, ToolACL, default_tool_acl, sanitize_tool_arguments
 
@@ -119,7 +121,12 @@ class MCPRegistry:
     Registry for MCP Tools, Resources, and Prompts implementing standard JSON-RPC dispatch.
     """
 
-    def __init__(self, tool_acl: Optional[ToolACL] = None) -> None:
+    def __init__(self, tool_acl: Optional[ToolACL] = None, *, iam=None, tenant_id: Optional[str] = None, tenant_root: Optional[Path] = None) -> None:
+        if any(value is not None for value in (iam, tenant_id, tenant_root)) and not all(value is not None for value in (iam, tenant_id, tenant_root)):
+            raise ValueError("Tenant registry requires IAM, tenant ID and storage root")
+        self.iam = iam
+        self.tenant_id = tenant_id
+        self.tenant_root = Path(tenant_root).resolve() if tenant_root is not None else None
         self.tools: Dict[str, ToolDefinition] = {}
         self.resources: Dict[str, ResourceDefinition] = {}
         self.prompts: Dict[str, PromptDefinition] = {}
@@ -149,6 +156,8 @@ class MCPRegistry:
 
     def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Any:
         """Synchronously execute a registered tool handler."""
+        if self.iam is not None:
+            raise PermissionError("Tenant tools require authenticated request dispatch")
         if name not in self.tools:
             raise KeyError(f"Tool '{name}' not found")
         args = arguments or {}
@@ -192,8 +201,41 @@ class MCPRegistry:
         self,
         request: JsonRpcRequest,
         principal: Optional[str] = None,
+        *, bearer_token: Optional[str] = None,
     ) -> Optional[JsonRpcResponse]:
         """Dispatch JSON-RPC request to appropriate MCP handler."""
+        from mas.tenancy import current_binding, tenant_scope
+        binding = current_binding()
+        if self.iam is not None:
+            if binding is None:
+                try:
+                    with tenant_scope(self.iam, bearer_token, self.tenant_id, self.tenant_root):
+                        return await self.handle_request(request, principal=principal)
+                except PermissionError as exc:
+                    return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, str(exc))
+            if binding.iam is not self.iam or binding.identity.tenant_id != self.tenant_id or binding.workspace != self.tenant_root / "workspaces" / "tenants" / self.tenant_id:
+                return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, "Cross-tenant dispatch denied")
+            try:
+                binding.require("tools:read")
+            except PermissionError as exc:
+                return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, str(exc))
+            if request.method not in {"initialize", "notifications/initialized", "tools/list", "tools/call"}:
+                return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, "Endpoint lacks tenant isolation")
+            if request.method == "tools/call":
+                try:
+                    name = (request.params or {}).get("name")
+                    reads = {"fs_read", "fs_list", "pm_get_board_state", "pm_get_issue", "pm_list_issues"}
+                    writes = {"fs_write", "pm_create_project", "pm_create_issue", "pm_transition_issue", "pm_attach_evidence", "pm_cast_verdict", "pm_record_verdict"}
+                    if name not in reads | writes | {"run_python"}:
+                        raise PermissionError("Tool lacks tenant isolation")
+                    binding.require("tools:read" if name in reads else "tools:execute")
+                    binding.require("storage:write" if name in writes else "storage:read")
+                    from mas.security import ExecutionContext
+                    caller = ExecutionContext.resolve_authenticated_principal(principal)
+                    ExecutionContext.resolve_authenticated_principal((request.params or {}).get("principal"))
+                    principal = caller
+                except PermissionError as exc:
+                    return JsonRpcResponse.fail(request.id, APPLICATION_ERROR, str(exc))
         method = request.method
         params = request.params or {}
 
@@ -232,7 +274,7 @@ class MCPRegistry:
             elif method == "tools/call":
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
-                caller = params.get("principal") or principal
+                caller = principal or params.get("principal")
                 if not tool_name or tool_name not in self.tools:
                     return JsonRpcResponse.fail(
                         request.id,
@@ -240,7 +282,7 @@ class MCPRegistry:
                         f"Tool '{tool_name}' not found",
                     )
 
-                if CONFIG.tool_acl_enabled and not self.tool_acl.is_allowed(caller, tool_name):
+                if self.iam is None and CONFIG.tool_acl_enabled and not self.tool_acl.is_allowed(caller, tool_name):
                     if caller and caller in self.tool_acl.principals:
                         return JsonRpcResponse.fail(
                             request.id,

@@ -35,11 +35,21 @@ class PMDatabase:
     """Thread-safe SQLite database manager for MAS-PM."""
 
     def __init__(self, db_path: Optional[Path | str] = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        from mas.tenancy import current_binding
+        binding = current_binding()
+        self.db_path = Path(db_path) if db_path else (binding.database if binding else DEFAULT_DB_PATH)
+        if binding and self.db_path.resolve() != binding.database.resolve():
+            raise PermissionError("Database belongs to another tenant")
         self._lock = threading.Lock()
         self.init_schema()
 
     def _get_connection(self) -> sqlite3.Connection:
+        from mas.tenancy import current_binding
+        binding = current_binding()
+        if binding:
+            binding.require("storage:read")
+            if self.db_path.resolve() != binding.database.resolve():
+                raise PermissionError("Database belongs to another tenant")
         conn = sqlite3.connect(
             str(self.db_path),
             timeout=5.0,

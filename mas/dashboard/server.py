@@ -11,6 +11,7 @@ import threading
 from dataclasses import asdict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, List, Optional
+from pathlib import Path
 from urllib.parse import urlparse
 from mas.organization.company import ConsultingEnterprise
 from mas.organization.engagement import ConsultingEngagement, EngagementArtifacts
@@ -565,6 +566,42 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"success": True, "issue_key": issue.key, "sprint_id": sprint_id})
 
 
+class TenantDashboardRequestHandler(DashboardRequestHandler):
+    """Tenant-bound PM API. Shared enterprise, portal and model routes fail closed."""
+
+    def _is_authenticated(self) -> bool:
+        from mas.tenancy import current_binding
+        binding = current_binding()
+        return bool(binding and binding.iam is self.iam and binding.identity.tenant_id == self.tenant_id)
+
+    def _tenant_request(self, method):
+        from mas.tenancy import tenant_scope
+        auth = self.headers.get("Authorization", "")
+        token = auth[7:].strip() if auth.startswith("Bearer ") else None
+        try:
+            with tenant_scope(self.iam, token, self.tenant_id, self.tenant_root) as binding:
+                action = "storage:read" if method == "GET" else "storage:write"
+                binding.require(action)
+                path = urlparse(self.path).path
+                if not path.startswith("/api/pm/"):
+                    self._send_json({"error": "Endpoint lacks tenant isolation"}, status=403)
+                    return
+                self.auth_principal = f"{self.tenant_id}:{binding.identity.principal_id}"
+                if method == "GET":
+                    super().do_GET()
+                else:
+                    binding.require("tools:execute")
+                    super().do_POST()
+        except PermissionError:
+            self._send_json({"error": "Missing, invalid or unauthorized tenant credential"}, status=403)
+
+    def do_GET(self):
+        self._tenant_request("GET")
+
+    def do_POST(self):
+        self._tenant_request("POST")
+
+
 class DashboardServer:
     """
     Observability Dashboard Server running on background thread or foreground loop.
@@ -577,7 +614,10 @@ class DashboardServer:
         port: int = 8080,
         auth_token: Optional[str] = None,
         allowed_origins: Optional[List[str]] = None,
+        *, iam=None, tenant_id: Optional[str] = None, tenant_root: Optional[Path] = None,
     ) -> None:
+        if any(value is not None for value in (iam, tenant_id, tenant_root)) and not all(value is not None for value in (iam, tenant_id, tenant_root)):
+            raise ValueError("Tenant dashboard requires IAM, tenant ID and storage root")
         self.enterprise = enterprise
         self.host = host
         self.port = port
@@ -587,7 +627,9 @@ class DashboardServer:
 
         # Each server owns its credentials, enterprise and cached artifacts.
         # Class-wide mutation leaked state and tokens across concurrent servers.
-        handler = type("BoundDashboardRequestHandler", (DashboardRequestHandler,), {
+        handler = type("BoundDashboardRequestHandler", (TenantDashboardRequestHandler if iam is not None else DashboardRequestHandler,), {
+            "iam": iam, "tenant_id": tenant_id,
+            "tenant_root": Path(tenant_root).resolve() if tenant_root is not None else None,
             "enterprise": self.enterprise,
             "static_dir": self.static_dir,
             "initial_roster_names": set(self.enterprise.get_roster().keys()),

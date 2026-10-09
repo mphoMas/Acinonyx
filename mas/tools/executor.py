@@ -42,14 +42,19 @@ def _sandbox_check(code: str) -> Optional[str]:
 
 def _build_command_and_env(code: str) -> tuple[List[str], Dict[str, str]]:
     """Build isolated execution command and stripped environment."""
-    bwrap_path = shutil.which("bwrap") if CONFIG.sandbox_python else None
+    from mas.tenancy import current_binding
+    binding = current_binding()
+    if binding:
+        binding.require("tools:execute")
+        binding.require("storage:write")
+    bwrap_path = shutil.which("bwrap") if CONFIG.sandbox_python or binding else None
     safe_env = {
         "PATH": "/usr/bin:/bin:" + os.path.dirname(sys.executable),
         "LANG": "C.UTF-8",
         "PYTHONUNBUFFERED": "1",
     }
 
-    if CONFIG.sandbox_python and not bwrap_path:
+    if (CONFIG.sandbox_python or binding) and not bwrap_path:
         raise RuntimeError("Sandbox unavailable: bubblewrap is required; host execution refused")
 
     if bwrap_path:
@@ -69,12 +74,14 @@ def _build_command_and_env(code: str) -> tuple[List[str], Dict[str, str]]:
         for runtime in {sys.base_prefix, str(Path(sys.executable).resolve().parent.parent)}:
             if runtime != py_prefix and not Path(runtime).is_relative_to("/usr"):
                 cmd.extend(["--ro-bind", runtime, runtime])
-        from mas.tools.filesystem import ALLOWED_PROJECT_ROOTS
-        for root in ALLOWED_PROJECT_ROOTS:
+        from mas.tools.filesystem import effective_roots
+        for root in effective_roots():
             root_str = str(root)
             if os.path.exists(root_str):
                 cmd.extend(["--bind-try", root_str, root_str])
 
+        if binding:
+            cmd.extend(["--chdir", str(binding.workspace)])
         cmd.extend([
             "--unshare-all",
             "--clearenv",

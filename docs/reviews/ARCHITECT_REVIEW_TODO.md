@@ -1,5 +1,10 @@
 # Independent Reviewer & Chief Architect — Assigned Tasks
 
+## Tenant-boundary pilot milestone
+
+Authenticated tenant-bound MCP and PM HTTP paths now isolate workspaces and SQLite state; 18 tenant adversarial/integration cases and the full 367-test suite pass. Unsupported shared services remain denied in tenant mode. See [tenant boundary review](TENANT_BOUNDARY_REVIEW.md). Durable identity/session revocation and tenant-aware memory/model/orchestration remain required before whole-platform multi-tenant deployment.
+
+
 Owner: Codex, acting as Independent Reviewer & Chief Architect for Platform, AI & Data.
 Scope: `mphoMas/Acinonyx`, branch `Acinonyx_frontier`.
 Baseline inspected: `7e75b857703b3744da456eced493f83d87d10559`.

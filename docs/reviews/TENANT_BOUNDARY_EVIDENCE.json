@@ -1,0 +1,30 @@
+{
+  "baseline": "3a373990e1cdd5d8cc1269d41dce4bdd48efa52b",
+  "command": "bash scripts/run_quality_gate.sh",
+  "results": {
+    "passed": 367,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "tenant_cases": 18
+  },
+  "source_sha256": {
+    "mas/tenancy.py": "b835195cd3e48ea94ecaf5d16e915d4be42ef72b914bc705db77833a0d3481a3",
+    "mas/iam.py": "4f82542b2710107316e2ff6ef996c5128499edb4a3e19ed2cddc673167bb8b4a",
+    "mas/mcp/protocol.py": "de5c38db2f16ca093503c47e60a2642fe1ad4a3b9bcf4f5be70e1427bdcf4fcc",
+    "mas/mcp/transport.py": "2e889106e306644c29551370836e2788b2fe15c2c1531603e54e535aa03f19c8",
+    "mas/pm/db.py": "13e82f4d154e0800da199c10c914b108a8432b382c20ee4470028f20fb8d6cb5",
+    "mas/pm/tools.py": "a465fd1782c1ee40849fe3a927d5c0246bb8e769a9e9bfafc05ebd5b986773d0",
+    "mas/tools/filesystem.py": "2c90542ae7b04cca4581b63f392b8a33cb33fc1f87189d05a46331db543c8437",
+    "mas/tools/executor.py": "a1484da7a6177e1d10dfb2ec51790dd60c0a37cce7a486530110337d241e3e32",
+    "mas/dashboard/server.py": "7c7a19078a3fc6f8d6205f4b49248971f47582b5e22bae115686abf3b8da1e7b",
+    "mas/capabilities.py": "92f95acb0b5f7bfc0f7cc9ff214447fb116fdeb2936bb3e92f4c8c81aed642cc",
+    "tests/test_tenant_boundary.py": "9a9d0a47427922fc05c9747158041bf2f6c84d70013d37e6e97bf16d865a88e6"
+  },
+  "artifacts_sha256": {
+    "/workspace/review-evidence/tenant-boundary-gate.log": "7ae073e5f7acd4746e702fb19a6b6b25524067f693a1bbf4d87a727ca51814e7",
+    "/workspace/review-evidence/tenant-boundary-tests.xml": "bfdeec4362e74376069dfb5aab373d97d38dcb484bef74010288755339ed30fd"
+  },
+  "scope": "Authenticated tenant-bound MCP and PM HTTP pilot; whole-platform enterprise multi-tenancy remains rejected",
+  "new_live_model_evaluation": false
+}

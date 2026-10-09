@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 from mas.pm.db import DEFAULT_DB_PATH, PMDatabase
 from mas.pm.fsm import FSMEngine
@@ -33,6 +34,12 @@ _GLOBAL_DB: Optional[PMDatabase] = None
 
 def get_pm_db(db_path: Optional[str] = None) -> PMDatabase:
     """Singleton/accessor for PM database."""
+    from mas.tenancy import current_binding
+    binding = current_binding()
+    if binding:
+        if db_path and Path(db_path).resolve() != binding.database.resolve():
+            raise PermissionError("Database belongs to another tenant")
+        return PMDatabase(binding.database)
     global _GLOBAL_DB
     if _GLOBAL_DB is None or db_path:
         _GLOBAL_DB = PMDatabase(db_path or DEFAULT_DB_PATH)
@@ -231,6 +238,9 @@ def pm_transition_issue(
     database = db or get_pm_db()
     fsm = FSMEngine(database)
     from mas.security import ExecutionContext
+    from mas.tenancy import current_binding
+    if current_binding():
+        caller_principal = ExecutionContext.resolve_authenticated_principal(caller_principal)
     with ExecutionContext.scope(caller_principal):
         updated = fsm.transition(
             issue_id_or_key=issue_key,
@@ -286,6 +296,10 @@ def pm_cast_verdict(
     db: Optional[PMDatabase] = None,
 ) -> Dict[str, Any]:
     """Casts an independent critic verdict on an issue under review."""
+    from mas.tenancy import current_binding
+    from mas.security import ExecutionContext
+    if current_binding():
+        reviewer_principal = ExecutionContext.resolve_authenticated_principal(reviewer_principal)
     database = db or get_pm_db()
     issue = database.get_issue(issue_key)
     if not issue:

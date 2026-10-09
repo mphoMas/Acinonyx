@@ -42,7 +42,7 @@ CAPABILITIES: List[Capability] = [
     Capability("visual_diff_gate", CapabilityStatus.IMPLEMENTED, "Pixel RMSE visual regression", "mas.tools.visual_diff"),
     Capability("eval_harness", CapabilityStatus.IMPLEMENTED, "Golden missions + structural/quality scoring", "mas.eval"),
     Capability("cli_doctor", CapabilityStatus.IMPLEMENTED, "Runtime health / mode report", "mas.cli"),
-    Capability("multi_tenant_iam", CapabilityStatus.IMPLEMENTED, "OAuth/PAB PBAC/RBAC tenant isolation + HMAC token auth + workspace jailing", "mas.iam"),
+    Capability("multi_tenant_iam", CapabilityStatus.IMPLEMENTED, "Verified HMAC/RBAC tenant-bound MCP and PM HTTP APIs; isolated SQLite/workspaces; legacy endpoints remain single-tenant", "mas.iam"),
     Capability("managed_vector_saas", CapabilityStatus.DEMO_ONLY, "Local in-memory cloud adapter simulations; no remote persistence", "mas.memory.vector_saas"),
     Capability("computer_use", CapabilityStatus.IMPLEMENTED, "Virtual Xvfb display + discrete OS mouse/keyboard actions + SoM grounding + Scope Jail", "mas.tools.computer_use"),
     Capability("bigquery_finops_sql", CapabilityStatus.IMPLEMENTED, "Native Google Cloud BigQuery execution + dry-run cost estimation + mandatory labeling", "mas.tools.bigquery_tool"),
