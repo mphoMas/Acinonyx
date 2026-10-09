@@ -1,9 +1,19 @@
 # MAS consolidation acceptance checklist
 
-Status: **DRAFT — every gate below is pending for consolidation.** Baseline: `119ca57ac000058f485dc1a33f62aafd722a3931`.
-Related: [ADR](MAS_CONSOLIDATION_ADR.md), [migration map](MAS_CONSOLIDATION_MIGRATION.md).
+Status: **IN PROGRESS — no full consolidation gate is signed off.** Regrouping baseline: `3311a4fa4a99957d9f4c13dde89fc97f0e8817f3`.
+Related: [ADR](MAS_CONSOLIDATION_ADR.md), [migration map](MAS_CONSOLIDATION_MIGRATION.md), [scope inventory](MAS_CONSOLIDATION_INVENTORY.md).
 
-The baseline passed 424 repository tests and 38 repeated post-commit checks, with a clean-wheel smoke test; see [external anchor evidence](../reviews/EXTERNAL_AUDIT_ANCHOR_EVIDENCE.json). Those results qualify their documented baseline scope. They do not pass future consolidation gates, certify a deployed witness or establish a whole-platform rating.
+The shared-identity baseline passed 478 repository tests, all five gates and clean-wheel checks; see [shared identity evidence](../reviews/SHARED_SWARM_IDENTITY_EVIDENCE.json). These results qualify their documented scope. They do not pass future consolidation gates, certify a deployed witness or establish enterprise readiness. Earlier anchor/contract milestones remain historical evidence.
+
+## Current partial evidence
+
+| Gate | Current contribution | Still required |
+| --- | --- | --- |
+| A0 | Source-referenced control-plane and development consumer inventory; explicit scope exclusions | Confirm deployment consumers, ownership and external-service inventory before cutover; reviewer sign-off |
+| A1 | Shared identity/evidence contracts plus bounded coding task admission | Message/capability/result/approval/audit schemas and shared lifecycle; conformance review |
+| A2 | Existing coding schema 2, idempotency and approval behavior retained | Full extraction comparison including cancelled and failed tasks; reviewed upgrade mapping |
+| A3 | Fresh platform-bound swarm and tenant PM MCP share durable IAM sessions; revocation cases pass at baseline | All admitted HTTP/CLI/MCP workflow surfaces and broader cutover |
+| A4–A16 | Scoped earlier fixtures/reviews supply inputs where applicable | Candidate-specific full acceptance and operational evidence; no automatic gate pass |
 
 ## Gate register
 

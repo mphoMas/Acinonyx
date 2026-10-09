@@ -1,6 +1,6 @@
 # MAS consolidation implementation status
 
-Baseline: `645067c673f4221cfcaf8959a49be266ea38911d`. Scope: first contract/compatibility slice; P0 and P2 are **in progress**, not complete. Design: [ADR](MAS_CONSOLIDATION_ADR.md), [migration map](MAS_CONSOLIDATION_MIGRATION.md), [acceptance gates](MAS_CONSOLIDATION_ACCEPTANCE.md).
+Regrouping baseline: `3311a4fa4a99957d9f4c13dde89fc97f0e8817f3`. Scope: incremental contracts and explicit shared identity; P0, P1 and P2 are **in progress**, not complete. Design: [ADR](MAS_CONSOLIDATION_ADR.md), [migration map](MAS_CONSOLIDATION_MIGRATION.md), [acceptance gates](MAS_CONSOLIDATION_ACCEPTANCE.md).
 
 ## Shared identity slice
 
@@ -14,7 +14,9 @@ Explicitly platform-bound stores now use durable platform IAM sessions with dedi
 
 The bridge returns existing evidence unchanged. Swarm storage remains schema 2; signatures, state machine, role checks, private test expectations and separate human approval remain enforced by their existing owners. No new network endpoint, unrestricted worker, credential migration or automatic deployment is introduced. Shared contract validation supplements existing Store provenance/approval checks; it does not replace them.
 
-Concrete task, message, capability, approval, audit and general execution schemas remain to be specified/implemented beyond this deliberately small evidence slice. The current task identity is not a complete Task contract. Do not interpret this module as a completed common coordinator or broker.
+A bounded `CodingTaskAdmission` now validates fresh authenticated submissions before the Store inserts them. It binds server-owned tenant/subject, task/request key, immutable request/suite hashes and frozen coding limits to the supported workflow. Operational ceilings remain owned by the existing coding Limits policy. The host document is preserved; signed schema 2 and idempotent retry semantics are unchanged. The admission view is not serialized into historical stores and cannot mint caller authority.
+
+Concrete message, capability, approval, audit, general execution and shared lifecycle schemas remain to be specified/implemented. The task admission view is deliberately coding-specific, not a complete general Task contract. See the [scope inventory](MAS_CONSOLIDATION_INVENTORY.md). Do not interpret this module as a completed common coordinator or broker.
 
 ## Inspected control-plane inventory
 
@@ -23,7 +25,7 @@ This inventory covers identified executable surfaces and state owners. It is not
 | Surface | Current authority / side effects | Consolidation boundary |
 | --- | --- | --- |
 | `mas`, `mas-doctor`, `python -m mas` | Health/capabilities CLI; configuration and local health inspection | Keep read-only scope; report admitted adapters truthfully. |
-| `mas-swarm`, `python -m mas.swarm.cli` | Separate local hashed credentials and signed SQLite schema-2 store; model requests, Docker workers, backups, approved file export | First shared evidence bridge only; shared IAM pending. Local enrollment/init are trusted operator actions. |
+| `mas-swarm`, `python -m mas.swarm.cli` | Separate local hashed credentials and signed SQLite schema-2 store; model requests, Docker workers, backups, approved file export | Shared evidence/admission validation and explicit platform IAM for fresh bound stores; historical migration pending. Local enrollment/init are trusted operator actions. |
 | `main.py` demos | Configured legacy providers/tools/organization and template modes | Demo paths cannot supply production verification evidence; no consolidation admission. |
 | `DashboardServer` legacy handler | Broad dashboard/portal/dispatch/PM routes and configured host services | Do not route it into shared platform implicitly. Enumerate callers and retire/adapt bypass routes in P5. |
 | Tenant-bound dashboard handler | Durable platform IAM, server-resolved tenant workspace and private tenant PM SQLite; PM mutations and session revocation | Retain tested tenant PM restrictions; common task/broker adapter pending. |
@@ -50,3 +52,5 @@ This inventory covers identified executable surfaces and state owners. It is not
 4. Admit the first PM-to-coding vertical slice. Gate memory/research and every additional interface independently.
 
 Verification and the architect verdict are in the [first-slice review](../reviews/CONSOLIDATION_CONTRACT_REVIEW.md). No consolidation gate is marked complete merely because these contracts exist.
+
+Regrouping task-admission validation and readiness reconciliation are recorded in the [incremental verification report](../reviews/REGROUPING_TASK_ADMISSION_REVIEW.md); this contribution does not complete a consolidation gate.

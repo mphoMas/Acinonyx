@@ -1,6 +1,6 @@
 # MAS consolidation component migration map
 
-Status: **DRAFT; [first contract integration](MAS_CONSOLIDATION_STATUS.md) is implemented, but no identity/data/interface migration is complete.** Baseline: `119ca57ac000058f485dc1a33f62aafd722a3931`.
+Status: **DRAFT; [first contract integration](MAS_CONSOLIDATION_STATUS.md) is implemented, but no identity/data/interface migration is complete.** Regrouping baseline: `3311a4fa4a99957d9f4c13dde89fc97f0e8817f3`.
 Design authority: [ADR](MAS_CONSOLIDATION_ADR.md). Admission evidence: [checklist](MAS_CONSOLIDATION_ACCEPTANCE.md).
 Owner roles below are proposed responsibilities, not claims that people have been assigned.
 

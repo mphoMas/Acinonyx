@@ -1,43 +1,33 @@
-# Acinonyx Enterprise Release Readiness Checklist & Pilot Report
+# Acinonyx release readiness
 
-**Author:** `chief_architect`  
-**Deliverable for:** `OPS-04` (`MAS-24`)  
-**Scope:** `docs/`  
-**Reviewer:** `product_lead`  
-**Status:** Approved & Certified
+Status: **Development prototype; supported single-host shared-identity pilot approved with conditions. Enterprise production activation is not approved.**
+Regrouping baseline: `3311a4fa4a99957d9f4c13dde89fc97f0e8817f3` (9 October 2026).
 
----
+This document supersedes the earlier Sprint 2 certification. Its claims of production readiness, universally authenticated agent squads and blanket completion were broader than the measured evidence. Historical work-queue completion and template reviews do not establish deployment acceptance.
 
-## 1. Executive Summary
+## Evidence and supported scope
 
-This document certifies the release readiness of **Acinonyx / MAS-Core** following the execution and verification of Sprint 2 across the 12 authenticated agent squad members. All 24 planned engineering work packages have been completed, verified against empirical test logs and Git commit hashes, and ratified under multi-critic judicial review.
+The [shared identity review](reviews/SHARED_SWARM_IDENTITY_REVIEW.md) and [evidence manifest](reviews/SHARED_SWARM_IDENTITY_EVIDENCE.json) record 478 passing tests, zero failures/errors/skips, all five repository gates and clean-wheel CLI/PM MCP checks. These results qualify that baseline's source and documented scope; they do not qualify later candidates automatically. TLS model fixtures are integration evidence, not live model-quality results.
 
----
+Implemented scope includes explicit durable platform IAM for fresh tenant-bound coding stores, tenant PM interfaces, signed coding state/evidence, restricted Docker workers and separate human approval. Historical local stores are not automatically migrated. Legacy single-tenant interfaces, demonstrations and unadmitted capabilities are outside the consolidated pilot.
 
-## 2. Release Gate Verification Checklist
+## Deployment and consolidation register
 
-| Quality Gate | Verification Requirement | Status | Evidence Reference |
-| :--- | :--- | :--- | :--- |
-| **Gate 1: Secrets & Identity** | Zero exposed credentials in tracked repository; authenticated identity boundaries enforced. | **PASSED** | `SEC-01` (`MAS-1`), `SEC-02` (`MAS-2`) |
-| **Gate 2: Scope Jail & Containment** | Fail-closed git diff-tree changeset inspection; forbidden path traversal prohibited. | **PASSED** | `SEC-03` (`MAS-3`), `tests/test_pm_remediation.py` |
-| **Gate 3: Flow & WIP Limits** | Little's Law WIP ceiling enforced across all columns; concurrency serialized in SQLite WAL. | **PASSED** | `SEC-04` (`MAS-4`), `tests/test_pm_engine.py` |
-| **Gate 4: CI & Container Hygiene** | GitHub Actions CI configured for `Acinonyx_frontier`; Docker runs unprivileged as `USER mas` (UID 10001). | **PASSED** | `OPS-01` (`MAS-5`), `.github/workflows/ci.yml` |
-| **Gate 5: Independent Judicial Review**| 100% separation of builder and judge; multi-critic unanimous PASS required for all completions. | **PASSED** | `GOV-01` (`MAS-6`), `tests/test_handover_governance.py` |
-| **Gate 6: Delivery Board** | Native Scrum/Kanban board reflects live SQLite state; real-time CFD metrics and sprint planning. | **PASSED** | `PM-01` (`MAS-7`), `portal/scrum.html` |
-| **Gate 7: Computer-Use Safety** | Headless Playwright workers isolated with Xvfb virtual display; Set-of-Marks visual grounding. | **PASSED** | `CU-01` (`MAS-13`), `CU-02` (`MAS-14`), `CU-03` (`MAS-15`) |
-| **Gate 8: Design System & UX** | Curated graphite editorial design; WCAG 2.1 AA keyboard focus outlines; anti-slop certified. | **PASSED** | `UX-01` (`MAS-18`), `UX-02` (`MAS-19`), `UX-04` (`MAS-21`) |
+| Requirement | Current status | Closure evidence |
+| --- | --- | --- |
+| Shared-identity source and package regression | Passed at the regrouping baseline | Shared identity evidence above; rerun on changed candidates |
+| Historical identity/run migration | Pending | Reviewed ownership/history mappings, credential reissue and recovery rehearsal (A4) |
+| Independent production IAM witness | Pending; protocol implemented | Actual independent HTTPS deployment and outage/restore drills (A5) |
+| Shared contracts, coordinator and capability broker | Partial | Contract conformance, compatibility, lifecycle and routing/execution cases (A0–A9) |
+| PM-to-coding end-to-end workflow | Pending | Real admitted interfaces, verification, separate approval, export and restart reconciliation (A10) |
+| Wider memory/research/model/interface admission | Pending | Per-adapter qualification and interface cutover (A11–A13) |
+| Operational load, backup and recovery targets | Unqualified | Agreed thresholds and measured drills (A14) |
+| Reproducible release candidate and final review | Pending for consolidation | Candidate-specific package/deployment checks and independent verdict (A15–A16) |
 
----
+The [consolidation acceptance register](architecture/MAS_CONSOLIDATION_ACCEPTANCE.md) owns gate status; the [implementation status](architecture/MAS_CONSOLIDATION_STATUS.md) records partial slices. No checkbox here grants production approval. The [capability matrix](CAPABILITIES.md) describes implemented code separately from admitted deployment scope.
 
-## 3. Autonomous Pilot Results
+## Environment snapshot at regrouping
 
-- **Total Sprints Executed:** 2 (Sprint 1: Core Governance; Sprint 2: Frontier Foundation).
-- **Total Work Queue Items Delivered:** 24 of 24 (100%).
-- **Automated Test Suite Pass Rate:** 100% (zero regressions).
-- **Rework Cycles:** 0 (all critic reviews passed on first evaluation cycle).
+The managed development environment is connected. No application containers/dashboard were running during inspection. Runtime doctor reported STAGED dispatch, sandbox and tool ACL enabled, and no legacy live provider. Swarm provider variables were present, but current remote authorization/model availability was not tested. Production dashboard credentials, durable IAM configuration and witness endpoint were not set in the inspected shell. Readiness observations for injected credentials/network enforcement were unknown.
 
----
-
-## 4. Release Certification
-
-The Acinonyx platform is certified production-ready for autonomous multi-agent task execution and continuous delivery.
+These observations describe this development session, not all deployments. Do not infer production configuration from historical container smoke logs.

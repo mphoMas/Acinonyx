@@ -46,8 +46,14 @@ class Contract(BaseModel):
         def constant(_):
             raise ContractError("Non-finite JSON number")
 
+        def finite_float(value):
+            number = float(value)
+            if not math.isfinite(number):
+                raise ContractError("Non-finite JSON number")
+            return number
+
         try:
-            data = json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
+            data = json.loads(raw, object_pairs_hook=pairs, parse_constant=constant, parse_float=finite_float)
             # JSON arrays map explicitly to immutable tuples at this boundary.
             if cls is VerificationEvidence and isinstance(data, dict) and isinstance(data.get("results"), list):
                 data["results"] = tuple(data["results"])
@@ -61,6 +67,57 @@ class TaskIdentity(Contract):
     task_id: Identifier
     attempt_id: Identifier
     workflow: Literal["coding.solve.v1"]
+
+
+class CodingLimits(BaseModel):
+    """Immutable policy view; existing coding Limits owns operational ceilings."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    deadline_seconds: int | float
+    worker_seconds: int | float
+    provider_seconds: int | float
+    max_tokens: int
+    completion_tokens: int
+    context_bytes: int
+    source_bytes: int
+    output_bytes: int
+    max_cases: int
+    parallel_cases: int
+
+    @model_validator(mode="after")
+    def supported_policy(self):
+        from mas.swarm.contracts import Limits, SwarmError
+
+        try:
+            Limits(**self.model_dump())
+        except SwarmError as exc:
+            raise ValueError("Unsupported coding resource policy") from exc
+        return self
+
+
+class CodingTaskAdmission(Contract):
+    """Host-owned submission view, not a new coordinator or authority token.
+
+    State version zero is only the admission snapshot. Subsequent transitions
+    remain owned by signed swarm schema 2; no new lifecycle is inferred here.
+    """
+
+    tenant_id: Identifier
+    task_id: Identifier
+    subject_id: Identifier
+    request_key: Identifier
+    workflow: Literal["coding.solve.v1"]
+    request_hash: Hash
+    suite_hash: Hash
+    limits: CodingLimits
+    created: Annotated[float, Field(gt=0, allow_inf_nan=False)]
+
+    def bind(self, tenant_id: str, subject_id: str, request_key: str, request_hash: str, suite_hash: str):
+        if (self.tenant_id, self.subject_id, self.request_key, self.request_hash, self.suite_hash) != (
+            tenant_id, subject_id, request_key, request_hash, suite_hash
+        ):
+            raise ContractError("Task admission differs from authenticated submission")
+        return self
 
 
 class CaseOutcome(BaseModel):

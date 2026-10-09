@@ -1,8 +1,28 @@
 """Trusted coding adapter; validate evidence without rewriting signed schema v2."""
 from pydantic import ValidationError
 
-from mas.platform.contracts import ContractError, TaskIdentity, VerificationEvidence
+from mas.platform.contracts import CodingTaskAdmission, ContractError, TaskIdentity, VerificationEvidence
 from mas.swarm.contracts import SwarmError, digest, exact_keys
+
+
+def validate_coding_admission(document, request_key, actor):
+    """Validate a freshly constructed host submission; never accept agent authority.
+
+    The authenticated Store owns actor and request_key. Return its dictionary
+    unchanged so historical signatures and persisted schema remain compatible.
+    """
+    try:
+        parsed = CodingTaskAdmission(
+            tenant_id=document["tenant"], task_id=document["id"], subject_id=document["submitted_by"],
+            request_key=request_key, workflow="coding.solve.v1", request_hash=document["request_hash"],
+            suite_hash=digest(document["request"]["cases"]), limits=document["request"]["limits"], created=document["created"],
+        )
+        if document["state"] != "queued" or type(document["version"]) is not int or document["version"] != 0:
+            raise ContractError("Task admission requires a fresh queued submission")
+        parsed.bind(actor["tenant"], actor["subject"], request_key, digest(document["request"]), digest(document["request"]["cases"]))
+        return document
+    except (ValidationError, ContractError, KeyError, TypeError) as exc:
+        raise SwarmError("Coding task admission violates shared contract") from exc
 
 
 def validate_coding_evidence(document, evidence, image):

@@ -16,6 +16,7 @@ from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from mas.platform.identity import PlatformAuthority
+from mas.platform.coding import validate_coding_admission
 
 from .contracts import Limits, SwarmError, canonical, cases_contract, digest, identifier, strict_json, text
 
@@ -308,6 +309,7 @@ class Store:
                 "usage": {"calls": 0, "tokens": 0, "reserved": 0},
                 "created": time.time(),
             }
+            validate_coding_admission(doc, request_key, actor)
             raw = canonical(doc)
             db.execute("INSERT INTO runs VALUES(?,?,?,?,?)", (doc["id"], doc["tenant"], request_key, raw, self._sign(raw)))
             self._audit(db, {"action": "submit", "run_id": doc["id"], **actor, "document_hash": digest(doc)})

@@ -3,6 +3,8 @@
 **Multi-Agent Operating Runtime** built from first principles in Python.  
 Version **0.2.0** — development prototype; enterprise engagement demos remain **staged** unless live dispatch is armed. See the [independent architecture review](docs/reviews/ARCHITECT_REVIEW.md) for verified limitations and production blockers.
 
+See [release readiness](docs/RELEASE_READINESS_CHECKLIST.md) for current admission limits.
+
 See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for an honest implemented / demo-only / planned matrix.
 
 The new [supervised coding swarm](docs/architecture/SUPERVISED_SWARM.md) provides a
@@ -41,7 +43,8 @@ Start with the [documentation index](docs/README.md). The [structure guide](docs
 | Native Scrum/Kanban PM engine + visual board | **Implemented** (guarded FSM + Little's Law WIP + Playwright verified) |
 | LLM ReAct / squad LLM repair / HR LLM gap analysis | **Implemented** when an LLM provider is attached |
 | Echo agents in `main.py`, enterprise engagement without LLM | **Demo / staged** (deterministic templates) |
-| Multi-tenant IAM, managed vector SaaS | **Planned** |
+| Durable IAM + tenant-bound PM/MCP + explicit shared swarm identity | **Implemented** within the reviewed pilot scope; wider cutover pending |
+| Managed vector SaaS | **Demo / simulated**; no remote persistence |
 
 Default dispatch is **STAGED** (`MAS_ENABLE_LIVE_DISPATCH=false`).
 
