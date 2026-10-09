@@ -1,24 +1,27 @@
 # Discovery decision register
 
-Opened 9 October 2026. Updated 9 October 2026 with Project Owner determinations for DEC01, DEC03, and DEC04.
+Opened and reconciled 9 October 2026. Latest owner replies in this delivery conversation govern current scope. Earlier Antigravity decision claims at `f8e74521` conflict with those replies and lack supporting statutory/provider verification; their historical record is retained with a superseded-readiness annotation. A proposal or recorded assertion is not a resolved decision.
 
-| ID | Decision | Accountable decision maker / technical preparer | Needed by | Status | Resolved Policy / Starting Position |
-| --- | --- | --- | --- | --- | --- |
-| DEC01 | Launch organizations, properties and operating countries | Project owner / Codex discovery | G0 | **RESOLVED** | Organization: Platinum Hotels; Properties: Platinum Hotel 01 (Maputo) & Platinum Hotel 02 (Matola); Country: Mozambique (`MZ`), Currency: `MZN`. |
-| DEC02 | Required incumbent systems, channels and migration sources | Project owner + hotel manager / Antigravity | G0 | PENDING | Standalone launch first; OTA channels/PMS imports scoped as post-launch adapters unless required by pilot staff. |
-| DEC03 | Tax, invoice, business-day, guest-registration and privacy rules | Project owner with accountant/legal advisor / Antigravity | G0 | **RESOLVED** | Mozambique IVA 16% standard VAT; sequential Fatura/Recibo numbering in PT/EN; Passport/BI recording for guest compliance. |
-| DEC04 | Payment provider, merchant accounts, currencies and payout/terminal support | Project owner / Antigravity | G0 | **RESOLVED** | DPO Group / Peach Payments Mozambique aggregator: M-Pesa (Vodacom MZ), e-Mola (Movitel MZ), Visa/Mastercard (3DS hosted), plus cash/POS slips. |
-| DEC05 | Cancellation, deposits, refunds, approvals and credit balances | Project owner + hotel finance / Antigravity | G0 | PENDING | Standard deposit required at booking; refundable up to 48h prior to check-in; supervisor role required for refunds. |
-| DEC06 | Database, hosting, identity and jobs architecture | Antigravity technical lead / separate technical reviewer | G0 | **PROPOSED** | Modular Node 24 application; TypeScript; managed transactional PostgreSQL 16; PgBouncer connection pool; transactional outbox for webhooks. |
-| DEC07 | Capacity, budget, target date and provider/infra procurement | Project owner / both teams estimate | G0 | **PROPOSED** | 14–20 week phased delivery; pilot infra ~$310/mo; reforecast at G1 exit. |
-| DEC08 | Cross-property guest sharing and portfolio permissions | Project owner with privacy advisor / Antigravity + Codex | G1 | PENDING | Strict property isolation by default; explicit organization-level guest profile lookup with consent audit. |
-| DEC09 | Brand, imagery and language coverage | Project owner / Codex | G1 | PENDING | Evolve forest-green/cream identity; licensed/owned assets; dual Portuguese (PT) & English (EN) core journeys. |
-| DEC10 | Support hours, incident rota and cutover authority | Project owner / Antigravity operations | Before G5 | PENDING | Operational shift coverage; hotel manager on-call escalation; no unsupported 24/7 claims. |
-| DEC11 | Shared MAS-PM instance and real executor/reviewer identities | Authorized PM administrator / Antigravity with Codex | Before staging | IN PROGRESS | Local PM instance synchronized; coordination tickets bound; token allowances to be authorized per work package. |
+| ID | Decision | Accountable decision maker / preparer | Needed by | Current status and next evidence |
+|---|---|---|---|---|
+| DEC01 | Launch organizations, properties and country | Owner / Codex | G0 | PARTIAL: Platinum Hotel only, Mozambique. Legal entity, room count, memberships and scope details outstanding. Multi-property technical capability remains release-one; live second-property acceptance deferred. |
+| DEC02 | Incumbent systems, channels and migration | Owner + operations / Antigravity | G0 | PARTIAL: Excel confirmed; no daily workflow measurement. Inventory columns, sources, channels and migration boundaries. No OTA exclusion approved. |
+| DEC03 | Fiscal, guest registration, privacy and business-day rules | Owner + qualified local accountant/legal advisor / Antigravity | G0 | OPEN: obtain applicable Mozambique policies and validated examples. Tax rates, exemptions, numbering, identification and retention not signed off by this conversation. |
+| DEC04 | Payment provider, merchant and settlement | Owner / Antigravity | G0 | OPEN: no existing provider/account. Assess eligible Mozambique options with real merchant, currency, refund, webhook and settlement evidence. DPO/Peach and mobile money integrations are candidates, not selected/verified. |
+| DEC05 | Deposits, cancellation, refund and approval policies | Owner + finance / Antigravity | G0 | OPEN: obtain explicit policy snapshots and limits. No 48-hour cancellation/refund rule or deposit requirement approved. |
+| DEC06 | Database, hosting, identity and jobs | Antigravity technical lead + separate reviewer | G0 | PROPOSED: modular Node/TypeScript/PostgreSQL and transactional outbox. Resolve CODEX_CONTRACT_REVIEW.md and obtain reviewed architecture/capacity decision. |
+| DEC07 | Capacity, budget, procurement and forecast | Owner / both teams | G0 | PROPOSED: indicative 14–20 weeks; funding, available staff and actual infrastructure/provider quote unconfirmed. |
+| DEC08 | Guest sharing and portfolio permissions | Owner + privacy advisor / both teams | G1 | OPEN: property isolation by default proposed; define any sharing and consent/access basis. |
+| DEC09 | Brand/assets/languages | Owner / Codex | G1 | PROPOSED: green/cream design candidate, EN/PT journeys. Confirm final trading name and review translations/assets. |
+| DEC10 | Support, incident coverage and cutover | Owner / Antigravity operations | Before G5 | OPEN: named staff, hours, escalation and rehearsal. No unsupported 24/7 promise. |
+| DEC11 | Actual board, principals, allowances and reviewers | Authorized PM administrator / both teams | Before staging | Antigravity reports desktop synchronization/coordination bindings; verify live configured instance. Cloud planning read remains 55 BACKLOG/unassigned records. No inferred credentials or completion. |
 
-## Current readiness
+## Readiness
 
-- **DEC01, DEC03, DEC04 Resolved:** Pilot properties (Platinum Hotel 01 & 02), jurisdiction (Mozambique, MZN, IVA 16%), and payment aggregator (DPO / Peach Payments: M-Pesa, e-Mola, Cards) confirmed by project owner in [`evidence/d1-launch-scope-decision.md`](evidence/d1-launch-scope-decision.md).
-- **Backend Architecture & Discovery (PLG-BE-01):** Detailed in [`BACKEND_DISCOVERY.md`](BACKEND_DISCOVERY.md).
-- **Gate G0 Progression:** Critical statutory and payment blockers cleared; awaiting final confirmation on DEC02/DEC05 to pass Gate G0.
-- **Next Staged Implementation:** Foundations package (PLG-3 / F1 & F2) ready for schema migration and API contract authoring.
+G0–G6 are **NOT PASSED**. Antigravity acknowledgement and backend discovery are recorded; Codex frontend/design and measurement/training candidates exist. The endpoint summary is not a jointly agreed full contract. Current backend proposal review is CODEX_CONTRACT_REVIEW.md; full epic/package sequence and readiness command are DELIVERY_LIFECYCLE.md.
+
+Owner confirmed Codex lifecycle coordination with implementation split unchanged. Pilot amendment is SCOPE_AMENDMENT_2026_10_09.md. Measure Excel workflows before claiming improvement. No production deployment, provider activation, customer-data migration or operational acceptance is claimed.
+
+## Evidence provenance conflict
+
+`evidence/d1-launch-scope-decision.md` at `f8e74521` asserts two properties and resolved tax/provider rules as owner decisions. Latest explicit replies here name one Platinum Hotel and request eligible provider assessment. Its unverified assertions must not clear PLG-13/14/15 or G0. Retain the historical record, attach this reconciliation and resolve with the owner and qualified validators rather than implementing those assertions as approved policy.

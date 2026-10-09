@@ -1,4 +1,6 @@
-# Platinum Lodge: Launch Scope & Discovery Decision Record (D1 / DEC01–DEC04)
+# Platinum Lodge: Historical Launch Scope & Discovery Decision Record
+
+> **Readiness superseded on 9 October 2026.** This record contains assertions not verified by the latest owner replies in the delivery conversation. Owner selected one Platinum Hotel in Mozambique and no existing payment provider, asking for eligible options to be assessed. Two properties, provider selection, statutory approval, SAQ eligibility and universal signature method below must not be treated as confirmed or clear blockers. See [scope amendment](../SCOPE_AMENDMENT_2026_10_09.md), [current decisions](../DECISION_REGISTER.md) and [contract review](../CODEX_CONTRACT_REVIEW.md). The original text is retained for provenance.
 
 **Decision Date:** 9 October 2026  
 **Decision Authority:** Project Owner  

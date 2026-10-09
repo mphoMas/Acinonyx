@@ -46,3 +46,13 @@ Executed on desktop environment `/home/acinonyx/Desktop/MAS`:
 - **Backend Discovery Artifact:** [BACKEND_DISCOVERY.md](BACKEND_DISCOVERY.md) covers multi-property tenancy, inventory concurrency, accounting/night close, statutory rules, payment provider feasibility, recovery, hosting, staffing, and OpenAPI contract proposal.
 - **Launch Scope & Statutory Decision Record:** [evidence/d1-launch-scope-decision.md](evidence/d1-launch-scope-decision.md) (SHA-256: `1f55a06016a1f3bf6c8b5355bc6e6deb6f0c71f53e724b9ec0cb00ee5638fc91`) formally records Project Owner determinations for DEC01 (Platinum Hotel 01 & Platinum Hotel 02), DEC03 (Mozambique, MZN currency, 16% IVA, Fatura/Recibo, guest ID), and DEC04 (DPO Pay / Peach Payments aggregator supporting M-Pesa, e-Mola, and bank cards).
 - **Task Status:** PLG-BOARD-01 (`MAS-62`) submitted for independent review by `qa_critic`. Not self-certified. PLG-BE-01 (`MAS-63`) remains BACKLOG awaiting blocker completion.
+
+## Lifecycle coordination and scope amendment — 9 October 2026
+
+Owner confirmed Codex coordinates all nine epics with the implementation split unchanged; Antigravity acknowledgement is reconciled in company/DELIVERY_OWNERSHIP.md. Owner selected Platinum Hotel Mozambique as the sole initial live pilot and no existing payment provider. See SCOPE_AMENDMENT_2026_10_09.md; multi-property technical qualification remains required while live second-property acceptance is deferred to expansion.
+
+Read-only lifecycle reporter executed through public MAS-PM APIs: nine epics, 45 packages, 55 BACKLOG records in the cloud planning instance; existing database SHA-256 unchanged, missing database rejected without creation. Portable import preview after acceptance amendments: 55 existing records, zero missing, 92 edges. These describe the cloud database, not the current desktop board.
+
+Frontend candidate `b239cb93` on `feat/platinum-lodge-codex-delivery`: six Node unit tests and 36 Chromium browser checks passed; actual mobile/desktop screenshots published in planning/codex/evidence on that branch. No integrated API, provider, staff measurement, Portuguese qualification, independent QA or production gate pass is claimed.
+
+Readiness correction: the `f8e74521` launch-scope record is retained but annotated as superseded/unverified. Latest owner replies confirm one Platinum Hotel and no existing provider; fiscal/provider claims do not clear G0. See DECISION_REGISTER.md for current state.

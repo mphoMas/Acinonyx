@@ -157,7 +157,7 @@
     {
       "source_key": "PLG-11",
       "title": "[D1] Confirm launch properties, countries and scope",
-      "description": "WBS: D1\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G0\nDependencies (WBS): none\nAcceptance: Owner-reviewed launch list, two real pilot-property candidates, required integrations and exclusions; no implied legal/provider eligibility.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "description": "WBS: D1\nDelivery/integration owner: Codex\nReviewer: Antigravity integration review + independent hotel/UX reviewer\nGate: G0\nDependencies (WBS): none\nAcceptance: Owner-reviewed Platinum Hotel Mozambique pilot scope, room/role inventory, required integrations and exclusions; multi-property technical qualification remains required; no implied legal/provider eligibility.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
       "issue_type": "TASK",
       "priority": "HIGH",
       "parent_source_key": "PLG-2",
@@ -1209,7 +1209,7 @@
     {
       "source_key": "PLG-55",
       "title": "[L5] Complete operational acceptance and support handover",
-      "description": "WBS: L5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G6\nDependencies (WBS): L4\nAcceptance: M15 two-real-property 14-day evidence, daily inventory/finance close, M01–M04/M13 reports, known issues and owner expansion decision.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
+      "description": "WBS: L5\nDelivery/integration owner: Antigravity development team\nReviewer: Codex contract review + separate technical/domain reviewer\nGate: G6\nDependencies (WBS): L4\nAcceptance: M15 14-day evidence at Platinum Hotel Mozambique, daily inventory/finance close, M01–M04/M13 reports, multi-property synthetic qualification, known issues and owner expansion decision; live second-property acceptance deferred.\nContract: versioned hotel API to be agreed in F4; policy/metric definitions in PROJECT_PLAN.md and BENCHMARKS_AND_ACCEPTANCE.md.\nPlanning bounds only; refine exact paths, split packages, estimate capacity, bind authenticated principal and allowances before staging. All tasks initially BACKLOG; no production activation except under explicit release authorization.",
       "issue_type": "TASK",
       "priority": "HIGH",
       "parent_source_key": "PLG-10",
