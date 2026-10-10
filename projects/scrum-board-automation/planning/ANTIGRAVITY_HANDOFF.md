@@ -1,12 +1,12 @@
 # Antigravity handoff: Scrum Board Automation
 
-- MAS-PM project: SBA. Tasks SBA-1 through SBA-8; stable planning references SBA-01 through SBA-08 map in LOCAL_BOARD_REGISTRATION.json.
+- MAS-PM project: SBA. Tasks SBA-1 through SBA-9; stable planning references SBA-01 through SBA-08 map in LOCAL_BOARD_REGISTRATION.json.
 - Outcome: the CEO describes projects and starts Antigravity; plans, agent activity, comments, evidence and guarded progress reach the live board automatically.
-- Backend delivery owner: Antigravity development team (SBA-02, SBA-03, SBA-04, SBA-07).
+- Backend delivery owner: Antigravity development team (SBA-02, SBA-03, SBA-04, SBA-07, SBA-09).
 - Frontend and coordination owner: Codex (SBA-01, SBA-05, SBA-06, SBA-08).
 - Integration coordinator: Codex; technical contract acknowledgement required from Antigravity.
 - Separate reviewer: appointment pending; cannot be the implementation owner.
-- Baseline: integration/platinum-lodge, 52181ba96694ac4992a5f8ac15a8cb3786860c9d before this planning change.
+- Baseline: feat/scrum-board-automation, branched from Acinonyx_frontier at 3748443d3a87b7738ae5271253334866c58771ba; initial planning commit 98034d89.
 - Allowed files: per-task scopes in BACKLOG.json. Shared files require one named implementation owner.
 - Dependencies: agree SBA-01 before backend work; do not bypass the dependency graph or normal FSM.
 - Contract: not yet signed. Define project registry, planning revision API, authenticated identity/session access, agent event ingestion, comments/evidence storage and live activity reads. Preserve tenant isolation and independent completion review.

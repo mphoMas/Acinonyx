@@ -12,3 +12,4 @@ Runtime status is authoritative in MAS-PM. This snapshot defines planned work, n
 | SBA-06 | HIGH | Codex | SBA-02, SBA-03, SBA-04, SBA-05 | Deliver live project, task and activity views |
 | SBA-07 | HIGH | Antigravity | SBA-04 | Qualify recovery, isolation and adversarial events |
 | SBA-08 | HIGH | Codex | SBA-06, SBA-07 | Prove the CEO-to-agent-to-board workflow |
+| SBA-09 | HIGH | Antigravity | SBA-01, SBA-04, SBA-07, SBA-08 | Automate branch synchronization and Antigravity task kickoff |

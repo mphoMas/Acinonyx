@@ -5,6 +5,7 @@ Sponsor and final product authority: CEO, AcinonyxLabs. Architect and Scrum coor
 The board must become an automatically maintained operational view. The CEO supplies project details through conversation and, for now, starts Antigravity manually. Repository discovery, plan publication, task activity, comments, notes, evidence and guarded status updates must then flow into MAS-PM without CEO scripts or manual ticket maintenance.
 
 - [Project plan and release acceptance](planning/PROJECT_PLAN.md)
+- [Antigravity pickup instructions](planning/ANTIGRAVITY_PICKUP.md)
 - [Prioritized backlog](planning/BACKLOG.md)
 - [Machine-readable planning snapshot](planning/BACKLOG.json)
 - [Local board registration evidence](planning/LOCAL_BOARD_REGISTRATION.json)

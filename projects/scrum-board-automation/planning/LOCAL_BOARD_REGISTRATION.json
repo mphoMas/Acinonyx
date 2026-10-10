@@ -10,9 +10,10 @@
     "SBA-05": "SBA-5",
     "SBA-06": "SBA-6",
     "SBA-07": "SBA-7",
-    "SBA-08": "SBA-8"
+    "SBA-08": "SBA-8",
+    "SBA-09": "SBA-9"
   },
-  "records": 8,
-  "dependency_edges": 13,
+  "records": 9,
+  "dependency_edges": 17,
   "scope": "Local cloud board only; remote deployment synchronization not verified"
 }

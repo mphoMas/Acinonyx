@@ -29,6 +29,6 @@ Codex owns frontend, UX and coordination; Antigravity owns backend/engine and in
 
 ## Scope and dependencies
 
-Manual Antigravity startup is retained for this release. Production deployment, new model-provider selection and broad MAS consolidation are separate decisions. Actual Antigravity event/access integration, authenticated board session support and remote deployment identity must be established during discovery; a simulated producer cannot satisfy live integration acceptance. No production date is committed before that discovery.
+Manual Antigravity startup is retained for the first board release. SBA-09 then automates branch synchronization and kickoff after the manual end-to-end workflow is qualified. Production deployment, new model-provider selection and broad MAS consolidation are separate decisions. Actual Antigravity event/access integration, authenticated board session support and remote deployment identity must be established during discovery; a simulated producer cannot satisfy live integration acceptance. No production date is committed before that discovery.
 
 Git planning snapshots record intent. MAS-PM retains runtime state, evidence and review. This project is registered in the cloud workspace's local database; remote board visibility and synchronization remain unverified. Do not describe planning registration as automation delivered.
