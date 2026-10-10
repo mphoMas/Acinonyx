@@ -7,3 +7,9 @@ Backend dependency: Antigravity must provide the agreed cookie session/login/pag
 Until that backend exists, the board retains available read behavior but blocks mutations with an error. This is intentional fail-closed behavior, not completed end-to-end authentication. Candidate requires real backend integration and independent review before SBA-05 is DONE.
 
 Validation: four Playwright browser checks passed with controlled responses: valid session sends CSRF without actor claim; structured 403 error retained; modal error visible and focused; missing session sends no mutation. Screenshot captured and inspected at /workspace/review-evidence/sba05/rejected-action.png. These checks validate frontend handling, not live IAM/CSRF enforcement. No whole-repository or native computer-use test claim is made for this candidate.
+
+## Unblocked follow-up and regression correction
+
+The first helper replacement inadvertently removed board render/load helpers; direct request tests missed this. Restored those helpers and added persistent tests/test_scrum_board_actions.py covering real page load and user form interactions. Seven browser tests pass with controlled responses, including issue creation, transition, visible/focused denial, and missing/expired/unavailable session blocking. Ruff and diff whitespace checks pass. Requests now have a 15-second deadline and content exposes aria-busy. A corrected full-board modal screenshot was captured and inspected. No live backend/security test is claimed.
+
+Prepared SBA_06_FRONTEND_SPEC.md and LIVE_INTEGRATION_CHECKLIST.md for actual backend integration. These specify activity/evidence rendering, freshness, recovery and live acceptance; they do not introduce a simulated live feed or mark dependent tasks DONE.
