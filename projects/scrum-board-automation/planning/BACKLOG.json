@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "project_key": "SBA",
+  "project_name": "Scrum Board Automation",
+  "project_description": "Make the MAS board an automatically maintained view of repository projects, approved plans and authenticated agent execution.",
+  "records": [
+    {
+      "source_key": "SBA-01",
+      "title": "Define the end-to-end board contract",
+      "priority": "CRITICAL",
+      "delivery_owner": "Codex",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [],
+      "path_whitelist": [
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Agree project identity, plan revision, task identity, authenticated agent event and evidence contracts with Antigravity.",
+        "Define permitted transitions and separate reviewer authority; record acknowledgement before implementation."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-02",
+      "title": "Discover and reconcile repository projects",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-01"
+      ],
+      "path_whitelist": [
+        "mas/pm/",
+        "mas/dashboard/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Discover registered projects in the configured repository automatically; arbitrary folders are not silently classified as projects.",
+        "Repeated scans are idempotent; renamed, removed and inaccessible sources are reported without deleting runtime history."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-03",
+      "title": "Publish conversation-derived plans into MAS-PM",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-01",
+        "SBA-02"
+      ],
+      "path_whitelist": [
+        "mas/pm/",
+        "mas/dashboard/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Architect publishes structured project details and approved plan revisions through an authenticated integration, creating tasks and dependencies without CEO scripts.",
+        "Updates preserve active work, evidence and review; ambiguous changes are surfaced instead of silently overwriting."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-04",
+      "title": "Integrate Antigravity agent progress and evidence",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-01",
+        "SBA-03"
+      ],
+      "path_whitelist": [
+        "mas/pm/",
+        "mas/dashboard/",
+        "mas/agents/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Once the CEO starts Antigravity, assignment, start, progress, blocker, comments, notes and evidence events persist automatically against the correct task.",
+        "Authenticated tenant and task ownership enforced; duplicate, replayed and out-of-order events handled; agent claims cannot certify DONE.",
+        "Demonstrate the adapter with actual Antigravity execution, not only a simulated producer."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-05",
+      "title": "Repair authenticated board actions",
+      "priority": "CRITICAL",
+      "delivery_owner": "Codex",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-01"
+      ],
+      "path_whitelist": [
+        "portal/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Remove hard-coded founder_lead caller identity and consume the agreed authenticated identity contract.",
+        "Authorized action succeeds; unauthorized action remains denied; errors visible above drawers and stale governance notice corrected."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-06",
+      "title": "Deliver live project, task and activity views",
+      "priority": "HIGH",
+      "delivery_owner": "Codex",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-02",
+        "SBA-03",
+        "SBA-04",
+        "SBA-05"
+      ],
+      "path_whitelist": [
+        "portal/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Board reflects persisted agent events within five seconds on a healthy connection without manual refresh.",
+        "Show comments, notes, evidence provenance, blockers and independent review state; visibly report stale/disconnected data and reconnect safely."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-07",
+      "title": "Qualify recovery, isolation and adversarial events",
+      "priority": "HIGH",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-04"
+      ],
+      "path_whitelist": [
+        "tests/",
+        "mas/pm/",
+        "mas/dashboard/",
+        "docs/"
+      ],
+      "acceptance": [
+        "Restart and reconnect retain project/task history and resume event processing without duplicate tickets or transitions.",
+        "Reject cross-tenant writes, forged identity, replay, invalid transitions and fabricated completion evidence; attach actual executed results."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    },
+    {
+      "source_key": "SBA-08",
+      "title": "Prove the CEO-to-agent-to-board workflow",
+      "priority": "HIGH",
+      "delivery_owner": "Codex",
+      "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
+      "dependencies": [
+        "SBA-06",
+        "SBA-07"
+      ],
+      "path_whitelist": [
+        "projects/scrum-board-automation/planning/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Use one real approved project: CEO supplies details, architect publishes plan, CEO starts Antigravity once, agents work and board updates automatically.",
+        "Capture native browser evidence of progress, comments, evidence and independently reviewed completion; no CEO SQL, import commands, ticket dragging or manual status maintenance.",
+        "Independent reviewer accepts the exact candidate; CEO approves rollout and rollback procedure."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0
+    }
+  ]
+}

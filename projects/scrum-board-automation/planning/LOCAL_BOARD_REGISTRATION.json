@@ -1,0 +1,18 @@
+{
+  "database": "/workspace/Acinonyx/mas_pm.db",
+  "project": "SBA",
+  "created": [],
+  "key_mapping": {
+    "SBA-01": "SBA-1",
+    "SBA-02": "SBA-2",
+    "SBA-03": "SBA-3",
+    "SBA-04": "SBA-4",
+    "SBA-05": "SBA-5",
+    "SBA-06": "SBA-6",
+    "SBA-07": "SBA-7",
+    "SBA-08": "SBA-8"
+  },
+  "records": 8,
+  "dependency_edges": 13,
+  "scope": "Local cloud board only; remote deployment synchronization not verified"
+}
