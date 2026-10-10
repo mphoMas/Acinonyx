@@ -154,3 +154,7 @@ All new backend components and test suites remain explicitly marked **[PROPOSED]
 - **Execution Budget:** 0 tokens currently allocated in `BACKLOG.json`.
 - **Runtime Task Status:** SBA-01 (local SBA-1) remains in `BACKLOG` pending joint sign-off, independent reviewer appointment, and deployment token budget allocation.
 - **Phase Two Sequence:** Backend implementation will commence only after formal contract gate acceptance and deployment authorization, proceeding in strict sequence: **SBA-02 → SBA-03 → SBA-04 → SBA-07**. Codex owns frontend tasks (SBA-05, SBA-06, SBA-08).
+
+## Codex counterparty acceptance of proposal v2
+
+Reviewed candidate ca9aa60f: design direction APPROVED WITH CONDITIONS in [SBA_01_REVIEW_3.md](SBA_01_REVIEW_3.md). Prior session, transactional-read and local identity design findings are resolved. The review's trust, watcher generation and session constraints apply to implementation. Submitted JSONL supports activity parsing; it does not establish functioning MCP/bridge integration or trusted test execution. Independent design approval and runtime admission remain pending. No further prose-only resubmission is required solely to restate the implementation constraints.
