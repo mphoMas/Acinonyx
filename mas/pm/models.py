@@ -115,6 +115,12 @@ class Issue(BaseModel):
     blocker_reason: Optional[str] = None
     path_whitelist: List[str] = Field(default_factory=list)
     forbidden_paths: List[str] = Field(default_factory=list)
+    task_id: Optional[str] = None
+    planning_reference: Optional[str] = None
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    proposed_delivery_owner: Optional[str] = None
+    reviewer_requirement: Optional[str] = None
+    proposed_budget_tokens: Optional[int] = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -211,4 +217,85 @@ class TaskMapping(BaseModel):
     local_issue_key: str
     created_at: str = ""
     updated_at: str = ""
+
+
+class PlanTaskDefinition(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    task_id: str
+    planning_reference: str
+    title: str
+    description: str = ""
+    type: IssueType = IssueType.TASK
+    priority: PriorityLevel = PriorityLevel.MEDIUM
+    parent_task_id: Optional[str] = None
+    dependencies: List[str] = Field(default_factory=list)
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    proposed_delivery_owner: Optional[str] = None
+    reviewer_requirement: Optional[str] = None
+    path_whitelist: List[str] = Field(default_factory=list)
+    proposed_budget: Optional[Dict[str, Any]] = None
+    proposed_budget_tokens: Optional[int] = None
+
+
+class PlanPublicationRequest(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    schema_version: int = 1
+    plan_id: str
+    revision: int
+    expected_previous_revision: Optional[int] = None
+    source_commit: Optional[str] = None
+    scope_reference: Optional[str] = None
+    tasks: List[PlanTaskDefinition] = Field(default_factory=list)
+
+
+class PlanMapping(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    task_id: str
+    planning_reference: str
+    local_issue_id: str
+    local_issue_key: str
+
+
+class ReconciliationItem(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    task_id: str
+    planning_reference: str
+    issue_key: str
+    current_state: str
+    change_type: str
+    description: str
+
+
+class PlanPublicationResponse(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    success: bool = True
+    project_id: str
+    project_key: str
+    plan_id: str
+    revision: int
+    source_commit: Optional[str] = None
+    scope_reference: Optional[str] = None
+    mappings: List[PlanMapping] = Field(default_factory=list)
+    tasks_created: int = 0
+    tasks_updated: int = 0
+    changes_requiring_reconciliation: List[ReconciliationItem] = Field(default_factory=list)
+    board_cursor: str = ""
+
+
+class PlanRecord(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    project_id: str
+    plan_id: str
+    revision: int
+    source_commit: Optional[str] = None
+    scope_reference: Optional[str] = None
+    published_by: str = ""
+    tasks_count: int = 0
+    created_at: str = ""
 

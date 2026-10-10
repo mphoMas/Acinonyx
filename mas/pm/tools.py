@@ -4,8 +4,9 @@ mas.pm.tools: MCP Tool registrations for the MAS Project Management Engine (MAS-
 
 from __future__ import annotations
 
+import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
 from mas.pm.db import DEFAULT_DB_PATH, PMDatabase
@@ -407,6 +408,43 @@ def pm_record_verdict(
     }
 
 
+def pm_publish_plan(
+    project_key: str,
+    plan_payload: Union[Dict[str, Any], str],
+    idempotency_key: Optional[str] = None,
+    db: Optional[PMDatabase] = None,
+) -> Dict[str, Any]:
+    """
+    Publishes a conversation-derived plan into MAS-PM under current authorization context.
+    Creates tasks in BACKLOG, maps identities, links dependencies, and preserves active work.
+    """
+    from mas.pm.models import PlanPublicationRequest
+    from mas.pm.plans import PlanPublisherService
+    from mas.security import ExecutionContext
+    from mas.tenancy import current_binding
+
+    database = db or get_pm_db()
+    binding = current_binding()
+    tenant_id = binding.identity.tenant_id if binding else "default"
+    actor = ExecutionContext.current_principal() or (f"{tenant_id}:{binding.identity.principal_id}" if binding else "architect")
+
+    if isinstance(plan_payload, str):
+        plan_dict = json.loads(plan_payload)
+    else:
+        plan_dict = plan_payload
+
+    plan_req = PlanPublicationRequest(**plan_dict)
+    service = PlanPublisherService(database)
+    status_code, resp = service.publish_plan(
+        project_id_or_key=project_key,
+        request=plan_req,
+        actor=actor,
+        tenant_id=tenant_id,
+        idempotency_key=idempotency_key,
+    )
+    return resp.model_dump()
+
+
 def register_pm_tools(registry: Any, db: Optional[PMDatabase] = None) -> None:
     """Registers the complete MAS-PM tool suite into the MCP tool registry."""
     # 1. pm_create_project
@@ -581,5 +619,23 @@ def register_pm_tools(registry: Any, db: Optional[PMDatabase] = None) -> None:
         },
         handler=lambda issue_key, verdict, findings=None, commit_sha=None: pm_record_verdict(
             issue_key=issue_key, verdict=verdict, findings=findings, commit_sha=commit_sha, db=db
+        ),
+    )
+
+    # 10. pm_publish_plan
+    registry.register_tool(
+        name="pm_publish_plan",
+        description="Publishes a conversation-derived plan into MAS-PM, atomically allocating keys and preserving active work.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "project_key": {"type": "string", "description": "Project key or ID (e.g. SBA)"},
+                "plan_payload": {"type": "object", "description": "PlanPublicationRequest structured dictionary"},
+                "idempotency_key": {"type": "string", "description": "Optional idempotency key", "default": None},
+            },
+            "required": ["project_key", "plan_payload"],
+        },
+        handler=lambda project_key, plan_payload, idempotency_key=None: pm_publish_plan(
+            project_key=project_key, plan_payload=plan_payload, idempotency_key=idempotency_key, db=db
         ),
     )

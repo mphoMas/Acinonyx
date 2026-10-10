@@ -192,7 +192,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self._apply_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token, Idempotency-Key")
         self.end_headers()
 
     def do_GET(self):
@@ -415,6 +415,54 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(disc.get_projects_with_freshness())
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+
+        elif path.startswith("/api/pm/v1/projects/") and path.endswith("/board"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) == 6 and parts[3] == "projects" and parts[5] == "board":
+                proj_ref = parts[4]
+                from mas.pm.tools import get_pm_db, pm_get_board_state
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+                proj = db.get_project(proj_ref) or db.get_project_by_key(proj_ref)
+                if not proj:
+                    self._send_json({"error": {"code": "not_found", "message": f"Project '{proj_ref}' not found"}}, status=404)
+                    return
+                try:
+                    board = pm_get_board_state(proj.key, db=db)
+                    self._send_json(board)
+                except Exception as e:
+                    self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
+                return
+
+        elif path.startswith("/api/pm/v1/projects/") and path.endswith("/plans"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) == 6 and parts[3] == "projects" and parts[5] == "plans":
+                proj_ref = parts[4]
+                from mas.pm.tools import get_pm_db
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+                proj = db.get_project(proj_ref) or db.get_project_by_key(proj_ref)
+                if not proj:
+                    self._send_json({"error": {"code": "not_found", "message": f"Project '{proj_ref}' not found"}}, status=404)
+                    return
+                cur = db._get_connection()
+                try:
+                    rows = cur.execute("SELECT * FROM pm_plans WHERE project_id = ? ORDER BY revision ASC", (proj.id,)).fetchall()
+                    plans = [
+                        {
+                            "project_id": r["project_id"],
+                            "plan_id": r["plan_id"],
+                            "revision": r["revision"],
+                            "source_commit": r["source_commit"],
+                            "scope_reference": r["scope_reference"],
+                            "published_by": r["published_by"],
+                            "tasks_count": r["tasks_count"],
+                            "created_at": str(r["created_at"]),
+                        }
+                        for r in rows
+                    ]
+                    self._send_json({"project_id": proj.id, "project_key": proj.key, "plans": plans})
+                finally:
+                    cur.close()
+                return
 
         elif path.startswith("/api/pm/projects"):
             from mas.pm.tools import get_pm_db
@@ -887,6 +935,86 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             db.assign_issue_to_sprint(issue.id, sprint_id)
             self._send_json({"success": True, "issue_key": issue.key, "sprint_id": sprint_id})
 
+        elif path.startswith("/api/pm/v1/projects/") and path.endswith("/plans"):
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
+            parts = [p for p in path.split("/") if p]
+            if len(parts) != 6 or parts[3] != "projects" or parts[5] != "plans":
+                self._send_json({"error": {"code": "not_found", "message": "Invalid endpoint path"}}, status=404)
+                return
+            project_id_or_key = parts[4]
+
+            idempotency_key = self.headers.get("Idempotency-Key")
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 1_048_576:
+                self._send_json({"error": {"code": "payload_too_large", "message": "Plan payload exceeds 1 MiB limit", "retryable": False}}, status=413)
+                return
+
+            body = self.rfile.read(content_length)
+            if not body:
+                self._send_json({"error": {"code": "malformed", "message": "Empty request body", "retryable": False}}, status=400)
+                return
+
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except Exception as e:
+                self._send_json({"error": {"code": "malformed", "message": f"Malformed JSON: {e}", "retryable": False}}, status=400)
+                return
+
+            if not isinstance(payload, dict):
+                self._send_json({"error": {"code": "malformed", "message": "Expected JSON object for plan publication", "retryable": False}}, status=400)
+                return
+
+            from mas.pm.models import PlanPublicationRequest
+            from mas.pm.plans import (
+                PlanPublisherService,
+                PlanValidationError,
+                IdempotencyConflictError,
+                StaleRevisionError,
+                RevisionMismatchError,
+                ProjectNotFoundError,
+            )
+            from mas.pm.tools import get_pm_db
+
+            try:
+                plan_req = PlanPublicationRequest(**payload)
+            except Exception as e:
+                self._send_json({"error": {"code": "malformed", "message": str(e), "retryable": False}}, status=400)
+                return
+
+            db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+            publisher = PlanPublisherService(db)
+            mode, principal, auth_tenant_id, actions, session_data = self._resolve_session_or_auth()
+            tenant_id = auth_tenant_id or getattr(self, "tenant_id", None) or "default"
+
+            try:
+                status_code, resp = publisher.publish_plan(
+                    project_id_or_key=project_id_or_key,
+                    request=plan_req,
+                    actor=actor,
+                    tenant_id=tenant_id,
+                    idempotency_key=idempotency_key,
+                )
+                self._send_json(resp.model_dump(), status=status_code)
+            except IdempotencyConflictError as e:
+                self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False}}, status=409)
+            except (StaleRevisionError, RevisionMismatchError) as e:
+                self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False}}, status=409)
+            except PlanValidationError as e:
+                self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False, "details": e.details}}, status=400)
+            except ProjectNotFoundError as e:
+                self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False}}, status=404)
+            except PermissionError as e:
+                self._send_json({"error": {"code": "unauthorized", "message": str(e), "retryable": False}}, status=403)
+            except Exception as e:
+                self._send_json({"error": {"code": "internal_error", "message": str(e), "retryable": False}}, status=500)
+
+        else:
+            self._send_json({"error": {"code": "not_found", "message": f"Endpoint not found: {path}"}}, status=404)
+
 
 
 class TenantDashboardRequestHandler(DashboardRequestHandler):
@@ -1111,6 +1239,9 @@ class DashboardServer:
     def shutdown(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+
+    def stop(self) -> None:
+        self.shutdown()
 
 
 def run_dashboard(

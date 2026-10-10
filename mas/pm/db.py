@@ -12,7 +12,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from mas.pm.models import (
     CriticVerdict,
@@ -28,6 +28,7 @@ from mas.pm.models import (
     Sprint,
     SprintState,
     TaskMapping,
+    PlanRecord,
 )
 
 DEFAULT_DB_PATH = Path(os.environ.get("MAS_PM_DB_PATH", "mas_pm.db"))
@@ -273,10 +274,76 @@ class PMDatabase:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_sessions_principal ON pm_sessions(principal);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_sessions_revoked ON pm_sessions(is_revoked);")
 
+                # SBA-03: Plan publication and optimistic concurrency
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_plans (
+                    project_id TEXT NOT NULL REFERENCES pm_projects(id) ON DELETE CASCADE,
+                    plan_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    source_commit TEXT,
+                    scope_reference TEXT,
+                    published_by TEXT NOT NULL,
+                    tasks_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT pk_pm_plans PRIMARY KEY (project_id, plan_id, revision)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_plans_project_rev ON pm_plans(project_id, revision);")
+
+                # SBA-03: Idempotency keys scoped to (tenant_id, action, idempotency_key)
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_idempotency_keys (
+                    tenant_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    response_code INTEGER NOT NULL,
+                    response_body TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (tenant_id, action, idempotency_key)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_idempotency_tenant_action ON pm_idempotency_keys(tenant_id, action);")
 
                 # Migrations for existing tables
                 try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN priority TEXT DEFAULT 'MEDIUM';")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN sprint_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN rework_cycle INTEGER DEFAULT 0;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN blocker_reason TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN task_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN planning_reference TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN acceptance_criteria JSON;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN proposed_delivery_owner TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN reviewer_requirement TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN proposed_budget_tokens INTEGER DEFAULT 50000;")
                 except sqlite3.OperationalError:
                     pass
                 try:
@@ -329,6 +396,8 @@ class PMDatabase:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_evidence_issue ON pm_evidence_links(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_project_sources_remote_id ON pm_project_sources(remote_project_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_verdicts_issue ON pm_critic_verdicts(issue_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_task_id ON pm_issues(project_id, task_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_planning_ref ON pm_issues(project_id, planning_reference);")
 
                 # GOV-03: Immutable evidence triggers
                 conn.execute("""
@@ -627,43 +696,53 @@ class PMDatabase:
             if manage_conn:
                 c.close()
 
-    # --- Task Mapping Operations (SBA-01 / SBA-02) ---
+    # --- Task Mapping Operations (SBA-01 / SBA-02 / SBA-03) ---
 
-    def upsert_task_mapping(self, mapping: TaskMapping) -> TaskMapping:
-        conn = self._get_connection()
-        try:
-            now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    """
-                    INSERT INTO pm_task_mappings (
-                        project_id, planning_reference, task_id, local_issue_id, local_issue_key, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(project_id, planning_reference) DO UPDATE SET
-                        task_id = excluded.task_id,
-                        local_issue_id = excluded.local_issue_id,
-                        local_issue_key = excluded.local_issue_key,
-                        updated_at = excluded.updated_at
-                    """,
-                    (
-                        mapping.project_id,
-                        mapping.planning_reference,
-                        mapping.task_id,
-                        mapping.local_issue_id,
-                        mapping.local_issue_key,
-                        mapping.created_at or now,
-                        now,
-                    ),
-                )
+    def upsert_task_mapping(
+        self,
+        mapping: TaskMapping,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> TaskMapping:
+        now = datetime.now(timezone.utc).isoformat()
+        def _execute(c: sqlite3.Connection) -> None:
+            c.execute(
+                """
+                INSERT INTO pm_task_mappings (
+                    project_id, planning_reference, task_id, local_issue_id, local_issue_key, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, planning_reference) DO UPDATE SET
+                    task_id = excluded.task_id,
+                    local_issue_id = excluded.local_issue_id,
+                    local_issue_key = excluded.local_issue_key,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    mapping.project_id,
+                    mapping.planning_reference,
+                    mapping.task_id,
+                    mapping.local_issue_id,
+                    mapping.local_issue_key,
+                    mapping.created_at or now,
+                    now,
+                ),
+            )
             mapping.updated_at = now
-            return mapping
-        finally:
-            conn.close()
 
-    def get_task_mapping(self, project_id: str, planning_reference: str) -> Optional[TaskMapping]:
-        conn = self._get_connection()
-        try:
-            cur = conn.execute(
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
+        return mapping
+
+    def get_task_mapping(
+        self,
+        project_id: str,
+        planning_reference: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> Optional[TaskMapping]:
+        def _execute(c: sqlite3.Connection) -> Optional[TaskMapping]:
+            cur = c.execute(
                 "SELECT * FROM pm_task_mappings WHERE project_id = ? AND planning_reference = ?",
                 (project_id, planning_reference),
             )
@@ -679,13 +758,23 @@ class PMDatabase:
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
             )
-        finally:
-            conn.close()
 
-    def get_task_mapping_by_task_id(self, project_id: str, task_id: str) -> Optional[TaskMapping]:
-        conn = self._get_connection()
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
         try:
-            cur = conn.execute(
+            return _execute(c)
+        finally:
+            c.close()
+
+    def get_task_mapping_by_task_id(
+        self,
+        project_id: str,
+        task_id: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> Optional[TaskMapping]:
+        def _execute(c: sqlite3.Connection) -> Optional[TaskMapping]:
+            cur = c.execute(
                 "SELECT * FROM pm_task_mappings WHERE project_id = ? AND task_id = ?",
                 (project_id, task_id),
             )
@@ -701,13 +790,22 @@ class PMDatabase:
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
             )
-        finally:
-            conn.close()
 
-    def list_task_mappings(self, project_id: str) -> List[TaskMapping]:
-        conn = self._get_connection()
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
         try:
-            cur = conn.execute(
+            return _execute(c)
+        finally:
+            c.close()
+
+    def list_task_mappings(
+        self,
+        project_id: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> List[TaskMapping]:
+        def _execute(c: sqlite3.Connection) -> List[TaskMapping]:
+            cur = c.execute(
                 "SELECT * FROM pm_task_mappings WHERE project_id = ? ORDER BY planning_reference ASC",
                 (project_id,),
             )
@@ -724,60 +822,73 @@ class PMDatabase:
                 )
                 for row in rows
             ]
-        finally:
-            conn.close()
 
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
+        try:
+            return _execute(c)
+        finally:
+            c.close()
 
     # --- Issue Operations ---
 
-    def create_issue(self, issue: Issue) -> Issue:
-        conn = self._get_connection()
-        try:
-            now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    """
-                    INSERT INTO pm_issues (
-                        id, project_id, key, title, description, issue_type, current_state,
-                        priority, sprint_id, parent_id, assignee_principal, appetite_tokens, appetite_timeout_s,
-                        tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        issue.id,
-                        issue.project_id,
-                        issue.key,
-                        issue.title,
-                        issue.description,
-                        issue.issue_type.value if hasattr(issue.issue_type, "value") else str(issue.issue_type),
-                        issue.current_state.value if hasattr(issue.current_state, "value") else str(issue.current_state),
-                        issue.priority.value if hasattr(issue.priority, "value") else str(issue.priority),
-                        issue.sprint_id,
-                        issue.parent_id,
-                        issue.assignee_principal,
-                        issue.appetite_tokens,
-                        issue.appetite_timeout_s,
-                        issue.tokens_spent,
-                        issue.reflexion_attempts,
-                        issue.rework_cycle,
-                        issue.blocker_reason,
-                        json.dumps(issue.path_whitelist),
-                        json.dumps(issue.forbidden_paths),
-                        now,
-                        now,
-                    ),
-                )
-            issue.created_at = now
+    def create_issue(self, issue: Issue, conn: Optional[sqlite3.Connection] = None) -> Issue:
+        now = datetime.now(timezone.utc).isoformat()
+        def _execute(c: sqlite3.Connection) -> None:
+            c.execute(
+                """
+                INSERT INTO pm_issues (
+                    id, project_id, key, title, description, issue_type, current_state,
+                    priority, sprint_id, parent_id, assignee_principal, appetite_tokens, appetite_timeout_s,
+                    tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
+                    task_id, planning_reference, acceptance_criteria, proposed_delivery_owner, reviewer_requirement,
+                    proposed_budget_tokens, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    issue.id,
+                    issue.project_id,
+                    issue.key,
+                    issue.title,
+                    issue.description,
+                    issue.issue_type.value if hasattr(issue.issue_type, "value") else str(issue.issue_type),
+                    issue.current_state.value if hasattr(issue.current_state, "value") else str(issue.current_state),
+                    issue.priority.value if hasattr(issue.priority, "value") else str(issue.priority),
+                    issue.sprint_id,
+                    issue.parent_id,
+                    issue.assignee_principal,
+                    issue.appetite_tokens,
+                    issue.appetite_timeout_s,
+                    issue.tokens_spent,
+                    issue.reflexion_attempts,
+                    issue.rework_cycle,
+                    issue.blocker_reason,
+                    json.dumps(issue.path_whitelist),
+                    json.dumps(issue.forbidden_paths),
+                    issue.task_id,
+                    issue.planning_reference,
+                    json.dumps(issue.acceptance_criteria),
+                    issue.proposed_delivery_owner,
+                    issue.reviewer_requirement,
+                    issue.proposed_budget_tokens or issue.appetite_tokens,
+                    issue.created_at or now,
+                    now,
+                ),
+            )
+            issue.created_at = issue.created_at or now
             issue.updated_at = now
-            return issue
-        finally:
-            conn.close()
 
-    def get_issue(self, issue_id_or_key: str) -> Optional[Issue]:
-        conn = self._get_connection()
-        try:
-            cur = conn.execute(
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
+        return issue
+
+    def get_issue(self, issue_id_or_key: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Issue]:
+        def _execute(c: sqlite3.Connection) -> Optional[Issue]:
+            cur = c.execute(
                 "SELECT * FROM pm_issues WHERE id = ? OR key = ?",
                 (issue_id_or_key, issue_id_or_key.upper()),
             )
@@ -785,8 +896,62 @@ class PMDatabase:
             if not row:
                 return None
             return self._row_to_issue(row)
+
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
+        try:
+            return _execute(c)
         finally:
-            conn.close()
+            c.close()
+
+    def update_issue_from_plan(
+        self,
+        issue_id: str,
+        title: str,
+        description: str,
+        issue_type: IssueType,
+        priority: PriorityLevel,
+        parent_id: Optional[str],
+        path_whitelist: List[str],
+        acceptance_criteria: List[str],
+        proposed_delivery_owner: Optional[str],
+        reviewer_requirement: Optional[str],
+        proposed_budget_tokens: Optional[int],
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
+        """Updates plan-defined fields of an issue, preserving runtime state, tokens, and active assignment."""
+        def _execute(c: sqlite3.Connection) -> None:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                """
+                UPDATE pm_issues
+                SET title = ?, description = ?, issue_type = ?, priority = ?, parent_id = ?,
+                    path_whitelist = ?, acceptance_criteria = ?, proposed_delivery_owner = ?,
+                    reviewer_requirement = ?, proposed_budget_tokens = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    title,
+                    description,
+                    issue_type.value if hasattr(issue_type, "value") else str(issue_type),
+                    priority.value if hasattr(priority, "value") else str(priority),
+                    parent_id,
+                    json.dumps(path_whitelist),
+                    json.dumps(acceptance_criteria),
+                    proposed_delivery_owner,
+                    reviewer_requirement,
+                    proposed_budget_tokens,
+                    now,
+                    issue_id,
+                ),
+            )
+
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
 
     def list_issues(self, project_id: Optional[str] = None, state: Optional[str] = None) -> List[Issue]:
         conn = self._get_connection()
@@ -906,13 +1071,13 @@ class PMDatabase:
             with self.atomic_transaction() as c:
                 _execute_update(c)
 
-    def next_issue_key(self, project_key: str) -> str:
+    def next_issue_key(self, project_key: str, conn: Optional[sqlite3.Connection] = None) -> str:
         """
         PM-DATA-001: Computes the next incremental sequence issue key using atomic transaction.
         """
         pkey = project_key.upper()
-        with self.atomic_transaction() as conn:
-            cur_max = conn.execute(
+        def _allocate(c: sqlite3.Connection) -> str:
+            cur_max = c.execute(
                 """
                 SELECT COALESCE(MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)), 0) AS max_seq
                 FROM pm_issues
@@ -923,7 +1088,7 @@ class PMDatabase:
             row_max = cur_max.fetchone()
             max_existing = int(row_max["max_seq"]) if row_max else 0
 
-            conn.execute(
+            c.execute(
                 """
                 INSERT INTO pm_project_sequences (project_key, last_sequence)
                 VALUES (?, ?)
@@ -932,7 +1097,7 @@ class PMDatabase:
                 """,
                 (pkey, max_existing),
             )
-            cur = conn.execute(
+            cur = c.execute(
                 """
                 UPDATE pm_project_sequences
                 SET last_sequence = last_sequence + 1
@@ -944,6 +1109,148 @@ class PMDatabase:
             row = cur.fetchone()
             seq = int(row["last_sequence"]) if row else (max_existing + 1)
             return f"{pkey}-{seq}"
+
+        if conn is not None:
+            return _allocate(conn)
+        with self.atomic_transaction() as c:
+            return _allocate(c)
+
+    # --- Plan Record & Idempotency Operations (SBA-03) ---
+
+    def create_plan_record(self, record: PlanRecord, conn: Optional[sqlite3.Connection] = None) -> PlanRecord:
+        def _execute(c: sqlite3.Connection) -> None:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                """
+                INSERT INTO pm_plans (
+                    project_id, plan_id, revision, source_commit, scope_reference,
+                    published_by, tasks_count, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.project_id,
+                    record.plan_id,
+                    record.revision,
+                    record.source_commit,
+                    record.scope_reference,
+                    record.published_by,
+                    record.tasks_count,
+                    record.created_at or now,
+                ),
+            )
+            record.created_at = record.created_at or now
+
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
+        return record
+
+    def get_latest_plan_revision(
+        self,
+        project_id: str,
+        plan_id: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> Optional[PlanRecord]:
+        def _execute(c: sqlite3.Connection) -> Optional[PlanRecord]:
+            cur = c.execute(
+                """
+                SELECT * FROM pm_plans
+                WHERE project_id = ? AND plan_id = ?
+                ORDER BY revision DESC
+                LIMIT 1
+                """,
+                (project_id, plan_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return PlanRecord(
+                project_id=row["project_id"],
+                plan_id=row["plan_id"],
+                revision=int(row["revision"]),
+                source_commit=row["source_commit"],
+                scope_reference=row["scope_reference"],
+                published_by=row["published_by"],
+                tasks_count=int(row["tasks_count"]),
+                created_at=str(row["created_at"]),
+            )
+
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
+        try:
+            return _execute(c)
+        finally:
+            c.close()
+
+    def get_idempotency_record(
+        self,
+        tenant_id: str,
+        action: str,
+        idempotency_key: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> Optional[Dict[str, Any]]:
+        def _execute(c: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            cur = c.execute(
+                """
+                SELECT * FROM pm_idempotency_keys
+                WHERE tenant_id = ? AND action = ? AND idempotency_key = ?
+                """,
+                (tenant_id, action, idempotency_key),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "tenant_id": row["tenant_id"],
+                "action": row["action"],
+                "idempotency_key": row["idempotency_key"],
+                "request_hash": row["request_hash"],
+                "response_code": int(row["response_code"]),
+                "response_body": row["response_body"],
+                "created_at": str(row["created_at"]),
+            }
+
+        if conn is not None:
+            return _execute(conn)
+        c = self._get_connection()
+        try:
+            return _execute(c)
+        finally:
+            c.close()
+
+    def save_idempotency_record(
+        self,
+        tenant_id: str,
+        action: str,
+        idempotency_key: str,
+        request_hash: str,
+        response_code: int,
+        response_body: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
+        def _execute(c: sqlite3.Connection) -> None:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                """
+                INSERT INTO pm_idempotency_keys (
+                    tenant_id, action, idempotency_key, request_hash, response_code, response_body, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(tenant_id, action, idempotency_key) DO UPDATE SET
+                    request_hash = excluded.request_hash,
+                    response_code = excluded.response_code,
+                    response_body = excluded.response_body
+                """,
+                (tenant_id, action, idempotency_key, request_hash, response_code, response_body, now),
+            )
+
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
 
     # --- Dependency Operations (PM-07) ---
 
@@ -1335,6 +1642,11 @@ class PMDatabase:
     def _row_to_issue(self, row: sqlite3.Row) -> Issue:
         path_whitelist = json.loads(row["path_whitelist"]) if row["path_whitelist"] else []
         forbidden_paths = json.loads(row["forbidden_paths"]) if row["forbidden_paths"] else []
+        acceptance_criteria = (
+            json.loads(row["acceptance_criteria"])
+            if ("acceptance_criteria" in row.keys() and row["acceptance_criteria"])
+            else []
+        )
         return Issue(
             id=row["id"],
             project_id=row["project_id"],
@@ -1355,6 +1667,12 @@ class PMDatabase:
             blocker_reason=row["blocker_reason"] if "blocker_reason" in row.keys() else None,
             path_whitelist=path_whitelist,
             forbidden_paths=forbidden_paths,
+            task_id=row["task_id"] if "task_id" in row.keys() else None,
+            planning_reference=row["planning_reference"] if "planning_reference" in row.keys() else None,
+            acceptance_criteria=acceptance_criteria,
+            proposed_delivery_owner=row["proposed_delivery_owner"] if "proposed_delivery_owner" in row.keys() else None,
+            reviewer_requirement=row["reviewer_requirement"] if "reviewer_requirement" in row.keys() else None,
+            proposed_budget_tokens=row["proposed_budget_tokens"] if "proposed_budget_tokens" in row.keys() else None,
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )
