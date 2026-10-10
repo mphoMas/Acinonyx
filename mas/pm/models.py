@@ -196,6 +196,7 @@ class ProjectSource(BaseModel):
     last_successful_sync: Optional[str] = None
     last_error: Optional[str] = None
     is_stale: bool = False
+    remote_project_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
 

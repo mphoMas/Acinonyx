@@ -520,3 +520,265 @@ def test_two_tenant_servers_zero_cross_tenant_discovery(tmp_path: Path):
     assert any(p.key == "TENANT_A_PROJ" for p in projects_a)
     assert not any(p.key == "TENANT_A_PROJ" for p in projects_b)
     assert len(projects_b) == 0
+
+
+# 16. Injected source-insert failure after project creation asserts total rollback
+def test_atomic_reconciliation_rollback_on_injected_source_error(test_repo: Path, test_db: PMDatabase):
+    discovery = ProjectRegistryDiscovery(repo_root=test_repo, db=test_db)
+    manifest = discovery.load_and_validate_registry()
+
+    original_upsert = test_db.upsert_project_source
+
+    def failing_upsert(source, conn=None):
+        if source.project_id == manifest["projects"][0]["project_id"]:
+            raise RuntimeError("Injected database failure during source upsert")
+        return original_upsert(source, conn=conn)
+
+    test_db.upsert_project_source = failing_upsert
+
+    with pytest.raises(RuntimeError, match="Injected database failure"):
+        discovery.reconcile_projects(manifest)
+
+    # Assert ZERO projects or sources survived the transaction failure
+    assert len(test_db.list_projects()) == 0
+    assert len(test_db.list_project_sources()) == 0
+
+
+# 17. Injected failure after project update asserts rollback of project update
+def test_atomic_reconciliation_rollback_on_injected_update_error(test_repo: Path, test_db: PMDatabase):
+    discovery = ProjectRegistryDiscovery(repo_root=test_repo, db=test_db)
+    manifest = discovery.load_and_validate_registry()
+
+    # Initial sync creates records cleanly
+    res = discovery.reconcile_projects(manifest)
+    assert len(res["created"]) == 2
+
+    # Prepare update manifest with modified name
+    updated_manifest = copy.deepcopy(manifest)
+    updated_manifest["projects"][0]["name"] = "Modified Name Should Not Persist"
+
+    def failing_upsert(source, conn=None):
+        raise RuntimeError("Injected failure during second update")
+
+    test_db.upsert_project_source = failing_upsert
+
+    with pytest.raises(RuntimeError, match="Injected failure during second update"):
+        discovery.reconcile_projects(updated_manifest)
+
+    # Assert original name remains intact (no partial update committed)
+    proj = test_db.get_project_by_key("SBA")
+    assert proj.name == "Scrum Board Automation"
+
+
+# 18. Concurrent reconciliation does not corrupt database or produce duplicate IDs
+def test_concurrent_reconciliation(test_repo: Path, test_db: PMDatabase):
+    import threading
+
+    discovery = ProjectRegistryDiscovery(repo_root=test_repo, db=test_db)
+    manifest = discovery.load_and_validate_registry()
+
+    errors = []
+
+    def worker():
+        try:
+            discovery.reconcile_projects(manifest)
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    projects = test_db.list_projects()
+    assert len(projects) == 2
+    sources = test_db.list_project_sources()
+    assert len(sources) == 2
+
+
+# 19. Remote deletion while old local directory remains
+def test_remote_project_deletion_while_local_directory_remains(tmp_path: Path, test_db: PMDatabase):
+    # Setup bare repo and staging repo
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+
+    staging = tmp_path / "staging"
+    subprocess.run(["git", "clone", str(bare), str(staging)], check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=str(staging), check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(staging), check=True)
+
+    branch = "feat/scrum-board-automation"
+    subprocess.run(["git", "checkout", "-b", branch], cwd=str(staging), check=True, capture_output=True)
+
+    # Commit 1: Two projects SBA and PLG
+    (staging / "projects" / "scrum-board-automation" / "planning").mkdir(parents=True)
+    (staging / "projects" / "scrum-board-automation" / "planning" / "plan.md").write_text("# Plan")
+    (staging / "projects" / "platinum-lodge" / "planning").mkdir(parents=True)
+    (staging / "projects" / "platinum-lodge" / "planning" / "plan.md").write_text("# Plan")
+
+    reg = {
+        "schema_version": 1,
+        "repository": {
+            "id": "test/repo",
+            "owner": "test",
+            "name": "repo",
+            "configured_branch": branch,
+        },
+        "projects": [
+            {
+                "project_id": "c2e7bb0e-6f81-5c31-9a7c-501b802711ff",
+                "project_key": "SBA",
+                "name": "Scrum Board Automation",
+                "root_path": "projects/scrum-board-automation",
+                "planning_path": "projects/scrum-board-automation/planning",
+                "status": "active",
+            },
+            {
+                "project_id": "2a2e70fc-0d6e-4d52-84ee-6818f2c61a7c",
+                "project_key": "PLG",
+                "name": "Platinum Lodge",
+                "root_path": "projects/platinum-lodge",
+                "planning_path": "projects/platinum-lodge/planning",
+                "status": "active",
+            },
+        ],
+    }
+    (staging / "projects" / "registry.json").write_text(json.dumps(reg))
+    subprocess.run(["git", "add", "."], cwd=str(staging), check=True)
+    subprocess.run(["git", "commit", "-m", "Commit 1"], cwd=str(staging), check=True)
+    subprocess.run(["git", "push", "origin", branch], cwd=str(staging), check=True)
+
+    # Clone to local repo
+    local = tmp_path / "local"
+    subprocess.run(["git", "clone", str(bare), str(local)], check=True, capture_output=True)
+    subprocess.run(["git", "checkout", branch], cwd=str(local), check=True, capture_output=True)
+
+    # In staging, delete PLG directory from git and commit
+    subprocess.run(["git", "rm", "-r", "projects/platinum-lodge"], cwd=str(staging), check=True)
+    reg["projects"][1]["status"] = "active"  # registry still claims active
+    (staging / "projects" / "registry.json").write_text(json.dumps(reg))
+    subprocess.run(["git", "add", "projects/registry.json"], cwd=str(staging), check=True)
+    subprocess.run(["git", "commit", "-m", "Delete PLG in git"], cwd=str(staging), check=True)
+    subprocess.run(["git", "push", "origin", branch], cwd=str(staging), check=True)
+
+    rev_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(staging), capture_output=True, text=True, check=True)
+    remote_rev = rev_res.stdout.strip()
+
+    # Note: local directory STILL has local projects/platinum-lodge on disk!
+    assert (local / "projects" / "platinum-lodge").exists()
+
+    discovery = ProjectRegistryDiscovery(repo_root=local, db=test_db)
+    # Fetch remote ref into local repo
+    subprocess.run(["git", "fetch", "origin", branch], cwd=str(local), check=True)
+
+    # Validate registry against remote_rev
+    manifest = discovery.load_and_validate_registry(revision=remote_rev)
+
+    # Even though local directory exists on disk, revision inspection marks PLG as not exists_on_disk!
+    plg_def = next(p for p in manifest["projects"] if p["project_key"] == "PLG")
+    assert plg_def["exists_on_disk"] is False
+
+
+# 20. Symlink and file paths presented as directories are strictly rejected
+def test_symlink_and_file_directory_rejection(test_repo: Path, test_db: PMDatabase):
+    discovery = ProjectRegistryDiscovery(repo_root=test_repo, db=test_db)
+
+    # Test file presented as directory
+    (test_repo / "projects" / "file_not_dir").write_text("just a file")
+    manifest = {
+        "schema_version": 1,
+        "repository": {
+            "id": "test/repo",
+            "owner": "test",
+            "name": "repo",
+            "configured_branch": "main",
+        },
+        "projects": [
+            {
+                "project_id": str(uuid.uuid4()),
+                "project_key": "BAD",
+                "name": "Bad Project",
+                "root_path": "projects/file_not_dir",
+                "planning_path": "projects/file_not_dir",
+                "status": "active",
+            }
+        ],
+    }
+    with pytest.raises(RegistryValidationError, match="file, not a directory"):
+        discovery.reconcile_projects(manifest)
+
+    # Test symlink presented as directory
+    (test_repo / "projects" / "symlink_dir").symlink_to(test_repo / "projects" / "scrum-board-automation")
+    manifest["projects"][0]["root_path"] = "projects/symlink_dir"
+    manifest["projects"][0]["planning_path"] = "projects/symlink_dir/planning"
+    with pytest.raises(RegistryValidationError, match="symlink, not a directory"):
+        discovery.reconcile_projects(manifest)
+
+
+# 21. Two tenants sharing storage root use isolated databases without leakage
+def test_two_tenants_sharing_storage_root_use_isolated_databases(tmp_path: Path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    from mas.tenancy import resolve_tenant_database_path, tenant_scope
+    from mas.pm.tools import get_pm_db
+
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_alpha", "Tenant Alpha")
+    iam.create_tenant("tenant_beta", "Tenant Beta")
+
+    iam.register_principal("tenant_alpha", "alice", roles={StandardRole.TENANT_ADMIN.value})
+    iam.register_principal("tenant_beta", "bob", roles={StandardRole.TENANT_ADMIN.value})
+
+    token_a = iam.issue_token("tenant_alpha", "alice")
+    token_b = iam.issue_token("tenant_beta", "bob")
+
+    shared_root = tmp_path / "shared_tenant_storage"
+    shared_root.mkdir()
+
+    path_a = resolve_tenant_database_path(iam, "tenant_alpha", shared_root)
+    path_b = resolve_tenant_database_path(iam, "tenant_beta", shared_root)
+
+    assert path_a != path_b
+    assert "tenant_alpha" in str(path_a)
+    assert "tenant_beta" in str(path_b)
+
+    with tenant_scope(iam, token_a, "tenant_alpha", shared_root):
+        db_a = get_pm_db()
+        db_a.create_project(Project(id="alpha-p1", key="ALP", name="Alpha Project"))
+        assert len(db_a.list_projects()) == 1
+
+    with tenant_scope(iam, token_b, "tenant_beta", shared_root):
+        db_b = get_pm_db()
+        assert len(db_b.list_projects()) == 0
+        db_b.create_project(Project(id="beta-p1", key="BET", name="Beta Project"))
+        assert len(db_b.list_projects()) == 1
+
+    with tenant_scope(iam, token_a, "tenant_alpha", shared_root):
+        db_a = get_pm_db()
+        projects = db_a.list_projects()
+        assert len(projects) == 1
+        assert projects[0].key == "ALP"
+
+
+# 22. Discovered projects appear in both project API and actual board
+def test_discovered_projects_appear_in_project_api_and_actual_board(test_repo: Path, test_db: PMDatabase):
+    from mas.pm.tools import pm_get_board_state
+
+    discovery = ProjectRegistryDiscovery(repo_root=test_repo, db=test_db)
+    sync_res = discovery.sync(fetch_remote=False)
+    assert sync_res["status"] == "healthy"
+    assert "SBA" in sync_res["created"]
+
+    # Freshness API response
+    fresh_resp = discovery.get_projects_with_freshness()
+    assert len(fresh_resp["projects"]) == 2
+    sba_item = next(p for p in fresh_resp["projects"] if p["key"] == "SBA")
+    assert sba_item["status"] == "active"
+    assert sba_item["source_freshness"]["status"] == "active"
+
+    # Actual board state via pm_get_board_state
+    board = pm_get_board_state("SBA", db=test_db)
+    assert board["project_key"] == "SBA"
+    assert "BACKLOG" in board["issues_by_column"]
+

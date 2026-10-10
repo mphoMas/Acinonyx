@@ -93,6 +93,12 @@ class SessionManager:
         if iam_token and not iam_token_hash:
             iam_token_hash = hashlib.sha256(iam_token.encode("utf-8")).hexdigest()
 
+        issued_roles_json = None
+        issued_scopes_json = None
+        if context is not None:
+            issued_roles_json = json.dumps(sorted(context.roles))
+            issued_scopes_json = json.dumps(sorted(context.scopes))
+
         if context is not None and self.iam is not None and hasattr(self.iam, "get_permitted_actions"):
             actions = self.iam.get_permitted_actions(context, ALL_PM_ACTIONS)
         else:
@@ -106,8 +112,9 @@ class SessionManager:
                     INSERT INTO pm_sessions (
                         token_hash, csrf_token, principal, tenant_id, permitted_actions,
                         iam_token_hash, iam_session_id, iam_expires_at, created_at,
-                        last_activity_at, expires_at, is_revoked
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        last_activity_at, expires_at, is_revoked,
+                        issued_roles, issued_scopes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                     """,
                     (
                         token_hash,
@@ -121,6 +128,8 @@ class SessionManager:
                         now_iso,
                         now_iso,
                         expires_at,
+                        issued_roles_json,
+                        issued_scopes_json,
                     ),
                 )
         finally:
@@ -180,6 +189,20 @@ class SessionManager:
             iam_token_hash = row["iam_token_hash"] if "iam_token_hash" in row.keys() else None
             iam_expires = row["iam_expires_at"] if "iam_expires_at" in row.keys() else None
 
+            issued_roles = None
+            if "issued_roles" in row.keys() and row["issued_roles"]:
+                try:
+                    issued_roles = json.loads(row["issued_roles"])
+                except Exception:
+                    pass
+
+            issued_scopes = None
+            if "issued_scopes" in row.keys() and row["issued_scopes"]:
+                try:
+                    issued_scopes = json.loads(row["issued_scopes"])
+                except Exception:
+                    pass
+
             if self.iam is not None and (iam_sid or iam_token_hash):
                 user_id = row["principal"].split(":", 1)[1] if ":" in row["principal"] else row["principal"]
                 tenant_id = row["tenant_id"]
@@ -191,6 +214,8 @@ class SessionManager:
                             session_id=iam_sid,
                             token_hash=iam_token_hash,
                             expires=iam_expires,
+                            issued_roles=issued_roles,
+                            issued_scopes=issued_scopes,
                         )
                     elif hasattr(self.iam, "_check_session") and iam_sid:
                         self.iam._check_session(tenant_id, user_id, iam_sid, iam_expires, iam_token_hash)

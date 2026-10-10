@@ -31,8 +31,8 @@ Per [SBA_02_05_BACKEND_REVIEW.md](SBA_02_05_BACKEND_REVIEW.md), the Antigravity 
 ### 2. Empirical integration test results
 
 Test suite: `tests/test_sba_05_session_integration.py`  
-Command: `python3 -m pytest tests/test_sba_05_session_integration.py -v`  
-Result: 20 passed in 9.87s.
+Command: `pytest tests/test_sba_05_session_integration.py -v`  
+Result: 23 passed in ~16s.
 
 Key regressions verified:
 1. `test_login_caller_selected_identity_prohibited`: Verifies client cannot forge reviewer or coordinator claims.
@@ -46,12 +46,20 @@ Key regressions verified:
 9. `test_login_origin_validation`: Verifies cross-origin login attempts return 403.
 10. `test_logout_csrf_enforcement`: Verifies logout without valid CSRF header is rejected.
 11. `test_secure_cookie_attribute`: Verifies `Secure` attribute on HTTPS hosts with loopback exception.
-12. `test_real_browser_login_and_board_actions`: End-to-end browser login, cookie issue, board loading, and authenticated actions.
+12. `test_durable_principal_suspension_survives_restart`: Verifies authenticated, authorized durable suspension persists across store restarts and blocks token verification/issuance.
+13. `test_cookie_session_credential_ceiling_under_authority_expansion`: Verifies cookie validation intersects current authority with issued claims, preserving the original credential ceiling.
+14. `test_shared_root_two_tenant_servers_no_leakage_and_board_sync`: Verifies two tenant servers sharing a storage root resolve isolated database paths via `resolve_tenant_database_path`, with zero leakage across project and board endpoints.
 
-### 3. Live browser evidence
+### 3. Live browser evidence and interactive UI verification
 
 Browser verification script: `scripts/record_browser_evidence.py`  
+Report: `workspace/review-evidence/BROWSER_EVIDENCE_REPORT.md`  
 Evidence captured in `workspace/review-evidence/`:
 - `01_portal_login_page.png`: Unprivileged public login bootstrap rendered in headless Chromium.
 - `02_scrum_board_authenticated.png`: Authenticated delivery board rendering live issues and columns in tenant scope.
-- `BROWSER_EVIDENCE_REPORT.md`: Step-by-step verification log of redirect, login, cookie attributes, board loading, CSRF logout, and post-logout denial.
+- `03_issue_created_sba_3.png`: Live interactive creation of issue SBA-3 in BACKLOG.
+- `04_transition_denied.png`: Attempted invalid transition (BACKLOG -> DONE) rejected by MAS-PM FSM guards.
+- `05_transition_permitted_refined.png`: Permitted transition (BACKLOG -> REFINED) executed and verified in Refined column.
+
+> **Note on synthetic display fixtures:** Pre-seeded cards `SBA-1` (DONE) and `SBA-2` (IN_PROGRESS) are explicitly disclosed and labeled as synthetic visual fixtures for board column layout testing. They do not constitute independent execution completion claims. Live mutations and transitions are exercised and verified with `SBA-3`.
+

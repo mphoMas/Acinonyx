@@ -228,6 +228,7 @@ class PMDatabase:
                     last_successful_sync TIMESTAMP,
                     last_error TEXT,
                     is_stale INTEGER NOT NULL DEFAULT 0,
+                    remote_project_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(project_id) REFERENCES pm_projects(id) ON DELETE CASCADE
@@ -306,6 +307,18 @@ class PMDatabase:
                     conn.execute("ALTER TABLE pm_sessions ADD COLUMN iam_expires_at REAL;")
                 except sqlite3.OperationalError:
                     pass
+                try:
+                    conn.execute("ALTER TABLE pm_sessions ADD COLUMN issued_roles JSON;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_sessions ADD COLUMN issued_scopes JSON;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_project_sources ADD COLUMN remote_project_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
 
                 # Indices
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_state ON pm_issues(current_state);")
@@ -314,6 +327,7 @@ class PMDatabase:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_sprint ON pm_issues(sprint_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_transitions_issue ON pm_transitions(issue_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_evidence_issue ON pm_evidence_links(issue_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_project_sources_remote_id ON pm_project_sources(remote_project_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_verdicts_issue ON pm_critic_verdicts(issue_id);")
 
                 # GOV-03: Immutable evidence triggers
@@ -348,37 +362,39 @@ class PMDatabase:
 
     # --- Project Operations ---
 
-    def create_project(self, project: Project) -> Project:
-        conn = self._get_connection()
+    def create_project(self, project: Project, conn: Optional[sqlite3.Connection] = None) -> Project:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
             now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    """
-                    INSERT INTO pm_projects (id, key, name, description, token_budget, tokens_consumed, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        project.id,
-                        project.key.upper(),
-                        project.name,
-                        project.description,
-                        project.token_budget,
-                        project.tokens_consumed,
-                        now,
-                        now,
-                    ),
-                )
+            c.execute(
+                """
+                INSERT INTO pm_projects (id, key, name, description, token_budget, tokens_consumed, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    project.id,
+                    project.key.upper(),
+                    project.name,
+                    project.description,
+                    project.token_budget,
+                    project.tokens_consumed,
+                    now,
+                    now,
+                ),
+            )
             project.created_at = now
             project.updated_at = now
             return project
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
-    def get_project_by_key(self, key: str) -> Optional[Project]:
-        conn = self._get_connection()
+    def get_project_by_key(self, key: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Project]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
-            cur = conn.execute("SELECT * FROM pm_projects WHERE key = ?", (key.upper(),))
+            cur = c.execute("SELECT * FROM pm_projects WHERE key = ?", (key.upper(),))
             row = cur.fetchone()
             if not row:
                 return None
@@ -393,12 +409,14 @@ class PMDatabase:
                 updated_at=str(row["updated_at"]),
             )
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
-    def get_project(self, project_id: str) -> Optional[Project]:
-        conn = self._get_connection()
+    def get_project(self, project_id: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Project]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
-            cur = conn.execute("SELECT * FROM pm_projects WHERE id = ?", (project_id,))
+            cur = c.execute("SELECT * FROM pm_projects WHERE id = ?", (project_id,))
             row = cur.fetchone()
             if not row:
                 return None
@@ -413,12 +431,14 @@ class PMDatabase:
                 updated_at=str(row["updated_at"]),
             )
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
-    def list_projects(self) -> List[Project]:
-        conn = self._get_connection()
+    def list_projects(self, conn: Optional[sqlite3.Connection] = None) -> List[Project]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
-            cur = conn.execute("SELECT * FROM pm_projects ORDER BY created_at ASC")
+            cur = c.execute("SELECT * FROM pm_projects ORDER BY created_at ASC")
             rows = cur.fetchall()
             return [
                 Project(
@@ -434,7 +454,8 @@ class PMDatabase:
                 for row in rows
             ]
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
     def update_project(
         self,
@@ -442,8 +463,10 @@ class PMDatabase:
         name: Optional[str] = None,
         description: Optional[str] = None,
         token_budget: Optional[int] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> Optional[Project]:
-        conn = self._get_connection()
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
             now = datetime.now(timezone.utc).isoformat()
             updates = ["updated_at = ?"]
@@ -458,141 +481,151 @@ class PMDatabase:
                 updates.append("token_budget = ?")
                 params.append(token_budget)
             params.append(project_id)
-            with conn:
-                conn.execute(
-                    f"UPDATE pm_projects SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
-            return self.get_project(project_id)
+            c.execute(
+                f"UPDATE pm_projects SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            return self.get_project(project_id, conn=c)
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
     # --- Project Source Operations (SBA-02) ---
 
-    def upsert_project_source(self, source: ProjectSource) -> ProjectSource:
-        conn = self._get_connection()
+    @staticmethod
+    def _source_from_row(row: sqlite3.Row) -> ProjectSource:
+        keys = row.keys()
+        return ProjectSource(
+            project_id=row["project_id"],
+            repository_id=row["repository_id"],
+            repository_owner=row["repository_owner"],
+            repository_name=row["repository_name"],
+            configured_branch=row["configured_branch"],
+            root_path=row["root_path"],
+            planning_path=row["planning_path"],
+            status=row["status"],
+            source_revision=row["source_revision"],
+            last_successful_sync=str(row["last_successful_sync"]) if row["last_successful_sync"] else None,
+            last_error=row["last_error"],
+            is_stale=bool(row["is_stale"]),
+            remote_project_id=row["remote_project_id"] if "remote_project_id" in keys else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def upsert_project_source(self, source: ProjectSource, conn: Optional[sqlite3.Connection] = None) -> ProjectSource:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
             now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    """
-                    INSERT INTO pm_project_sources (
-                        project_id, repository_id, repository_owner, repository_name, configured_branch,
-                        root_path, planning_path, status, source_revision, last_successful_sync,
-                        last_error, is_stale, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(project_id) DO UPDATE SET
-                        repository_id = excluded.repository_id,
-                        repository_owner = excluded.repository_owner,
-                        repository_name = excluded.repository_name,
-                        configured_branch = excluded.configured_branch,
-                        root_path = excluded.root_path,
-                        planning_path = excluded.planning_path,
-                        status = excluded.status,
-                        source_revision = excluded.source_revision,
-                        last_successful_sync = excluded.last_successful_sync,
-                        last_error = excluded.last_error,
-                        is_stale = excluded.is_stale,
-                        updated_at = excluded.updated_at
-                    """,
-                    (
-                        source.project_id,
-                        source.repository_id,
-                        source.repository_owner,
-                        source.repository_name,
-                        source.configured_branch,
-                        source.root_path,
-                        source.planning_path,
-                        source.status,
-                        source.source_revision,
-                        source.last_successful_sync or now,
-                        source.last_error,
-                        1 if source.is_stale else 0,
-                        source.created_at or now,
-                        now,
-                    ),
-                )
+            c.execute(
+                """
+                INSERT INTO pm_project_sources (
+                    project_id, repository_id, repository_owner, repository_name, configured_branch,
+                    root_path, planning_path, status, source_revision, last_successful_sync,
+                    last_error, is_stale, remote_project_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id) DO UPDATE SET
+                    repository_id = excluded.repository_id,
+                    repository_owner = excluded.repository_owner,
+                    repository_name = excluded.repository_name,
+                    configured_branch = excluded.configured_branch,
+                    root_path = excluded.root_path,
+                    planning_path = excluded.planning_path,
+                    status = excluded.status,
+                    source_revision = excluded.source_revision,
+                    last_successful_sync = excluded.last_successful_sync,
+                    last_error = excluded.last_error,
+                    is_stale = excluded.is_stale,
+                    remote_project_id = excluded.remote_project_id,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    source.project_id,
+                    source.repository_id,
+                    source.repository_owner,
+                    source.repository_name,
+                    source.configured_branch,
+                    source.root_path,
+                    source.planning_path,
+                    source.status,
+                    source.source_revision,
+                    source.last_successful_sync or now,
+                    source.last_error,
+                    1 if source.is_stale else 0,
+                    source.remote_project_id,
+                    source.created_at or now,
+                    now,
+                ),
+            )
             source.updated_at = now
             return source
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
-    def get_project_source(self, project_id: str) -> Optional[ProjectSource]:
-        conn = self._get_connection()
+    def get_project_source(self, project_id: str, conn: Optional[sqlite3.Connection] = None) -> Optional[ProjectSource]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
-            cur = conn.execute("SELECT * FROM pm_project_sources WHERE project_id = ?", (project_id,))
+            cur = c.execute("SELECT * FROM pm_project_sources WHERE project_id = ?", (project_id,))
             row = cur.fetchone()
             if not row:
                 return None
-            return ProjectSource(
-                project_id=row["project_id"],
-                repository_id=row["repository_id"],
-                repository_owner=row["repository_owner"],
-                repository_name=row["repository_name"],
-                configured_branch=row["configured_branch"],
-                root_path=row["root_path"],
-                planning_path=row["planning_path"],
-                status=row["status"],
-                source_revision=row["source_revision"],
-                last_successful_sync=str(row["last_successful_sync"]) if row["last_successful_sync"] else None,
-                last_error=row["last_error"],
-                is_stale=bool(row["is_stale"]),
-                created_at=str(row["created_at"]),
-                updated_at=str(row["updated_at"]),
+            return self._source_from_row(row)
+        finally:
+            if manage_conn:
+                c.close()
+
+    def get_project_source_by_remote_id(self, remote_project_id: str, conn: Optional[sqlite3.Connection] = None) -> Optional[ProjectSource]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
+        try:
+            cur = c.execute("SELECT * FROM pm_project_sources WHERE remote_project_id = ?", (remote_project_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return self._source_from_row(row)
+        finally:
+            if manage_conn:
+                c.close()
+
+    def list_project_sources(self, conn: Optional[sqlite3.Connection] = None) -> List[ProjectSource]:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
+        try:
+            cur = c.execute("SELECT * FROM pm_project_sources ORDER BY created_at ASC")
+            rows = cur.fetchall()
+            return [self._source_from_row(row) for row in rows]
+        finally:
+            if manage_conn:
+                c.close()
+
+    def mark_project_source_inactive(self, project_id: str, conn: Optional[sqlite3.Connection] = None) -> None:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                "UPDATE pm_project_sources SET status = 'inactive', updated_at = ? WHERE project_id = ?",
+                (now, project_id),
             )
         finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
-    def list_project_sources(self) -> List[ProjectSource]:
-        conn = self._get_connection()
-        try:
-            cur = conn.execute("SELECT * FROM pm_project_sources ORDER BY created_at ASC")
-            rows = cur.fetchall()
-            return [
-                ProjectSource(
-                    project_id=row["project_id"],
-                    repository_id=row["repository_id"],
-                    repository_owner=row["repository_owner"],
-                    repository_name=row["repository_name"],
-                    configured_branch=row["configured_branch"],
-                    root_path=row["root_path"],
-                    planning_path=row["planning_path"],
-                    status=row["status"],
-                    source_revision=row["source_revision"],
-                    last_successful_sync=str(row["last_successful_sync"]) if row["last_successful_sync"] else None,
-                    last_error=row["last_error"],
-                    is_stale=bool(row["is_stale"]),
-                    created_at=str(row["created_at"]),
-                    updated_at=str(row["updated_at"]),
-                )
-                for row in rows
-            ]
-        finally:
-            conn.close()
-
-    def mark_project_source_inactive(self, project_id: str) -> None:
-        conn = self._get_connection()
+    def update_project_source_error(self, project_id: str, error: str, is_stale: bool = True, conn: Optional[sqlite3.Connection] = None) -> None:
+        manage_conn = conn is None
+        c = self._get_connection() if manage_conn else conn
         try:
             now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    "UPDATE pm_project_sources SET status = 'inactive', updated_at = ? WHERE project_id = ?",
-                    (now, project_id),
-                )
+            c.execute(
+                "UPDATE pm_project_sources SET last_error = ?, is_stale = ?, updated_at = ? WHERE project_id = ?",
+                (error, 1 if is_stale else 0, now, project_id),
+            )
         finally:
-            conn.close()
-
-    def update_project_source_error(self, project_id: str, error: str, is_stale: bool = True) -> None:
-        conn = self._get_connection()
-        try:
-            now = datetime.now(timezone.utc).isoformat()
-            with conn:
-                conn.execute(
-                    "UPDATE pm_project_sources SET last_error = ?, is_stale = ?, updated_at = ? WHERE project_id = ?",
-                    (error, 1 if is_stale else 0, now, project_id),
-                )
-        finally:
-            conn.close()
+            if manage_conn:
+                c.close()
 
     # --- Task Mapping Operations (SBA-01 / SBA-02) ---
 
@@ -879,13 +912,25 @@ class PMDatabase:
         """
         pkey = project_key.upper()
         with self.atomic_transaction() as conn:
+            cur_max = conn.execute(
+                """
+                SELECT COALESCE(MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)), 0) AS max_seq
+                FROM pm_issues
+                WHERE key LIKE ? || '-%';
+                """,
+                (pkey,),
+            )
+            row_max = cur_max.fetchone()
+            max_existing = int(row_max["max_seq"]) if row_max else 0
+
             conn.execute(
                 """
                 INSERT INTO pm_project_sequences (project_key, last_sequence)
-                VALUES (?, 0)
-                ON CONFLICT(project_key) DO NOTHING;
+                VALUES (?, ?)
+                ON CONFLICT(project_key) DO UPDATE SET
+                    last_sequence = MAX(last_sequence, excluded.last_sequence);
                 """,
-                (pkey,),
+                (pkey, max_existing),
             )
             cur = conn.execute(
                 """
@@ -897,7 +942,7 @@ class PMDatabase:
                 (pkey,),
             )
             row = cur.fetchone()
-            seq = int(row["last_sequence"]) if row else 1
+            seq = int(row["last_sequence"]) if row else (max_existing + 1)
             return f"{pkey}-{seq}"
 
     # --- Dependency Operations (PM-07) ---

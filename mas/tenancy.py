@@ -28,6 +28,13 @@ def current_binding() -> TenantBinding | None:
     return _binding.get()
 
 
+def resolve_tenant_database_path(iam: MultiTenantIAM, tenant: str, root: Path | str) -> Path:
+    """Resolves the trusted isolated database path for a tenant within root."""
+    root_path = Path(root).resolve()
+    state = Path(iam.get_isolated_sandbox_path(tenant, str(root_path / "state")))
+    return state / "pm.db"
+
+
 @contextmanager
 def tenant_scope(iam: MultiTenantIAM, token: str | TenantContext, tenant: str, root: Path):
     if iam.database_path is not None and iam.database_path.is_relative_to((root / "workspaces").resolve()):
@@ -39,8 +46,8 @@ def tenant_scope(iam: MultiTenantIAM, token: str | TenantContext, tenant: str, r
     if identity.tenant_id != tenant:
         raise PermissionError("Credential belongs to another tenant")
     workspace = Path(iam.get_isolated_sandbox_path(tenant, str(root / "workspaces")))
-    state = Path(iam.get_isolated_sandbox_path(tenant, str(root / "state")))
-    binding = TenantBinding(iam, identity, workspace, state / "pm.db")
+    db_path = resolve_tenant_database_path(iam, tenant, root)
+    binding = TenantBinding(iam, identity, workspace, db_path)
     marker = _binding.set(binding)
     try:
         with ExecutionContext.scope(f"{tenant}:{identity.principal_id}"):

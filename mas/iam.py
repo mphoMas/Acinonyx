@@ -68,6 +68,7 @@ class Principal:
     scopes: Set[str] = field(default_factory=set)
     email: Optional[str] = None
     created_at: float = field(default_factory=time.time)
+    status: str = "ACTIVE"
 
 
 @dataclass
@@ -233,16 +234,43 @@ class MultiTenantIAM:
                 if session["tenant_id"] == tenant_id:
                     session["revoked"] = True
 
-    def suspend_principal(self, tenant_id: str, user_id: str) -> None:
-        """Suspends or removes principal, revoking all principal sessions."""
+    def suspend_principal(
+        self,
+        tenant_or_actor: str,
+        user_id: str,
+        actor_token: Optional[str] = None,
+    ) -> bool:
+        """Suspends or removes principal, revoking all principal sessions and persisting suspension."""
+        effective_token = actor_token
+        tenant_id = tenant_or_actor
+        if actor_token is None and "." in tenant_or_actor:
+            effective_token = tenant_or_actor
+
+        actor = None
+        if effective_token:
+            actor = self.verify_token(effective_token)
+            tenant_id = actor.tenant_id
+            if not self.authorize(actor, "admin:suspend", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal") and not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal"):
+                raise PermissionError("Principal suspension requires tenant admin authority")
+
         key = f"{tenant_id}:{user_id}"
         if key in self._principals:
+            p = self._principals[key]
+            p.status = "SUSPENDED"
             for session in self._sessions.values():
                 if session.get("tenant_id") == tenant_id and session.get("user_id") == user_id:
                     session["revoked"] = True
-            del self._principals[key]
+
         if self._store:
-            self._store.revoke_principal_sessions(tenant_id, user_id)
+            if actor:
+                self._store.suspend_principal(
+                    actor,
+                    user_id,
+                    lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:suspend") or self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"),
+                )
+            else:
+                self._store.suspend_principal(tenant_id, user_id)
+        return True
 
     # -------------------------------------------------------------------------
     # Principal Management
@@ -271,6 +299,7 @@ class MultiTenantIAM:
             roles=set(roles) if roles is not None else {StandardRole.READ_ONLY.value},
             scopes=set(scopes) if scopes is not None else set(),
             email=email,
+            status="ACTIVE",
         )
         if self._store:
             document = asdict(principal)
@@ -292,7 +321,10 @@ class MultiTenantIAM:
 
     @staticmethod
     def _principal_from_document(document):
-        return Principal(**{**document, "roles": set(document["roles"]), "scopes": set(document["scopes"])})
+        doc = dict(document)
+        roles = set(doc.pop("roles", []))
+        scopes = set(doc.pop("scopes", []))
+        return Principal(roles=roles, scopes=scopes, **doc)
 
     # -------------------------------------------------------------------------
     # Cryptographic Token Issuance & Verification (OAuth / Bearer)
@@ -307,6 +339,8 @@ class MultiTenantIAM:
         principal = self.get_principal(tenant_id, user_id)
         if not principal:
             raise ValueError(f"Principal '{user_id}' in tenant '{tenant_id}' does not exist.")
+        if getattr(principal, "status", "ACTIVE") == "SUSPENDED":
+            raise PermissionError("Principal is suspended")
 
         tenant = self.get_tenant(tenant_id)
         if not tenant or tenant.status != TenantStatus.ACTIVE:
@@ -333,7 +367,15 @@ class MultiTenantIAM:
         if self._store:
             self._store.issue_session(payload, token_hash)
         else:
-            self._sessions[payload["nonce"]] = {"tenant_id": tenant_id, "user_id": user_id, "expires": payload["exp"], "token_hash": token_hash, "revoked": False}
+            self._sessions[payload["nonce"]] = {
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "expires": payload["exp"],
+                "token_hash": token_hash,
+                "revoked": False,
+                "roles": list(principal.roles),
+                "scopes": list(principal.scopes),
+            }
         return token
 
     def verify_token(self, token: str) -> TenantContext:
@@ -402,12 +444,14 @@ class MultiTenantIAM:
         *,
         token_hash: Optional[str] = None,
         expires: Optional[float] = None,
+        issued_roles: Optional[Iterable[str]] = None,
+        issued_scopes: Optional[Iterable[str]] = None,
     ) -> TenantContext:
         """
         Public IAM-backed browser session validation.
         Validates tenant status, principal existence, session revocation,
         expiration, token hash match, and durable store audit/witness integrity.
-        Derives current roles and scopes directly from the identity authority.
+        Enforces that effective roles/scopes never exceed the original issued credential ceiling.
         """
         if not isinstance(tenant_id, str) or not tenant_id:
             raise PermissionError("Malformed tenant identifier")
@@ -425,8 +469,11 @@ class MultiTenantIAM:
             raise PermissionError(f"Tenant '{tenant_id}' is suspended, inactive or unavailable")
 
         principal = self.get_principal(tenant_id, user_id)
-        if principal is None:
-            raise PermissionError("Principal no longer exists or unavailable")
+        if principal is None or getattr(principal, "status", "ACTIVE") == "SUSPENDED":
+            raise PermissionError("Principal no longer exists, suspended or unavailable")
+
+        session_roles = None
+        session_scopes = None
 
         if self._store:
             document = self._store.authority(
@@ -434,14 +481,35 @@ class MultiTenantIAM:
                 token_hash=token_hash, expires=expires
             )
             principal = self._principal_from_document(document)
+            if getattr(principal, "status", "ACTIVE") == "SUSPENDED":
+                raise PermissionError("Principal is suspended")
+            sess_doc = self._store.get("session", session_id)
+            if sess_doc:
+                session_roles = sess_doc.get("roles")
+                session_scopes = sess_doc.get("scopes")
         else:
             self._check_session(tenant_id, user_id, session_id, expires, token_hash=token_hash)
+            mem_sess = self._sessions.get(session_id)
+            if mem_sess:
+                session_roles = mem_sess.get("roles")
+                session_scopes = mem_sess.get("scopes")
+
+        effective_roles = frozenset(principal.roles)
+        effective_scopes = frozenset(principal.scopes)
+
+        ceiling_roles = issued_roles if issued_roles is not None else session_roles
+        if ceiling_roles is not None:
+            effective_roles = effective_roles & frozenset(ceiling_roles)
+
+        ceiling_scopes = issued_scopes if issued_scopes is not None else session_scopes
+        if ceiling_scopes is not None:
+            effective_scopes = effective_scopes & frozenset(ceiling_scopes)
 
         context = TenantContext(
             tenant_id=tenant_id,
             principal_id=user_id,
-            roles=frozenset(principal.roles),
-            scopes=frozenset(principal.scopes),
+            roles=effective_roles,
+            scopes=effective_scopes,
             token_id=session_id,
             expires_at=expires if expires is not None else now + 3600,
         )
@@ -462,6 +530,9 @@ class MultiTenantIAM:
             raise PermissionError("Session expired, revoked or unavailable")
         if token_hash is not None and not hmac.compare_digest(session["token_hash"], token_hash):
             raise PermissionError("Token does not match issued session")
+        principal = self.get_principal(tenant, user)
+        if not principal or getattr(principal, "status", "ACTIVE") == "SUSPENDED":
+            raise PermissionError("Principal is suspended or unavailable")
 
     def revoke_session(self, actor_token: str, session_id: str) -> bool:
         """Revoke your own session, or a session in your tenant with admin authority."""

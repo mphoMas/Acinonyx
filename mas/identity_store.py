@@ -258,9 +258,21 @@ class IdentityStore:
             principal = self.read(db, "principal", f"{claims['tid']}:{claims['uid']}", latest)
             if not tenant or tenant["status"] != "ACTIVE" or not principal:
                 raise PermissionError("Identity changed during token issuance")
+            if principal.get("status") == "SUSPENDED":
+                raise PermissionError("Principal is suspended")
             if not set(claims["roles"]) <= set(principal["roles"]) or not set(claims["scopes"]) <= set(principal["scopes"]):
                 raise PermissionError("Permissions changed during token issuance")
-            session = {"tenant_id": claims["tid"], "user_id": claims["uid"], "expires": claims["exp"], "issued_at": claims["iat"], "token_hash": token_hash, "revoked": False, "revoked_at": None}
+            session = {
+                "tenant_id": claims["tid"],
+                "user_id": claims["uid"],
+                "expires": claims["exp"],
+                "issued_at": claims["iat"],
+                "token_hash": token_hash,
+                "revoked": False,
+                "revoked_at": None,
+                "roles": list(claims["roles"]),
+                "scopes": list(claims["scopes"]),
+            }
             if self.read(db, "session", claims["nonce"], latest):
                 raise PermissionError("Duplicate session identifier")
             self.save(db, "session", claims["nonce"], session)
@@ -271,6 +283,8 @@ class IdentityStore:
         session = self.read(db, "session", sid, latest)
         if not tenant or tenant["status"] != "ACTIVE" or not principal or not session:
             raise PermissionError("Identity or session unavailable")
+        if principal.get("status") == "SUSPENDED":
+            raise PermissionError("Principal is suspended")
         if session["tenant_id"] != tenant_id or session["user_id"] != user_id or session["revoked"] or session["expires"] <= time.time():
             raise PermissionError("Session expired or revoked")
         if token_hash is not None and not hmac.compare_digest(session["token_hash"], token_hash):
@@ -298,15 +312,40 @@ class IdentityStore:
                 self.save(db, "session", sid, session)
             return True
 
-    def revoke_principal_sessions(self, actor, user_id, permission_check):
+    def revoke_principal_sessions(self, actor_or_tenant, user_id, permission_check=None):
         with self.transaction() as db:
             latest = self.validate_audit(db)
-            principal = self._authority(db, latest, actor.tenant_id, actor.principal_id, actor.token_id, expires=actor.expires_at)
-            if not permission_check(principal):
-                raise PermissionError("Session revocation requires current tenant admin authority")
-            if not self.read(db, "principal", f"{actor.tenant_id}:{user_id}", latest):
+            if not isinstance(actor_or_tenant, str):
+                actor = actor_or_tenant
+                tenant_id = actor.tenant_id
+                principal = self._authority(db, latest, actor.tenant_id, actor.principal_id, actor.token_id, expires=actor.expires_at)
+                if permission_check and not permission_check(principal):
+                    raise PermissionError("Session revocation requires current tenant admin authority")
+            else:
+                tenant_id = actor_or_tenant
+            if not self.read(db, "principal", f"{tenant_id}:{user_id}", latest):
                 raise PermissionError("Principal unavailable in this tenant")
-            return self._revoke_matching(db, latest, actor.tenant_id, user_id)
+            return self._revoke_matching(db, latest, tenant_id, user_id)
+
+    def suspend_principal(self, actor_or_tenant, user_id, permission_check=None):
+        with self.transaction() as db:
+            latest = self.validate_audit(db)
+            if not isinstance(actor_or_tenant, str):
+                actor = actor_or_tenant
+                tenant_id = actor.tenant_id
+                principal = self._authority(db, latest, actor.tenant_id, actor.principal_id, actor.token_id, expires=actor.expires_at)
+                if permission_check and not permission_check(principal):
+                    raise PermissionError("Principal suspension requires current tenant admin authority")
+            else:
+                tenant_id = actor_or_tenant
+
+            target = self.read(db, "principal", f"{tenant_id}:{user_id}", latest)
+            if not target:
+                raise PermissionError("Principal unavailable in this tenant")
+            self._revoke_matching(db, latest, tenant_id, user_id)
+            target["status"] = "SUSPENDED"
+            self.save(db, "principal", f"{tenant_id}:{user_id}", target)
+            return True
 
     def invalidate_all_sessions(self):
         """Trusted offline restore fence; not an agent or authenticated API endpoint."""

@@ -27,6 +27,7 @@ Covers:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import socket
 import time
 import urllib.request
@@ -706,3 +707,179 @@ def test_portal_file_serving_and_traversal_prevention(dashboard_server):
             assert resp.status in (403, 404)
     except urllib.error.HTTPError as err:
         assert err.code in (403, 404)
+
+
+# 21. Durable principal suspension survives restart and prevents issuance/usage
+def test_durable_principal_suspension_survives_restart(tmp_path: Path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    db_file = tmp_path / "durable_iam.db"
+    secret = "a" * 64
+
+    # Create durable IAM
+    iam1 = MultiTenantIAM(signing_secret=secret, db_path=db_file)
+    iam1.create_tenant("tenant_dur", "Durable Tenant")
+    iam1.register_principal("tenant_dur", "admin_user", roles={StandardRole.TENANT_ADMIN.value})
+    iam1.register_principal("tenant_dur", "worker_user", roles={StandardRole.OPERATOR.value})
+
+    admin_token = iam1.issue_token("tenant_dur", "admin_user")
+    worker_token = iam1.issue_token("tenant_dur", "worker_user")
+
+    # Worker can verify token
+    ctx = iam1.verify_token(worker_token)
+    assert ctx.principal_id == "worker_user"
+
+    # Admin suspends worker
+    iam1.suspend_principal(admin_token, "worker_user")
+
+    # Worker token verification immediately fails
+    with pytest.raises(PermissionError, match="Principal is suspended"):
+        iam1.verify_token(worker_token)
+
+    # Worker cannot issue new token
+    with pytest.raises(PermissionError, match="Principal is suspended"):
+        iam1.issue_token("tenant_dur", "worker_user")
+
+    # RESTART IAM from the same SQLite database
+    iam2 = MultiTenantIAM(signing_secret=secret, db_path=db_file)
+
+    # Worker principal is still SUSPENDED
+    worker = iam2.get_principal("tenant_dur", "worker_user")
+    assert worker is not None
+    assert getattr(worker, "status", None) == "SUSPENDED"
+
+    # Worker token is still rejected after restart
+    with pytest.raises(PermissionError, match="Principal is suspended"):
+        iam2.verify_token(worker_token)
+
+    # Worker cannot issue new token after restart
+    with pytest.raises(PermissionError, match="Principal is suspended"):
+        iam2.issue_token("tenant_dur", "worker_user")
+
+
+# 22. Cookie session preserves original credential ceiling under in-memory authority expansion
+def test_cookie_session_credential_ceiling_under_authority_expansion(tmp_path: Path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    from mas.pm.session import SessionManager
+    from mas.pm.db import PMDatabase
+
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_ceil", "Ceiling Tenant")
+    iam.register_principal("tenant_ceil", "user_ro", roles={StandardRole.READ_ONLY.value})
+
+    # Issue token with READ_ONLY ceiling
+    ro_token = iam.issue_token("tenant_ceil", "user_ro")
+
+    db_path = tmp_path / "pm_ceil.db"
+    db = PMDatabase(db_path)
+    sm = SessionManager(db=db, iam=iam)
+
+    session_secret, meta = sm.create_session(
+        principal="tenant_ceil:user_ro",
+        tenant_id="tenant_ceil",
+        iam_token=ro_token,
+    )
+    assert "storage:read" in meta["permitted_actions"]
+    assert "storage:write" not in meta["permitted_actions"]
+
+    # Now simulate authority expansion in IAM (granting TENANT_ADMIN without new session)
+    principal = iam.get_principal("tenant_ceil", "user_ro")
+    principal.roles.add(StandardRole.TENANT_ADMIN.value)
+    assert StandardRole.TENANT_ADMIN.value in principal.roles
+
+    # Cookie validation must preserve original issued credential ceiling (storage:read only)
+    sess = sm.get_session(session_secret)
+    assert sess is not None
+    assert "storage:read" in sess["permitted_actions"]
+    assert "storage:write" not in sess["permitted_actions"]
+    assert "admin:*" not in sess["permitted_actions"]
+
+
+# 23. Two tenant servers sharing a storage root: unified state path, no leakage, and project/board synchronization
+def test_shared_root_two_tenant_servers_no_leakage_and_board_sync(tmp_path: Path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    from mas.tenancy import resolve_tenant_database_path
+    from mas.pm.models import Project, Issue, IssueType, PriorityLevel, IssueState
+
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_one", "Tenant One")
+    iam.create_tenant("tenant_two", "Tenant Two")
+    iam.register_principal("tenant_one", "alice", roles={StandardRole.TENANT_ADMIN.value})
+    iam.register_principal("tenant_two", "bob", roles={StandardRole.TENANT_ADMIN.value})
+
+    token_one = iam.issue_token("tenant_one", "alice")
+    token_two = iam.issue_token("tenant_two", "bob")
+
+    shared_root = tmp_path / "shared_tenant_storage"
+    shared_root.mkdir()
+
+    port_one = get_free_port()
+    port_two = get_free_port()
+
+    ent_one = ConsultingEnterprise(name="Enterprise One")
+    ent_two = ConsultingEnterprise(name="Enterprise Two")
+
+    server_one = DashboardServer(ent_one, host="127.0.0.1", port=port_one, iam=iam, tenant_id="tenant_one", tenant_root=shared_root)
+    server_two = DashboardServer(ent_two, host="127.0.0.1", port=port_two, iam=iam, tenant_id="tenant_two", tenant_root=shared_root)
+
+    # Verify both servers resolve distinct isolated database paths inside shared root
+    db_path_one = resolve_tenant_database_path(iam, "tenant_one", shared_root)
+    db_path_two = resolve_tenant_database_path(iam, "tenant_two", shared_root)
+    assert db_path_one != db_path_two
+    assert server_one.tenant_db_path == db_path_one
+    assert server_two.tenant_db_path == db_path_two
+
+    # Seed data into Tenant One's server_db
+    p1 = server_one.server_db.create_project(Project(id="p-one", key="TONE", name="Tenant One Project"))
+    server_one.server_db.create_issue(
+        Issue(
+            id="i-one",
+            project_id=p1.id,
+            key="TONE-1",
+            title="First Issue",
+            issue_type=IssueType.TASK,
+            priority=PriorityLevel.HIGH,
+            current_state=IssueState.BACKLOG,
+        )
+    )
+
+    server_one.start_background()
+    server_two.start_background()
+    time.sleep(0.3)
+
+    try:
+        url_one = f"http://127.0.0.1:{port_one}"
+        url_two = f"http://127.0.0.1:{port_two}"
+
+        # Login to Server One
+        _, _, headers_one = http_request(f"{url_one}/api/pm/v1/session/login", method="POST", data={"token": token_one})
+        cookie_one = headers_one["Set-Cookie"].split(";")[0]
+
+        # Login to Server Two
+        _, _, headers_two = http_request(f"{url_two}/api/pm/v1/session/login", method="POST", data={"token": token_two})
+        cookie_two = headers_two["Set-Cookie"].split(";")[0]
+
+        # Tenant One: v1 project reads return TONE
+        status_p, body_p, _ = http_request(f"{url_one}/api/pm/projects", headers={"Cookie": cookie_one})
+        assert status_p == 200
+        assert any(p["key"] == "TONE" for p in body_p["projects"])
+
+        # Tenant One: legacy board reads against same database return TONE board and ticket
+        status_b, body_b, _ = http_request(f"{url_one}/api/pm/board/TONE", headers={"Cookie": cookie_one})
+        assert status_b == 200
+        assert body_b["project_key"] == "TONE"
+        assert len(body_b["issues_by_column"]["BACKLOG"]) == 1
+        assert body_b["issues_by_column"]["BACKLOG"][0]["key"] == "TONE-1"
+
+        # Tenant Two: v1 project reads DO NOT return TONE (no cross-tenant leakage in shared root)
+        status_p2, body_p2, _ = http_request(f"{url_two}/api/pm/projects", headers={"Cookie": cookie_two})
+        assert status_p2 == 200
+        assert not any(p["key"] == "TONE" for p in body_p2["projects"])
+
+        # Tenant Two: board read for TONE returns 404
+        status_b2, _, _ = http_request(f"{url_two}/api/pm/board/TONE", headers={"Cookie": cookie_two})
+        assert status_b2 == 404
+    finally:
+        server_one.shutdown()
+        server_two.shutdown()
+
+

@@ -1060,15 +1060,23 @@ class DashboardServer:
         from mas.pm.db import PMDatabase
         from mas.pm.discovery import ProjectRegistryDiscovery
 
-        if tenant_root is not None:
+        if tenant_root is not None and iam is not None and tenant_id is not None:
+            from mas.tenancy import resolve_tenant_database_path
+            db_path = resolve_tenant_database_path(iam, tenant_id, tenant_root)
+            server_db = PMDatabase(db_path)
+            self.tenant_db_path = db_path
+        elif tenant_root is not None:
             db_path = Path(tenant_root).resolve() / "pm.db"
             server_db = PMDatabase(db_path)
+            self.tenant_db_path = db_path
         else:
             server_db = PMDatabase()
+            self.tenant_db_path = server_db.db_path
 
         session_mgr = SessionManager(db=server_db, iam=iam)
         discovery = ProjectRegistryDiscovery(db=server_db)
         self.db = server_db
+        self.server_db = server_db
         self.session_manager = session_mgr
         self.discovery = discovery
 

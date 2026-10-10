@@ -9,6 +9,7 @@ enforces safe path boundaries and uniqueness constraints.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from pathlib import Path
@@ -117,9 +118,19 @@ class ProjectRegistryDiscovery:
         except Exception:
             pass
 
-        target_branch = branch or "feat/scrum-board-automation"
+        target_branch = branch
+        if not target_branch:
+            if self.last_valid_manifest and "repository" in self.last_valid_manifest:
+                target_branch = self.last_valid_manifest["repository"].get("configured_branch")
+            elif self.registry_file.exists():
+                try:
+                    reg_data = json.loads(self.registry_file.read_text(encoding="utf-8"))
+                    target_branch = reg_data.get("repository", {}).get("configured_branch")
+                except Exception:
+                    pass
+        target_branch = target_branch or "feat/scrum-board-automation"
+
         try:
-            # Check if remote 'origin' is configured
             remotes = subprocess.run(
                 ["git", "remote"],
                 cwd=str(self.repo_root),
@@ -128,7 +139,6 @@ class ProjectRegistryDiscovery:
                 check=False,
             )
             if "origin" not in remotes.stdout.split():
-                # Local repository without remote origin: treat local revision as source
                 return {
                     "success": True,
                     "dirty_checkout_preserved": dirty,
@@ -137,7 +147,7 @@ class ProjectRegistryDiscovery:
                 }
 
             fetch_res = subprocess.run(
-                ["git", "fetch", "origin", target_branch],
+                ["git", "fetch", "origin", f"+refs/heads/{target_branch}:refs/remotes/origin/sba-discovery"],
                 cwd=str(self.repo_root),
                 capture_output=True,
                 text=True,
@@ -145,23 +155,25 @@ class ProjectRegistryDiscovery:
                 timeout=15,
             )
             if fetch_res.returncode == 0:
-                remote_rev = None
-                for ref in (f"origin/{target_branch}", "FETCH_HEAD", "HEAD"):
-                    rev_res = subprocess.run(
-                        ["git", "rev-parse", ref],
-                        cwd=str(self.repo_root),
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    if rev_res.returncode == 0 and rev_res.stdout.strip():
-                        remote_rev = rev_res.stdout.strip()
-                        break
+                rev_res = subprocess.run(
+                    ["git", "rev-parse", "--verify", "refs/remotes/origin/sba-discovery^{commit}"],
+                    cwd=str(self.repo_root),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if rev_res.returncode == 0 and rev_res.stdout.strip():
+                    remote_rev = rev_res.stdout.strip()
+                    return {
+                        "success": True,
+                        "dirty_checkout_preserved": dirty,
+                        "source_revision": remote_rev,
+                        "remote_ref": "refs/remotes/origin/sba-discovery",
+                    }
                 return {
-                    "success": True,
+                    "success": False,
+                    "error": "Failed to verify fetched commit ref",
                     "dirty_checkout_preserved": dirty,
-                    "source_revision": remote_rev or self.get_current_git_revision(),
-                    "remote_ref": f"origin/{target_branch}",
                 }
             else:
                 return {
@@ -180,42 +192,46 @@ class ProjectRegistryDiscovery:
         self,
         path: Optional[Path] = None,
         revision: Optional[str] = None,
+        registry_data: Optional[dict] = None,
     ) -> dict:
         """
         Loads and strictly validates projects/registry.json per BOARD_CONTRACT_V1.
         Supports reading from a target git revision or local filesystem.
         Rejects unsafe paths (absolute, traversal) and duplicate keys/IDs.
-        Missing project directories are marked exists_on_disk=False rather than
-        aborting the whole registry, so historical records are retained as inactive.
+        Validates tree entries strictly against the selected revision in remote mode,
+        rejecting blobs and symlinks.
         """
-        content = None
-        if revision:
-            try:
-                cat_res = subprocess.run(
-                    ["git", "show", f"{revision}:projects/registry.json"],
-                    cwd=str(self.repo_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if cat_res.returncode == 0 and cat_res.stdout:
-                    content = cat_res.stdout
-            except Exception:
-                pass
+        if registry_data is not None:
+            data = copy.deepcopy(registry_data)
+        else:
+            content = None
+            if revision:
+                try:
+                    cat_res = subprocess.run(
+                        ["git", "show", f"{revision}:projects/registry.json"],
+                        cwd=str(self.repo_root),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if cat_res.returncode == 0 and cat_res.stdout:
+                        content = cat_res.stdout
+                except Exception:
+                    pass
 
-        if content is None:
-            target_path = (path or self.registry_file).resolve()
-            if not target_path.exists():
-                raise RegistryValidationError(f"Registry file not found: {target_path}")
-            try:
-                content = target_path.read_text(encoding="utf-8")
-            except Exception as exc:
-                raise RegistryValidationError(f"Failed to read registry: {exc}")
+            if content is None:
+                target_path = (path or self.registry_file).resolve()
+                if not target_path.exists():
+                    raise RegistryValidationError(f"Registry file not found: {target_path}")
+                try:
+                    content = target_path.read_text(encoding="utf-8")
+                except Exception as exc:
+                    raise RegistryValidationError(f"Failed to read registry: {exc}")
 
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise RegistryValidationError(f"Malformed registry JSON: {exc}")
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as exc:
+                raise RegistryValidationError(f"Malformed registry JSON: {exc}")
 
         if not isinstance(data, dict):
             raise RegistryValidationError("Registry root must be a JSON object")
@@ -290,23 +306,6 @@ class ProjectRegistryDiscovery:
             if not resolved_root.is_relative_to(self.repo_root):
                 raise RegistryValidationError(f"root_path '{root_path_str}' escapes repository boundary")
 
-            # Check if root path exists in revision or filesystem
-            exists_in_tree = resolved_root.exists() and resolved_root.is_dir()
-            if not exists_in_tree and revision:
-                try:
-                    ls_res = subprocess.run(
-                        ["git", "ls-tree", revision, root_path_str],
-                        cwd=str(self.repo_root),
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    exists_in_tree = bool(ls_res.returncode == 0 and ls_res.stdout.strip())
-                except Exception:
-                    pass
-
-            p["exists_on_disk"] = exists_in_tree
-
             norm_root = str(resolved_root)
             if norm_root in seen_roots:
                 raise ContradictoryMappingError(f"Duplicate root_path mapping for '{root_path_str}'")
@@ -325,6 +324,70 @@ class ProjectRegistryDiscovery:
             if not resolved_plan.is_relative_to(self.repo_root):
                 raise RegistryValidationError(f"planning_path '{plan_path_str}' escapes repository boundary")
 
+            exists_in_tree = False
+            if revision:
+                # Inspect revision tree entries strictly without falling back to local filesystem
+                root_tree_res = subprocess.run(
+                    ["git", "ls-tree", revision, root_path_str],
+                    cwd=str(self.repo_root),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if root_tree_res.returncode != 0:
+                    raise GitSyncError(f"Failed to inspect git tree for revision {revision}")
+
+                root_out = root_tree_res.stdout.strip()
+                if root_out:
+                    parts = root_out.split()
+                    if len(parts) >= 2:
+                        mode, obj_type = parts[0], parts[1]
+                        if mode == "120000" or obj_type != "tree":
+                            raise RegistryValidationError(
+                                f"root_path '{root_path_str}' in revision {revision} is a {obj_type} (mode {mode}), not a directory"
+                            )
+                        plan_tree_res = subprocess.run(
+                            ["git", "ls-tree", revision, plan_path_str],
+                            cwd=str(self.repo_root),
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        plan_out = plan_tree_res.stdout.strip()
+                        if plan_out:
+                            p_parts = plan_out.split()
+                            if len(p_parts) >= 2:
+                                p_mode, p_type = p_parts[0], p_parts[1]
+                                if p_mode == "120000" or p_type != "tree":
+                                    raise RegistryValidationError(
+                                        f"planning_path '{plan_path_str}' in revision {revision} is a {p_type} (mode {p_mode}), not a directory"
+                                    )
+                                exists_in_tree = True
+                        else:
+                            exists_in_tree = False
+                else:
+                    exists_in_tree = False
+            else:
+                raw_root = self.repo_root / root_path_str
+                raw_plan = self.repo_root / plan_path_str
+                if raw_root.is_symlink() or any(p.is_symlink() for p in (raw_root, *raw_root.parents) if p != self.repo_root):
+                    raise RegistryValidationError(f"root_path '{root_path_str}' is a symlink, not a directory")
+                if raw_plan.is_symlink() or any(p.is_symlink() for p in (raw_plan, *raw_plan.parents) if p != self.repo_root):
+                    raise RegistryValidationError(f"planning_path '{plan_path_str}' is a symlink, not a directory")
+                if resolved_root.exists() and not resolved_root.is_dir():
+                    raise RegistryValidationError(f"root_path '{root_path_str}' is a file, not a directory")
+                if resolved_plan.exists() and not resolved_plan.is_dir():
+                    raise RegistryValidationError(f"planning_path '{plan_path_str}' is a file, not a directory")
+
+                exists_in_tree = (
+                    resolved_root.exists()
+                    and resolved_root.is_dir()
+                    and resolved_plan.exists()
+                    and resolved_plan.is_dir()
+                )
+
+            p["exists_on_disk"] = exists_in_tree
+
         return data
 
     def reconcile_projects(
@@ -334,13 +397,13 @@ class ProjectRegistryDiscovery:
     ) -> Dict[str, Any]:
         """
         Reconciles validated registry manifest against database atomically.
-        - Pre-validates all records before mutating database to ensure zero partial state.
+        - Runs within a single explicit BEGIN IMMEDIATE transaction.
+        - Performs all conflict checks within the transaction snapshot.
         - Preserves existing legacy deployment project IDs without destructive re-keying.
-        - Idempotently creates missing projects.
-        - Inactivates missing or removed sources without deleting tasks or history.
-        - Rejects contradictory identity mappings.
+        - Persists stable remote UUID mappings via remote_project_id.
+        - Rolls back completely if any mutation fails, leaving zero partial records.
         """
-        manifest = registry_data or self.load_and_validate_registry(revision=revision)
+        manifest = self.load_and_validate_registry(revision=revision, registry_data=registry_data)
         repo_meta = manifest["repository"]
         repo_id = str(repo_meta.get("id") or repo_meta.get("github_id"))
         repo_owner = repo_meta["owner"]
@@ -348,136 +411,153 @@ class ProjectRegistryDiscovery:
         configured_branch = repo_meta["configured_branch"]
         current_rev = revision or self.get_current_git_revision() or "unrecorded"
 
-        # Phase 1: Pre-validation across all projects
-        prevalidated = []
-        seen_keys_in_batch: set[str] = set()
-        seen_ids_in_batch: set[str] = set()
-
-        for p_def in manifest["projects"]:
-            proj_id = str(uuid.UUID(p_def["project_id"]))
-            proj_key = p_def["project_key"].strip().upper()
-            name = p_def["name"].strip()
-            description = (p_def.get("description") or "").strip()
-            root_path = p_def["root_path"].strip()
-            planning_path = p_def["planning_path"].strip()
-            exists_on_disk = p_def.get("exists_on_disk", True)
-
-            if proj_key in seen_keys_in_batch or proj_id in seen_ids_in_batch:
-                raise RegistryValidationError(f"Duplicate key '{proj_key}' or ID '{proj_id}' in batch")
-            seen_keys_in_batch.add(proj_key)
-            seen_ids_in_batch.add(proj_id)
-
-            existing_by_id = self.db.get_project(proj_id)
-            existing_by_key = self.db.get_project_by_key(proj_key)
-
-            if existing_by_id and existing_by_key and existing_by_id.id != existing_by_key.id:
-                raise ContradictoryMappingError(
-                    f"Contradictory mapping: UUID '{proj_id}' allocated to '{existing_by_id.key}', "
-                    f"but key '{proj_key}' allocated to project '{existing_by_key.id}'"
-                )
-
-            if existing_by_id:
-                if existing_by_id.key != proj_key:
-                    raise ContradictoryMappingError(
-                        f"Project {proj_id} has key '{existing_by_id.key}' in database, but registry specifies '{proj_key}'"
-                    )
-                actual_id = proj_id
-                action = "update" if (existing_by_id.name != name or existing_by_id.description != description) else "unchanged"
-            elif existing_by_key:
-                # Legacy / existing deployment project with existing ID: preserve it!
-                existing_source = self.db.get_project_source(existing_by_key.id)
-                if existing_source and existing_source.root_path != root_path:
-                    raise ContradictoryMappingError(
-                        f"Contradictory mapping: project '{proj_key}' is bound to path '{existing_source.root_path}', "
-                        f"cannot rebind to '{root_path}'"
-                    )
-                actual_id = existing_by_key.id
-                action = "update" if (existing_by_key.name != name or existing_by_key.description != description) else "unchanged"
-            else:
-                actual_id = proj_id
-                action = "create"
-
-            status = "active" if exists_on_disk else "inactive"
-            error_msg = None if exists_on_disk else f"Project directory '{root_path}' not found in revision"
-
-            prevalidated.append({
-                "actual_id": actual_id,
-                "proj_key": proj_key,
-                "name": name,
-                "description": description,
-                "root_path": root_path,
-                "planning_path": planning_path,
-                "action": action,
-                "status": status,
-                "error": error_msg,
-            })
-
         created_keys: list[str] = []
         updated_keys: list[str] = []
         unchanged_keys: list[str] = []
         inactivated_keys: list[str] = []
         registered_project_ids: set[str] = set()
 
-        # Phase 2: Atomic DB mutation in a single transaction
         with self._lock:
-            conn = self.db._get_connection()
-            try:
-                with conn:
-                    for item in prevalidated:
-                        actual_id = item["actual_id"]
-                        proj_key = item["proj_key"]
-                        action = item["action"]
+            with self.db.atomic_transaction() as tx_conn:
+                existing_projects = self.db.list_projects(conn=tx_conn)
+                existing_sources = self.db.list_project_sources(conn=tx_conn)
 
-                        if action == "create":
-                            new_proj = Project(
-                                id=actual_id,
-                                key=proj_key,
-                                name=item["name"],
-                                description=item["description"],
-                                token_budget=5_000_000,
-                                tokens_consumed=0,
+                by_id = {p.id: p for p in existing_projects}
+                by_key = {p.key: p for p in existing_projects}
+                sources_by_proj_id = {s.project_id: s for s in existing_sources}
+                sources_by_remote_id = {s.remote_project_id: s for s in existing_sources if s.remote_project_id}
+
+                prevalidated = []
+                seen_keys_in_batch: set[str] = set()
+                seen_ids_in_batch: set[str] = set()
+
+                for p_def in manifest["projects"]:
+                    proj_id = str(uuid.UUID(p_def["project_id"]))
+                    proj_key = p_def["project_key"].strip().upper()
+                    name = p_def["name"].strip()
+                    description = (p_def.get("description") or "").strip()
+                    root_path = p_def["root_path"].strip()
+                    planning_path = p_def["planning_path"].strip()
+                    exists_on_disk = p_def.get("exists_on_disk", True)
+
+                    if proj_key in seen_keys_in_batch or proj_id in seen_ids_in_batch:
+                        raise RegistryValidationError(f"Duplicate key '{proj_key}' or ID '{proj_id}' in batch")
+                    seen_keys_in_batch.add(proj_key)
+                    seen_ids_in_batch.add(proj_id)
+
+                    existing_by_remote = sources_by_remote_id.get(proj_id)
+                    existing_by_id = by_id.get(proj_id)
+                    existing_by_key = by_key.get(proj_key)
+
+                    if existing_by_remote:
+                        actual_id = existing_by_remote.project_id
+                        proj_obj = by_id.get(actual_id)
+                        if proj_obj and proj_obj.key != proj_key:
+                            raise ContradictoryMappingError(
+                                f"Remote project {proj_id} mapped to {actual_id} has key '{proj_obj.key}', contradictory to '{proj_key}'"
                             )
-                            self.db.create_project(new_proj)
-                            created_keys.append(proj_key)
-                        elif action == "update":
-                            self.db.update_project(actual_id, name=item["name"], description=item["description"])
-                            updated_keys.append(proj_key)
-                        else:
-                            unchanged_keys.append(proj_key)
-
-                        registered_project_ids.add(actual_id)
-
-                        source = ProjectSource(
-                            project_id=actual_id,
-                            repository_id=repo_id,
-                            repository_owner=repo_owner,
-                            repository_name=repo_name,
-                            configured_branch=configured_branch,
-                            root_path=item["root_path"],
-                            planning_path=item["planning_path"],
-                            status=item["status"],
-                            source_revision=current_rev,
-                            last_error=item["error"],
-                            is_stale=False,
+                        if existing_by_key and existing_by_key.id != actual_id:
+                            raise ContradictoryMappingError(
+                                f"Key '{proj_key}' already allocated to project {existing_by_key.id}, not {actual_id}"
+                            )
+                        action = "update" if (proj_obj and (proj_obj.name != name or proj_obj.description != description)) else "unchanged"
+                    elif existing_by_id and existing_by_key and existing_by_id.id != existing_by_key.id:
+                        raise ContradictoryMappingError(
+                            f"Contradictory mapping: UUID '{proj_id}' allocated to '{existing_by_id.key}', "
+                            f"but key '{proj_key}' allocated to project '{existing_by_key.id}'"
                         )
-                        self.db.upsert_project_source(source)
+                    elif existing_by_id:
+                        if existing_by_id.key != proj_key:
+                            raise ContradictoryMappingError(
+                                f"Project {proj_id} has key '{existing_by_id.key}' in database, but registry specifies '{proj_key}'"
+                            )
+                        actual_id = proj_id
+                        action = "update" if (existing_by_id.name != name or existing_by_id.description != description) else "unchanged"
+                    elif existing_by_key:
+                        existing_source = sources_by_proj_id.get(existing_by_key.id)
+                        if existing_source and existing_source.root_path != root_path:
+                            raise ContradictoryMappingError(
+                                f"Contradictory mapping: project '{proj_key}' is bound to path '{existing_source.root_path}', "
+                                f"cannot rebind to '{root_path}'"
+                            )
+                        actual_id = existing_by_key.id
+                        action = "update" if (existing_by_key.name != name or existing_by_key.description != description) else "unchanged"
+                    else:
+                        actual_id = proj_id
+                        action = "create"
 
-                    # Inactivate projects previously active in DB that are no longer in registry
-                    existing_sources = self.db.list_project_sources()
-                    for s in existing_sources:
-                        if s.status == "active" and s.project_id not in registered_project_ids:
-                            self.db.mark_project_source_inactive(s.project_id)
-                            proj = self.db.get_project(s.project_id)
-                            inactivated_keys.append(proj.key if proj else s.project_id)
+                    status = "active" if exists_on_disk else "inactive"
+                    error_msg = None if exists_on_disk else f"Project directory '{root_path}' not found in revision"
+
+                    prevalidated.append({
+                        "actual_id": actual_id,
+                        "remote_project_id": proj_id,
+                        "proj_key": proj_key,
+                        "name": name,
+                        "description": description,
+                        "root_path": root_path,
+                        "planning_path": planning_path,
+                        "action": action,
+                        "status": status,
+                        "error": error_msg,
+                    })
+
+                for item in prevalidated:
+                    actual_id = item["actual_id"]
+                    proj_key = item["proj_key"]
+                    action = item["action"]
+
+                    if action == "create":
+                        new_proj = Project(
+                            id=actual_id,
+                            key=proj_key,
+                            name=item["name"],
+                            description=item["description"],
+                            token_budget=5_000_000,
+                            tokens_consumed=0,
+                        )
+                        self.db.create_project(new_proj, conn=tx_conn)
+                        created_keys.append(proj_key)
+                    elif action == "update":
+                        self.db.update_project(
+                            actual_id,
+                            name=item["name"],
+                            description=item["description"],
+                            conn=tx_conn,
+                        )
+                        updated_keys.append(proj_key)
+                    else:
+                        unchanged_keys.append(proj_key)
+
+                    registered_project_ids.add(actual_id)
+
+                    source = ProjectSource(
+                        project_id=actual_id,
+                        repository_id=repo_id,
+                        repository_owner=repo_owner,
+                        repository_name=repo_name,
+                        configured_branch=configured_branch,
+                        root_path=item["root_path"],
+                        planning_path=item["planning_path"],
+                        status=item["status"],
+                        source_revision=current_rev,
+                        last_error=item["error"],
+                        is_stale=False,
+                        remote_project_id=item["remote_project_id"],
+                    )
+                    self.db.upsert_project_source(source, conn=tx_conn)
+
+                for s in existing_sources:
+                    if s.status == "active" and s.project_id not in registered_project_ids:
+                        self.db.mark_project_source_inactive(s.project_id, conn=tx_conn)
+                        proj = by_id.get(s.project_id)
+                        inactivated_keys.append(proj.key if proj else s.project_id)
 
                 self.last_valid_manifest = manifest
                 self.last_sync_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 self.last_sync_revision = current_rev
                 self.last_sync_error = None
                 self.is_stale = False
-
-            finally:
-                conn.close()
 
         return {
             "status": "healthy",
@@ -561,6 +641,7 @@ class ProjectRegistryDiscovery:
             if s:
                 freshness = {
                     "repository_id": s.repository_id,
+                    "remote_project_id": s.remote_project_id,
                     "configured_branch": s.configured_branch,
                     "source_revision": s.source_revision,
                     "last_successful_sync": s.last_successful_sync,
