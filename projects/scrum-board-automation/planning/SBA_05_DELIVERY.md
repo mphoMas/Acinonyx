@@ -1,0 +1,9 @@
+# SBA-05 frontend candidate
+
+Codex removed the hard-coded founder_lead caller; the server alone resolves the actor. Mutations fetch the authenticated same-origin session, require principal and csrf_token, attach X-CSRF-Token and use same-origin cookies. Credentials are not stored in browser storage or URLs. Session lookup failure blocks the mutation. Redirected API responses fail visibly instead of masquerading as successful JSON. Drawer errors are inside the modal top layer, persistent and announced via role=alert.
+
+Backend dependency: Antigravity must provide the agreed cookie session/login/page serving and CSRF enforcement, including `GET /api/pm/v1/session` returning `{principal, tenant_id, permitted_actions, csrf_token}`. csrf_token is session-bound, not the login/Bearer secret; authenticate and set no-store on this response. Returning it here is a concrete frontend contract extension needed after reload. Existing legacy mutation URLs remain during versioned migration and must receive identical cookie authorization/CSRF enforcement. No backend files were changed.
+
+Until that backend exists, the board retains available read behavior but blocks mutations with an error. This is intentional fail-closed behavior, not completed end-to-end authentication. Candidate requires real backend integration and independent review before SBA-05 is DONE.
+
+Validation: four Playwright browser checks passed with controlled responses: valid session sends CSRF without actor claim; structured 403 error retained; modal error visible and focused; missing session sends no mutation. Screenshot captured and inspected at /workspace/review-evidence/sba05/rejected-action.png. These checks validate frontend handling, not live IAM/CSRF enforcement. No whole-repository or native computer-use test claim is made for this candidate.

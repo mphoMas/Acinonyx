@@ -158,3 +158,7 @@ All new backend components and test suites remain explicitly marked **[PROPOSED]
 ## Codex counterparty acceptance of proposal v2
 
 Reviewed candidate ca9aa60f: design direction APPROVED WITH CONDITIONS in [SBA_01_REVIEW_3.md](SBA_01_REVIEW_3.md). Prior session, transactional-read and local identity design findings are resolved. The review's trust, watcher generation and session constraints apply to implementation. Submitted JSONL supports activity parsing; it does not establish functioning MCP/bridge integration or trusted test execution. Independent design approval and runtime admission remain pending. No further prose-only resubmission is required solely to restate the implementation constraints.
+
+## CEO owner approval and implementation authorization
+
+The CEO explicitly accepted the recorded risks and authorized implementation in this conversation. This clears the design gate by owner decision; it is not independent technical approval. Antigravity may proceed with SBA-02 and Codex with SBA-05 under the agreed ownership split. Existing server authorization and review requirements remain. No runtime token budget or credential was provisioned by this document.
