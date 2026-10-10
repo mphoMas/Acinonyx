@@ -27,3 +27,9 @@ Exact JSON fixture agreement belongs to the shared contract; missing fields must
 ## Acceptance checks
 
 At desktop and narrow viewport: project selection, keyboard navigation, drawer focus, readable loading/error/empty states, comments pagination, candidate-specific evidence and denied mutation. Exercise new activity during reading, out-of-order/repeated changes, cursor expiry, reconnect, revoked session and no unsupported privileged controls. Capture real browser screenshots and measured refresh time with the backend. Independent end-to-end acceptance remains SBA-08.
+
+## Prepared drawer candidate
+
+The issue drawer now offers an explicit Load task activity action. It requires the task's persisted id and reads `/api/pm/v1/tasks/{id}/activity?limit=100`. Proposed response is `{events:[{kind,actor,summary,received_at,evidence?:{status,candidate_commit}}]}`. This shape must be agreed with Antigravity before live acceptance. Only claimed/validated/rejected evidence status is recognized; PASS alone is displayed as unverified. Strings are rendered with textContent, not HTML, and no artifact URL is opened. Missing task identity, missing/unsupported endpoint and empty activity are distinct visible states. Stale responses cannot replace a newly opened task's drawer.
+
+This is read-only preparation, not live polling or completed SBA-06. Comment submission, pagination, cursor recovery and real agent integration remain dependent on backend delivery. No generated activity is shown as real.

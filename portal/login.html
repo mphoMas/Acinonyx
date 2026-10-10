@@ -101,6 +101,10 @@
       color: #64748b;
       text-align: center;
     }
+    #tokenHelp { font-size: 13px; line-height: 1.5; color: #cbd5e1; }
+    #toggleToken { width: auto; padding: 6px 10px; margin-bottom: 12px; background: transparent; color: #7dd3fc; border: 1px solid #475569; }
+    .footer-note { color: #94a3b8; }
+    :focus-visible { outline: 2px solid #7dd3fc; outline-offset: 3px; }
   </style>
 </head>
 <body>
@@ -110,12 +114,12 @@
       <p>Authenticate session to enter tenant workspace</p>
     </div>
 
-    <div id="errorAlert" class="alert-error" role="alert"></div>
+    <div id="errorAlert" class="alert-error" role="alert" tabindex="-1"></div>
 
-    <form id="loginForm">
+    <form id="loginForm" aria-busy="false">
       <div class="form-group">
         <label for="tokenInput">Access / IAM Token</label>
-        <input type="password" id="tokenInput" name="token" required placeholder="Enter bearer token..." autocomplete="current-password">
+        <input type="password" id="tokenInput" name="token" required placeholder="Enter bearer token..." autocomplete="off" spellcheck="false" aria-describedby="tokenHelp"><p id="tokenHelp">Use an access token issued by your administrator. Your identity and permissions are checked by the server.</p><button type="button" id="toggleToken" aria-pressed="false">Show token</button>
       </div>
       <button type="submit" id="submitBtn">Sign In</button>
     </form>
@@ -131,17 +135,19 @@
     const submitBtn = document.getElementById('submitBtn');
     const errorAlert = document.getElementById('errorAlert');
 
+    document.getElementById('toggleToken').onclick = function () { const show = tokenInput.type === 'password'; tokenInput.type = show ? 'text' : 'password'; this.textContent = show ? 'Hide token' : 'Show token'; this.setAttribute('aria-pressed', String(show)); };
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorAlert.style.display = 'none';
       errorAlert.textContent = '';
+      form.setAttribute('aria-busy', 'true');
       submitBtn.disabled = true;
       submitBtn.textContent = 'Authenticating...';
 
       const token = tokenInput.value.trim();
       try {
         const resp = await fetch('/api/pm/v1/session/login', {
-          method: 'POST',
+          method: 'POST', credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(15000),
           headers: {
             'Content-Type': 'application/json'
           },
@@ -150,15 +156,20 @@
 
         const data = await resp.json();
         if (resp.ok && data.success) {
+          tokenInput.value = '';
           window.location.href = '/portal/scrum.html';
         } else {
-          errorAlert.textContent = data.error || 'Authentication failed. Please check your credentials.';
-          errorAlert.style.display = 'block';
+          errorAlert.textContent = (typeof data.error === 'object' ? data.error.message : data.error) || 'Authentication failed. Please check your credentials.';
+          errorAlert.style.display = 'block'; errorAlert.focus();
         }
       } catch (err) {
         errorAlert.textContent = 'Network or server error while connecting to authentication authority.';
-        errorAlert.style.display = 'block';
+        errorAlert.style.display = 'block'; errorAlert.focus();
       } finally {
+        form.setAttribute('aria-busy', 'false');
+        tokenInput.type = 'password';
+        document.getElementById('toggleToken').textContent = 'Show token';
+        document.getElementById('toggleToken').setAttribute('aria-pressed', 'false');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
       }
