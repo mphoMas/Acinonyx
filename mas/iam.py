@@ -23,7 +23,7 @@ from pathlib import Path
 from mas.identity_store import IdentityStore
 from mas.audit_anchor import HTTPAuditAnchor
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 
 class TenantStatus(str, Enum):
@@ -233,6 +233,17 @@ class MultiTenantIAM:
                 if session["tenant_id"] == tenant_id:
                     session["revoked"] = True
 
+    def suspend_principal(self, tenant_id: str, user_id: str) -> None:
+        """Suspends or removes principal, revoking all principal sessions."""
+        key = f"{tenant_id}:{user_id}"
+        if key in self._principals:
+            for session in self._sessions.values():
+                if session.get("tenant_id") == tenant_id and session.get("user_id") == user_id:
+                    session["revoked"] = True
+            del self._principals[key]
+        if self._store:
+            self._store.revoke_principal_sessions(tenant_id, user_id)
+
     # -------------------------------------------------------------------------
     # Principal Management
     # -------------------------------------------------------------------------
@@ -382,6 +393,68 @@ class MultiTenantIAM:
         )
         self._contexts[id(context)] = context
         return context
+
+    def validate_session(
+        self,
+        tenant_id: str,
+        user_id: str,
+        session_id: str,
+        *,
+        token_hash: Optional[str] = None,
+        expires: Optional[float] = None,
+    ) -> TenantContext:
+        """
+        Public IAM-backed browser session validation.
+        Validates tenant status, principal existence, session revocation,
+        expiration, token hash match, and durable store audit/witness integrity.
+        Derives current roles and scopes directly from the identity authority.
+        """
+        if not isinstance(tenant_id, str) or not tenant_id:
+            raise PermissionError("Malformed tenant identifier")
+        if not isinstance(user_id, str) or not user_id:
+            raise PermissionError("Malformed user identifier")
+        if not isinstance(session_id, str) or not session_id:
+            raise PermissionError("Malformed session identifier")
+
+        now = time.time()
+        if expires is not None and now >= expires:
+            raise PermissionError("Session expired")
+
+        tenant = self.get_tenant(tenant_id)
+        if not tenant or tenant.status != TenantStatus.ACTIVE:
+            raise PermissionError(f"Tenant '{tenant_id}' is suspended, inactive or unavailable")
+
+        principal = self.get_principal(tenant_id, user_id)
+        if principal is None:
+            raise PermissionError("Principal no longer exists or unavailable")
+
+        if self._store:
+            document = self._store.authority(
+                tenant_id, user_id, session_id,
+                token_hash=token_hash, expires=expires
+            )
+            principal = self._principal_from_document(document)
+        else:
+            self._check_session(tenant_id, user_id, session_id, expires, token_hash=token_hash)
+
+        context = TenantContext(
+            tenant_id=tenant_id,
+            principal_id=user_id,
+            roles=frozenset(principal.roles),
+            scopes=frozenset(principal.scopes),
+            token_id=session_id,
+            expires_at=expires if expires is not None else now + 3600,
+        )
+        self._contexts[id(context)] = context
+        return context
+
+    def get_permitted_actions(self, context: TenantContext, candidate_actions: Iterable[str]) -> List[str]:
+        """Returns the subset of candidate_actions permitted for context under current authority."""
+        permitted = []
+        for action in candidate_actions:
+            if self.authorize(context, action, context.tenant_id, f"urn:mas:tenant:{context.tenant_id}:request"):
+                permitted.append(action)
+        return permitted
 
     def _check_session(self, tenant, user, sid, expiry, token_hash=None):
         session = self._sessions.get(sid)

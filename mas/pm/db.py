@@ -42,6 +42,7 @@ class PMDatabase:
         self.db_path = Path(db_path) if db_path else (binding.database if binding else DEFAULT_DB_PATH)
         if binding and self.db_path.resolve() != binding.database.resolve():
             raise PermissionError("Database belongs to another tenant")
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self.init_schema()
 
@@ -260,6 +261,8 @@ class PMDatabase:
                     tenant_id TEXT NOT NULL,
                     permitted_actions JSON NOT NULL,
                     iam_token_hash TEXT,
+                    iam_session_id TEXT,
+                    iam_expires_at REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at REAL NOT NULL,
@@ -293,6 +296,14 @@ class PMDatabase:
                     pass
                 try:
                     conn.execute("ALTER TABLE pm_critic_verdicts ADD COLUMN commit_sha TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_sessions ADD COLUMN iam_session_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_sessions ADD COLUMN iam_expires_at REAL;")
                 except sqlite3.OperationalError:
                     pass
 

@@ -4,23 +4,29 @@ Integration tests for SBA-05 session requirements and SBA_01_DECISIONS contract.
 Covers:
 1. GET /api/pm/v1/session unauthenticated returns 401 with Cache-Control: no-store.
 2. POST /api/pm/v1/session/login establishes cookie session, returns csrf_token, sets Cache-Control: no-store.
-3. GET /api/pm/v1/session with cookie returns 200, matching csrf_token and Cache-Control: no-store.
-4. Mutation with cookie and valid X-CSRF-Token succeeds; server resolves actor.
-5. Mutation with cookie and missing X-CSRF-Token returns 403 Forbidden.
-6. Mutation with cookie and invalid/tampered X-CSRF-Token returns 403 Forbidden.
-7. Caller impersonation attempt (claimed caller_principal != session principal) returns 403.
-8. Logout revokes session server-side, clears cookie, and subsequent session requests return 401.
-9. Bearer token authentication succeeds without requiring CSRF token.
-10. No silent fallback: invalid Bearer token with valid cookie returns 401, never falls back to cookie.
-11. Idle timeout: session older than 30 minutes without activity is rejected.
-12. IAM revocation chaining: revoking underlying IAM token revokes linked cookie session.
-13. Static /portal/ file serving serves files safely with nosniff header and rejects traversal.
+3. Caller-selected identity rejection: client cannot select principal or tenant in login payload (403).
+4. Unconfigured auth fail-closed: reject login, mutations, and arbitrary Bearer tokens (401).
+5. Configured origin validation: reject cross-origin state changes (403).
+6. GET /api/pm/v1/session with cookie returns 200, matching csrf_token and Cache-Control: no-store.
+7. Mutation with cookie and valid X-CSRF-Token succeeds; server resolves actor.
+8. Mutation with cookie and missing X-CSRF-Token returns 403 Forbidden.
+9. Mutation with cookie and invalid/tampered X-CSRF-Token returns 403 Forbidden.
+10. Caller impersonation attempt (claimed caller_principal != session principal) returns 403.
+11. Logout requires authentication and CSRF token; revokes session and clears cookie.
+12. Bearer token authentication succeeds without requiring CSRF token.
+13. No silent fallback: invalid Bearer token with valid cookie returns 401, never falls back to cookie.
+14. Idle timeout: session older than 30 minutes without activity is rejected.
+15. IAM revocation chaining: revoking underlying IAM token revokes linked cookie session.
+16. Cookie security flags: Secure issued for HTTPS/deployed host, with loopback development exception.
+17. Tenant server cookie bridge: public IAM validation, tenant_scope binding, and zero cross-tenant leakage.
+18. Tenant IAM suspension and authority outage handling (503 on identity authority failure).
+19. Authenticated tenant portal and reachable unprivileged login page.
+20. Static portal file serving with nosniff header and directory traversal prevention.
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import socket
 import time
 import urllib.request
@@ -29,7 +35,7 @@ import pytest
 
 from mas.dashboard.server import DashboardServer
 from mas.organization.company import ConsultingEnterprise
-from mas.pm.session import SessionManager, extract_session_cookie
+from mas.pm.session import SessionManager
 from mas.pm.tools import get_pm_db
 from mas.pm.models import Project
 
@@ -44,7 +50,7 @@ def get_free_port() -> int:
 
 @pytest.fixture
 def dashboard_server():
-    """Launches an isolated DashboardServer instance."""
+    """Launches an isolated DashboardServer instance with configured auth token."""
     port = get_free_port()
     enterprise = ConsultingEnterprise(name="Session Test Enterprise")
     server = DashboardServer(
@@ -116,8 +122,6 @@ def test_login_establishes_session_and_cookie(dashboard_server):
     base_url, _ = dashboard_server
     login_payload = {
         "token": "test-secret-bearer-token",
-        "principal": "operator_jane",
-        "tenant_id": "tenant-alpha",
     }
     status, body, headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
@@ -126,8 +130,8 @@ def test_login_establishes_session_and_cookie(dashboard_server):
     )
     assert status == 200
     assert body["success"] is True
-    assert body["principal"] == "operator_jane"
-    assert body["tenant_id"] == "tenant-alpha"
+    assert body["principal"] == "dashboard_operator"
+    assert body["tenant_id"] == "default"
     assert "csrf_token" in body
     assert len(body["csrf_token"]) == 64
     assert headers.get("Cache-Control") == "no-store"
@@ -136,35 +140,110 @@ def test_login_establishes_session_and_cookie(dashboard_server):
     assert "HttpOnly" in headers["Set-Cookie"]
 
 
-# 3. GET /api/pm/v1/session with cookie returns 200, matching csrf_token and Cache-Control: no-store
+# 3. Caller-selected identity rejection: client cannot select principal or tenant
+def test_caller_selected_identity_rejected(dashboard_server):
+    base_url, _ = dashboard_server
+    # Attempting to forge principal
+    status, body, _ = http_request(
+        f"{base_url}/api/pm/v1/session/login",
+        method="POST",
+        data={"token": "test-secret-bearer-token", "principal": "chief_architect"},
+    )
+    assert status == 403
+    assert "cannot select principal" in body["error"]
+
+    # Attempting to forge tenant
+    status, body, _ = http_request(
+        f"{base_url}/api/pm/v1/session/login",
+        method="POST",
+        data={"token": "test-secret-bearer-token", "tenant_id": "other_tenant"},
+    )
+    assert status == 403
+    assert "cannot select tenant" in body["error"]
+
+
+# 4. Unconfigured auth fail-closed: reject login, mutations, and arbitrary Bearer tokens
+def test_unconfigured_auth_fails_closed():
+    port = get_free_port()
+    enterprise = ConsultingEnterprise(name="Unconfigured Enterprise")
+    server = DashboardServer(
+        enterprise=enterprise,
+        host="127.0.0.1",
+        port=port,
+        auth_token=None,
+    )
+    server.start_background()
+    time.sleep(0.3)
+    base_url = f"http://127.0.0.1:{port}"
+
+    try:
+        # Login must fail closed
+        status, body, _ = http_request(
+            f"{base_url}/api/pm/v1/session/login",
+            method="POST",
+            data={"token": "any_token"},
+        )
+        assert status == 401
+
+        # Arbitrary Bearer token must be rejected
+        status, body, _ = http_request(
+            f"{base_url}/api/pm/v1/session",
+            headers={"Authorization": "Bearer arbitrary_unconfigured_token"},
+        )
+        assert status == 401
+
+        # Mutation without auth must be rejected
+        status, body, _ = http_request(
+            f"{base_url}/api/pm/issues/create",
+            method="POST",
+            data={"project_key": "SESS", "title": "Unauthenticated task"},
+        )
+        assert status == 401
+    finally:
+        server.shutdown()
+
+
+# 5. Configured origin validation: reject cross-origin state changes
+def test_cross_origin_requests_rejected(dashboard_server):
+    base_url, _ = dashboard_server
+    # Cross-origin login attempt
+    status, body, _ = http_request(
+        f"{base_url}/api/pm/v1/session/login",
+        method="POST",
+        headers={"Origin": "https://malicious-attacker.com"},
+        data={"token": "test-secret-bearer-token"},
+    )
+    assert status == 403
+    assert "Untrusted origin" in body["error"]
+
+
+# 6. GET /api/pm/v1/session with cookie returns 200, matching csrf_token
 def test_get_session_with_valid_cookie(dashboard_server):
     base_url, _ = dashboard_server
-    # Log in first
     _, login_body, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
 
-    # Fetch session
     status, body, headers = http_request(
         f"{base_url}/api/pm/v1/session",
         headers={"Cookie": cookie},
     )
     assert status == 200
-    assert body["principal"] == "operator_jane"
+    assert body["principal"] == "dashboard_operator"
     assert body["csrf_token"] == login_body["csrf_token"]
     assert headers.get("Cache-Control") == "no-store"
 
 
-# 4. Mutation with cookie and valid X-CSRF-Token succeeds; server resolves actor
+# 7. Mutation with cookie and valid X-CSRF-Token succeeds; server resolves actor
 def test_mutation_with_cookie_and_csrf_succeeds(dashboard_server):
     base_url, _ = dashboard_server
     _, login_body, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
     csrf_token = login_body["csrf_token"]
@@ -186,13 +265,13 @@ def test_mutation_with_cookie_and_csrf_succeeds(dashboard_server):
     assert body["result"]["issue_key"].startswith("SESS-")
 
 
-# 5. Mutation with cookie and missing X-CSRF-Token returns 403 Forbidden
+# 8. Mutation with cookie and missing X-CSRF-Token returns 403 Forbidden
 def test_mutation_missing_csrf_returns_403(dashboard_server):
     base_url, _ = dashboard_server
     _, _, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
 
@@ -203,20 +282,20 @@ def test_mutation_missing_csrf_returns_403(dashboard_server):
     status, body, _ = http_request(
         f"{base_url}/api/pm/issues/create",
         method="POST",
-        headers={"Cookie": cookie},  # No X-CSRF-Token header
+        headers={"Cookie": cookie},
         data=create_payload,
     )
     assert status == 403
     assert "CSRF token missing" in body["error"]
 
 
-# 6. Mutation with cookie and invalid/tampered X-CSRF-Token returns 403 Forbidden
+# 9. Mutation with cookie and invalid/tampered X-CSRF-Token returns 403 Forbidden
 def test_mutation_invalid_csrf_returns_403(dashboard_server):
     base_url, _ = dashboard_server
     _, _, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
 
@@ -234,18 +313,17 @@ def test_mutation_invalid_csrf_returns_403(dashboard_server):
     assert "CSRF token missing or invalid" in body["error"]
 
 
-# 7. Caller impersonation attempt returns 403 Forbidden
+# 10. Caller impersonation attempt returns 403 Forbidden
 def test_caller_impersonation_returns_403(dashboard_server):
     base_url, _ = dashboard_server
     _, login_body, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "real_operator"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
     csrf_token = login_body["csrf_token"]
 
-    # First create an issue
     _, create_res, _ = http_request(
         f"{base_url}/api/pm/issues/create",
         method="POST",
@@ -254,11 +332,10 @@ def test_caller_impersonation_returns_403(dashboard_server):
     )
     issue_key = create_res["result"]["issue_key"]
 
-    # Transition attempting to claim a forged caller_principal
     transition_payload = {
         "issue_key": issue_key,
         "target_state": "REFINED",
-        "caller_principal": "forged_admin_founder",  # Mismatch against session!
+        "caller_principal": "forged_admin_founder",
     }
     status, body, _ = http_request(
         f"{base_url}/api/pm/transition",
@@ -270,21 +347,31 @@ def test_caller_impersonation_returns_403(dashboard_server):
     assert "Caller identity must match" in body["error"]
 
 
-# 8. Logout revokes session, clears cookie, subsequent requests 401
+# 11. Logout requires authentication and CSRF token; revokes session and clears cookie
 def test_logout_revokes_session_and_clears_cookie(dashboard_server):
     base_url, _ = dashboard_server
-    _, _, login_headers = http_request(
+    _, login_body, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
+    csrf_token = login_body["csrf_token"]
 
-    # Logout
-    status, body, logout_headers = http_request(
+    # Logout without CSRF token must fail with 403
+    status, body, _ = http_request(
         f"{base_url}/api/pm/v1/session/logout",
         method="POST",
         headers={"Cookie": cookie},
+    )
+    assert status == 403
+    assert "CSRF token missing" in body["error"]
+
+    # Logout with valid CSRF token succeeds
+    status, body, logout_headers = http_request(
+        f"{base_url}/api/pm/v1/session/logout",
+        method="POST",
+        headers={"Cookie": cookie, "X-CSRF-Token": csrf_token},
     )
     assert status == 200
     assert body["success"] is True
@@ -299,12 +386,11 @@ def test_logout_revokes_session_and_clears_cookie(dashboard_server):
     assert body["error"]["message"] == "Session unavailable"
 
 
-# 9. Bearer token authentication succeeds without requiring CSRF token
+# 12. Bearer token authentication succeeds without requiring CSRF token
 def test_bearer_token_authentication_succeeds_without_csrf(dashboard_server):
     base_url, _ = dashboard_server
     bearer_headers = {"Authorization": "Bearer test-secret-bearer-token"}
 
-    # Session read
     status, body, headers = http_request(
         f"{base_url}/api/pm/v1/session",
         headers=bearer_headers,
@@ -313,7 +399,6 @@ def test_bearer_token_authentication_succeeds_without_csrf(dashboard_server):
     assert "csrf_token" in body
     assert headers.get("Cache-Control") == "no-store"
 
-    # Mutation with Bearer token does NOT require X-CSRF-Token header
     create_payload = {
         "project_key": "SESS",
         "title": "Created via Bearer CLI token",
@@ -328,18 +413,17 @@ def test_bearer_token_authentication_succeeds_without_csrf(dashboard_server):
     assert body["success"] is True
 
 
-# 10. No silent fallback: invalid Bearer token with valid cookie returns 401 immediately
+# 13. No silent fallback: invalid Bearer token with valid cookie returns 401 immediately
 def test_invalid_bearer_does_not_fall_back_to_cookie(dashboard_server):
     base_url, _ = dashboard_server
     _, login_body, login_headers = http_request(
         f"{base_url}/api/pm/v1/session/login",
         method="POST",
-        data={"token": "test-secret-bearer-token", "principal": "operator_jane"},
+        data={"token": "test-secret-bearer-token"},
     )
     cookie = login_headers["Set-Cookie"].split(";")[0]
     csrf_token = login_body["csrf_token"]
 
-    # Present an INVALID Bearer token alongside the VALID cookie
     conflicting_headers = {
         "Authorization": "Bearer INVALID_EXPIRED_TOKEN_123",
         "Cookie": cookie,
@@ -349,18 +433,16 @@ def test_invalid_bearer_does_not_fall_back_to_cookie(dashboard_server):
         f"{base_url}/api/pm/v1/session",
         headers=conflicting_headers,
     )
-    # Must reject with 401 and NEVER fall back to inspecting cookie!
     assert status == 401
     assert "Invalid bearer token" in body["error"]["message"]
 
 
-# 11. Idle timeout: session older than 30 minutes without activity is rejected
+# 14. Idle timeout: session older than 30 minutes without activity is rejected
 def test_session_idle_timeout_rejection():
     db = get_pm_db()
     sm = SessionManager(db=db)
     secret, meta = sm.create_session("idle_operator")
 
-    # Manually backdate last_activity_at in DB by 31 minutes
     token_hash = meta.get("token_hash") or sm.get_session(secret)["token_hash"]
     conn = db._get_connection()
     try:
@@ -371,12 +453,11 @@ def test_session_idle_timeout_rejection():
     finally:
         conn.close()
 
-    # Querying the session now must return None due to idle timeout
     assert sm.get_session(secret) is None
 
 
-# 12. IAM revocation chaining
-def test_iam_revocation_chaining(tmp_path):
+# 15. IAM revocation chaining
+def test_iam_revocation_chaining():
     from mas.iam import MultiTenantIAM, StandardRole
     iam = MultiTenantIAM()
     iam.create_tenant("chain_tenant", "Chain Tenant")
@@ -387,18 +468,228 @@ def test_iam_revocation_chaining(tmp_path):
     sm = SessionManager(db=db, iam=iam)
     secret, _ = sm.create_session("chain_tenant:operator_1", tenant_id="chain_tenant", iam_token=iam_token)
 
-    # Initially valid
     sess = sm.get_session(secret)
     assert sess is not None
 
-    # Revoke IAM session
     iam.revoke_principal_sessions(iam_token, "operator_1")
-
-    # Linked cookie session must now be rejected
     assert sm.get_session(secret) is None
 
 
-# 13. Static /portal/ file serving serves files safely with nosniff and rejects traversal
+# 16. Cookie security flags: Secure issued for HTTPS/deployed host, with loopback development exception
+def test_cookie_security_flags(dashboard_server):
+    base_url, _ = dashboard_server
+    # Loopback request should not have Secure flag
+    _, _, loopback_headers = http_request(
+        f"{base_url}/api/pm/v1/session/login",
+        method="POST",
+        headers={"Host": "127.0.0.1"},
+        data={"token": "test-secret-bearer-token"},
+    )
+    cookie_str = loopback_headers["Set-Cookie"]
+    assert "HttpOnly" in cookie_str
+    assert "SameSite=Lax" in cookie_str
+    assert "Secure" not in cookie_str
+
+    # Deployed domain or HTTPS forwarded header must set Secure flag
+    _, _, deployed_headers = http_request(
+        f"{base_url}/api/pm/v1/session/login",
+        method="POST",
+        headers={"Host": "portal.mas.internal", "X-Forwarded-Proto": "https"},
+        data={"token": "test-secret-bearer-token"},
+    )
+    deployed_cookie = deployed_headers["Set-Cookie"]
+    assert "Secure" in deployed_cookie
+    assert "HttpOnly" in deployed_cookie
+
+
+# 17. Tenant server cookie bridge: public IAM validation, tenant_scope binding, and zero cross-tenant leakage
+def test_tenant_server_cookie_bridge_and_isolation(tmp_path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_a", "Tenant A")
+    iam.create_tenant("tenant_b", "Tenant B")
+    iam.register_principal("tenant_a", "alice", roles={StandardRole.TENANT_ADMIN.value})
+    iam.register_principal("tenant_b", "bob", roles={StandardRole.TENANT_ADMIN.value})
+
+    token_a = iam.issue_token("tenant_a", "alice")
+    token_b = iam.issue_token("tenant_b", "bob")
+
+    root_a = tmp_path / "tenant_a"
+    root_b = tmp_path / "tenant_b"
+    root_a.mkdir()
+    root_b.mkdir()
+
+    ent_a = ConsultingEnterprise(name="Enterprise A")
+    ent_b = ConsultingEnterprise(name="Enterprise B")
+
+    port_a = get_free_port()
+    port_b = get_free_port()
+
+    server_a = DashboardServer(ent_a, host="127.0.0.1", port=port_a, iam=iam, tenant_id="tenant_a", tenant_root=root_a)
+    server_b = DashboardServer(ent_b, host="127.0.0.1", port=port_b, iam=iam, tenant_id="tenant_b", tenant_root=root_b)
+    server_a.start_background()
+    server_b.start_background()
+    time.sleep(0.3)
+
+    try:
+        url_a = f"http://127.0.0.1:{port_a}"
+        url_b = f"http://127.0.0.1:{port_b}"
+
+        # 1. Login to Server A with Tenant A's token
+        status, body_a, headers_a = http_request(
+            f"{url_a}/api/pm/v1/session/login",
+            method="POST",
+            data={"token": token_a},
+        )
+        assert status == 200
+        assert body_a["principal"] == "tenant_a:alice"
+        assert body_a["tenant_id"] == "tenant_a"
+        cookie_a = headers_a["Set-Cookie"].split(";")[0]
+
+        # 2. Access Server A with cookie
+        status, sess_body, _ = http_request(
+            f"{url_a}/api/pm/v1/session",
+            headers={"Cookie": cookie_a},
+        )
+        assert status == 200
+        assert sess_body["principal"] == "tenant_a:alice"
+
+        # 3. Access Server A PM routes with cookie (tenant_scope succeeds)
+        status, proj_body, _ = http_request(
+            f"{url_a}/api/pm/projects",
+            headers={"Cookie": cookie_a},
+        )
+        assert status == 200
+        assert "projects" in proj_body
+
+        # 4. Attempt to use Tenant A's cookie on Server B -> REJECTED (Zero cross-tenant leakage)
+        status, err_body, _ = http_request(
+            f"{url_b}/api/pm/projects",
+            headers={"Cookie": cookie_a},
+        )
+        assert status in (401, 403)
+
+        # 5. Log in to Server B with Tenant B's token -> succeeds
+        status, body_b, headers_b = http_request(
+            f"{url_b}/api/pm/v1/session/login",
+            method="POST",
+            data={"token": token_b},
+        )
+        assert status == 200
+        assert body_b["principal"] == "tenant_b:bob"
+        cookie_b = headers_b["Set-Cookie"].split(";")[0]
+
+        # 6. Attempt to use Tenant B's cookie on Server A -> REJECTED
+        status, err_b_on_a, _ = http_request(
+            f"{url_a}/api/pm/projects",
+            headers={"Cookie": cookie_b},
+        )
+        assert status in (401, 403)
+
+    finally:
+        server_a.shutdown()
+        server_b.shutdown()
+
+
+# 18. Tenant IAM suspension and authority outage handling
+def test_tenant_iam_suspension_and_outage_handling(tmp_path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_x", "Tenant X")
+    iam.register_principal("tenant_x", "charlie", roles={StandardRole.TENANT_ADMIN.value})
+    token = iam.issue_token("tenant_x", "charlie")
+
+    root = tmp_path / "tenant_x"
+    root.mkdir()
+    ent = ConsultingEnterprise(name="Enterprise X")
+    port = get_free_port()
+
+    server = DashboardServer(ent, host="127.0.0.1", port=port, iam=iam, tenant_id="tenant_x", tenant_root=root)
+    server.start_background()
+    time.sleep(0.3)
+
+    try:
+        url = f"http://127.0.0.1:{port}"
+        # Login
+        status, body, headers = http_request(
+            f"{url}/api/pm/v1/session/login",
+            method="POST",
+            data={"token": token},
+        )
+        assert status == 200
+        cookie = headers["Set-Cookie"].split(";")[0]
+
+        # Suspend principal
+        iam.suspend_principal("tenant_x", "charlie")
+
+        # Request with cookie now fails
+        status, _, _ = http_request(
+            f"{url}/api/pm/projects",
+            headers={"Cookie": cookie},
+        )
+        assert status == 401 or status == 403
+    finally:
+        server.shutdown()
+
+
+# 19. Authenticated tenant portal and reachable unprivileged login page
+def test_tenant_portal_and_login_page(tmp_path):
+    from mas.iam import MultiTenantIAM, StandardRole
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant_portal", "Tenant Portal")
+    iam.register_principal("tenant_portal", "dan", roles={StandardRole.TENANT_ADMIN.value})
+    token = iam.issue_token("tenant_portal", "dan")
+
+    root = tmp_path / "tenant_portal"
+    root.mkdir()
+    ent = ConsultingEnterprise(name="Portal Enterprise")
+    port = get_free_port()
+
+    server = DashboardServer(ent, host="127.0.0.1", port=port, iam=iam, tenant_id="tenant_portal", tenant_root=root)
+    server.start_background()
+    time.sleep(0.3)
+
+    try:
+        url = f"http://127.0.0.1:{port}"
+
+        # 1. Reachable unprivileged login page
+        req = urllib.request.Request(f"{url}/portal/login.html")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            assert resp.status == 200
+            content = resp.read().decode("utf-8")
+            assert "Acinonyx" in content or "login" in content.lower()
+
+        # 2. Protected portal page unauthenticated -> redirects to /portal/login.html
+        class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+            def http_error_302(self, req, fp, code, msg, headers):
+                return fp
+
+        opener = urllib.request.build_opener(NoRedirectHandler)
+        try:
+            resp = opener.open(f"{url}/portal/scrum.html", timeout=5)
+            assert resp.code == 302 or resp.status == 302
+        except urllib.error.HTTPError as err:
+            assert err.code == 302
+
+        # 3. Log in with IAM token and access portal with cookie
+        status, body, headers = http_request(
+            f"{url}/api/pm/v1/session/login",
+            method="POST",
+            data={"token": token},
+        )
+        assert status == 200
+        cookie = headers["Set-Cookie"].split(";")[0]
+
+        req_auth = urllib.request.Request(f"{url}/portal/scrum.html", headers={"Cookie": cookie})
+        with urllib.request.urlopen(req_auth, timeout=5) as resp:
+            assert resp.status == 200
+            assert "text/html" in resp.headers.get("Content-Type", "")
+
+    finally:
+        server.shutdown()
+
+
+# 20. Static portal file serving with nosniff header and directory traversal prevention
 def test_portal_file_serving_and_traversal_prevention(dashboard_server):
     base_url, _ = dashboard_server
     req = urllib.request.Request(f"{base_url}/portal/scrum.html")
@@ -409,11 +700,9 @@ def test_portal_file_serving_and_traversal_prevention(dashboard_server):
         content = resp.read().decode("utf-8")
         assert "Mission Control" in content
 
-    # Traversal escape rejected
     traversal_req = urllib.request.Request(f"{base_url}/portal/../../mas/pm/models.py")
     try:
         with urllib.request.urlopen(traversal_req, timeout=5) as resp:
-            # Should not serve as a portal file
             assert resp.status in (403, 404)
     except urllib.error.HTTPError as err:
         assert err.code in (403, 404)

@@ -5,8 +5,9 @@ Provides:
 - Opaque IAM-backed cookie sessions (mas_session) with token digests stored in SQLite.
 - Session-bound CSRF token issuance and timing-safe validation.
 - Idle timeout (30 min) and hard TTL (8 hr) enforcement.
-- Chained revocation to underlying IAM sessions.
+- Chained revocation to underlying IAM sessions through public IAM validation.
 - No bearer secret leakage; CSRF token distinct from session secret.
+- Secure cookie issuance for deployed HTTPS with loopback development exception.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from http.cookies import SimpleCookie
 import hmac
 import json
 import logging
-from pathlib import Path
 import secrets
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -30,6 +30,15 @@ logger = logging.getLogger("mas.pm.session")
 DEFAULT_SESSION_TTL = 28800  # 8 hours
 DEFAULT_IDLE_TIMEOUT = 1800  # 30 minutes
 SESSION_COOKIE_NAME = "mas_session"
+
+ALL_PM_ACTIONS = [
+    "storage:read",
+    "storage:write",
+    "tools:execute",
+    "issues:create",
+    "issues:transition",
+    "verdicts:record",
+]
 
 
 class SessionManager:
@@ -52,9 +61,13 @@ class SessionManager:
         permitted_actions: Optional[List[str]] = None,
         ttl_seconds: int = DEFAULT_SESSION_TTL,
         iam_token: Optional[str] = None,
+        iam_session_id: Optional[str] = None,
+        iam_token_hash: Optional[str] = None,
+        iam_expires_at: Optional[float] = None,
+        context: Optional[Any] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        Creates a new opaque session.
+        Creates a new opaque session without storing raw IAM bearer tokens in SQLite.
         Returns:
             (session_secret, session_metadata)
             where session_secret is the plaintext bearer cookie,
@@ -67,18 +80,23 @@ class SessionManager:
         now_iso = datetime.now(timezone.utc).isoformat()
         expires_at = now + ttl_seconds
 
-        actions = permitted_actions or [
-            "storage:read",
-            "storage:write",
-            "tools:execute",
-            "issues:create",
-            "issues:transition",
-            "verdicts:record",
-        ]
+        if context is None and iam_token and self.iam is not None:
+            try:
+                context = self.iam.verify_token(iam_token)
+            except Exception:
+                pass
 
-        iam_token_hash = None
-        if iam_token:
+        if context is not None:
+            iam_session_id = getattr(context, "token_id", None) or iam_session_id
+            iam_expires_at = getattr(context, "expires_at", None) or iam_expires_at
+
+        if iam_token and not iam_token_hash:
             iam_token_hash = hashlib.sha256(iam_token.encode("utf-8")).hexdigest()
+
+        if context is not None and self.iam is not None and hasattr(self.iam, "get_permitted_actions"):
+            actions = self.iam.get_permitted_actions(context, ALL_PM_ACTIONS)
+        else:
+            actions = permitted_actions or ALL_PM_ACTIONS
 
         conn = self.db._get_connection()
         try:
@@ -87,8 +105,9 @@ class SessionManager:
                     """
                     INSERT INTO pm_sessions (
                         token_hash, csrf_token, principal, tenant_id, permitted_actions,
-                        iam_token_hash, created_at, last_activity_at, expires_at, is_revoked
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        iam_token_hash, iam_session_id, iam_expires_at, created_at,
+                        last_activity_at, expires_at, is_revoked
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
                     (
                         token_hash,
@@ -97,6 +116,8 @@ class SessionManager:
                         tenant_id,
                         json.dumps(actions),
                         iam_token_hash,
+                        iam_session_id,
+                        iam_expires_at,
                         now_iso,
                         now_iso,
                         expires_at,
@@ -122,7 +143,7 @@ class SessionManager:
         1. Token hash exists and is_revoked == 0.
         2. Absolute expiration has not passed.
         3. Idle timeout (30 min) has not elapsed.
-        4. Underlying IAM token (if linked) remains unrevoked.
+        4. Underlying IAM token/session validated through public IAM authority.
         """
         if not session_secret or not isinstance(session_secret, str):
             return None
@@ -145,7 +166,6 @@ class SessionManager:
             # Idle timeout verification
             last_act_str = row["last_activity_at"]
             try:
-                # ISO datetime to timestamp
                 dt = datetime.fromisoformat(last_act_str)
                 last_act = dt.timestamp()
             except Exception:
@@ -154,29 +174,42 @@ class SessionManager:
             if now - last_act > DEFAULT_IDLE_TIMEOUT:
                 return None
 
-            # IAM underlying session check
-            iam_token_hash = row["iam_token_hash"]
-            if iam_token_hash and self.iam is not None:
-                # If IAM has store or in-memory sessions, check if revoked
-                if hasattr(self.iam, "_store") and self.iam._store:
-                    session_rec = self.iam._store.get_session(iam_token_hash)
-                    if not session_rec or session_rec.get("revoked"):
-                        self.revoke_session(session_secret)
-                        return None
-                elif hasattr(self.iam, "_sessions"):
-                    # Check in-memory IAM sessions
-                    matched = False
-                    for sess in self.iam._sessions.values():
-                        if sess.get("token_hash") == iam_token_hash:
-                            matched = True
-                            if sess.get("revoked"):
-                                self.revoke_session(session_secret)
-                                return None
-                            break
-                    # If token was issued by IAM but not found or revoked
-                    if not matched and self.iam._sessions:
-                        self.revoke_session(session_secret)
-                        return None
+            # Public IAM-backed session check
+            tenant_context = None
+            iam_sid = row["iam_session_id"] if "iam_session_id" in row.keys() else None
+            iam_token_hash = row["iam_token_hash"] if "iam_token_hash" in row.keys() else None
+            iam_expires = row["iam_expires_at"] if "iam_expires_at" in row.keys() else None
+
+            if self.iam is not None and (iam_sid or iam_token_hash):
+                user_id = row["principal"].split(":", 1)[1] if ":" in row["principal"] else row["principal"]
+                tenant_id = row["tenant_id"]
+                try:
+                    if iam_sid and hasattr(self.iam, "validate_session"):
+                        tenant_context = self.iam.validate_session(
+                            tenant_id=tenant_id,
+                            user_id=user_id,
+                            session_id=iam_sid,
+                            token_hash=iam_token_hash,
+                            expires=iam_expires,
+                        )
+                    elif hasattr(self.iam, "_check_session") and iam_sid:
+                        self.iam._check_session(tenant_id, user_id, iam_sid, iam_expires, iam_token_hash)
+                    elif iam_token_hash and hasattr(self.iam, "_sessions"):
+                        matched = False
+                        for sess in self.iam._sessions.values():
+                            if sess.get("token_hash") == iam_token_hash:
+                                matched = True
+                                if sess.get("revoked"):
+                                    self.revoke_session(session_secret)
+                                    return None
+                                break
+                        if not matched and self.iam._sessions:
+                            self.revoke_session(session_secret)
+                            return None
+                except Exception as exc:
+                    logger.info("IAM session validation failed (%s), revoking session", exc)
+                    self.revoke_session(session_secret)
+                    return None
 
             # Touch activity timestamp
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -187,10 +220,13 @@ class SessionManager:
                 )
 
             actions = []
-            try:
-                actions = json.loads(row["permitted_actions"])
-            except Exception:
-                pass
+            if tenant_context is not None and hasattr(self.iam, "get_permitted_actions"):
+                actions = self.iam.get_permitted_actions(tenant_context, ALL_PM_ACTIONS)
+            else:
+                try:
+                    actions = json.loads(row["permitted_actions"])
+                except Exception:
+                    pass
 
             return {
                 "principal": row["principal"],
@@ -199,6 +235,7 @@ class SessionManager:
                 "csrf_token": row["csrf_token"],
                 "expires_at": row["expires_at"],
                 "token_hash": token_hash,
+                "tenant_context": tenant_context,
             }
         finally:
             conn.close()
@@ -219,23 +256,10 @@ class SessionManager:
         finally:
             conn.close()
 
-    def revoke_principal_sessions(self, principal: str) -> int:
-        """Revokes all sessions for a principal."""
-        conn = self.db._get_connection()
-        try:
-            with conn:
-                cur = conn.execute(
-                    "UPDATE pm_sessions SET is_revoked = 1 WHERE principal = ?",
-                    (principal,),
-                )
-                return cur.rowcount
-        finally:
-            conn.close()
-
     @staticmethod
-    def verify_csrf(session_data: Dict[str, Any], csrf_token_header: Optional[str]) -> bool:
-        """Timing-safe comparison between expected session csrf_token and header value."""
-        if not csrf_token_header or not session_data:
+    def verify_csrf(session_data: Optional[Dict[str, Any]], csrf_token_header: Optional[str]) -> bool:
+        """Timing-safe CSRF validation."""
+        if not session_data or not csrf_token_header:
             return False
         expected = session_data.get("csrf_token", "")
         if not expected:
@@ -244,6 +268,20 @@ class SessionManager:
 
 
 # --- Cookie Helpers ---
+
+def should_secure_cookie(host: str = "127.0.0.1", headers: Any = None) -> bool:
+    """
+    Returns True for deployed HTTPS cookies; False only for explicit loopback development.
+    """
+    if headers and hasattr(headers, "get"):
+        proto = headers.get("X-Forwarded-Proto", "").strip().lower()
+        if proto == "https":
+            return True
+    clean_host = host.split(":")[0].strip().lower()
+    if clean_host in ("127.0.0.1", "localhost", "::1"):
+        return False
+    return True
+
 
 def extract_session_cookie(headers: Any) -> Optional[str]:
     """Extracts mas_session cookie from request headers."""
@@ -260,13 +298,25 @@ def extract_session_cookie(headers: Any) -> Optional[str]:
     return None
 
 
-def make_session_cookie(session_secret: str, secure: bool = False, max_age: int = DEFAULT_SESSION_TTL) -> str:
+def make_session_cookie(
+    session_secret: str,
+    secure: Optional[bool] = None,
+    max_age: int = DEFAULT_SESSION_TTL,
+    host: str = "127.0.0.1",
+    headers: Any = None,
+) -> str:
     """Constructs Set-Cookie header string for mas_session."""
-    sec = "; Secure" if secure else ""
+    is_sec = secure if secure is not None else should_secure_cookie(host=host, headers=headers)
+    sec = "; Secure" if is_sec else ""
     return f"{SESSION_COOKIE_NAME}={session_secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{sec}"
 
 
-def make_clear_session_cookie(secure: bool = False) -> str:
+def make_clear_session_cookie(
+    secure: Optional[bool] = None,
+    host: str = "127.0.0.1",
+    headers: Any = None,
+) -> str:
     """Constructs Set-Cookie header string to clear mas_session."""
-    sec = "; Secure" if secure else ""
+    is_sec = secure if secure is not None else should_secure_cookie(host=host, headers=headers)
+    sec = "; Secure" if is_sec else ""
     return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{sec}"

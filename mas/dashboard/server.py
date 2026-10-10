@@ -48,6 +48,37 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return hmac.compare_digest(token, self.auth_token)
         return False
 
+    def _validate_origin(self) -> bool:
+        """
+        Validates Origin or Referer header against allowed_origins and loopback addresses.
+        Returns True if valid or if neither header is provided (non-browser requests).
+        Returns False if Origin or Referer is untrusted.
+        """
+        origin = self.headers.get("Origin")
+        if not origin:
+            referer = self.headers.get("Referer")
+            if referer:
+                parsed = urlparse(referer)
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+        if not origin:
+            return True
+        if origin == "null":
+            return False
+        # Check loopback
+        if (
+            origin.startswith("http://127.0.0.1:")
+            or origin == "http://127.0.0.1"
+            or origin.startswith("http://localhost:")
+            or origin == "http://localhost"
+            or origin.startswith("http://[::1]:")
+            or origin == "http://[::1]"
+        ):
+            return True
+        # Check allowed_origins
+        if origin in self.allowed_origins:
+            return True
+        return False
+
     def _resolve_session_or_auth(self):
         """
         Resolves authentication via Bearer token or opaque cookie session.
@@ -76,7 +107,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 if hmac.compare_digest(token, self.auth_token):
                     return ("BEARER", getattr(self, "auth_principal", "dashboard_operator"), getattr(self, "tenant_id", "default") or "default", ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"], None)
                 return ("UNAUTHORIZED", None, None, None, None)
-            return ("BEARER", getattr(self, "auth_principal", "dashboard_operator"), getattr(self, "tenant_id", "default") or "default", ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"], None)
+            # Never accept arbitrary Bearer token when auth is unconfigured
+            return ("UNAUTHORIZED", None, None, None, None)
 
         # No Authorization header - inspect mas_session cookie
         from mas.pm.session import extract_session_cookie, SessionManager
@@ -110,7 +142,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(response_bytes)
 
     def _authenticate_pm_mutation(self):
-        """Authenticates a PM mutation request. Validates CSRF for cookie sessions."""
+        """Authenticates a PM mutation request. Validates CSRF for cookie sessions. Fails closed when unconfigured."""
         mode, principal, tenant_id, actions, session_data = self._resolve_session_or_auth()
         if mode == "UNAUTHORIZED":
             self._send_json({"error": "Unauthorized: invalid bearer token"}, status=401)
@@ -126,25 +158,25 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         elif mode == "BEARER":
             return True, principal, session_data
         else:
-            if self.auth_token:
-                self._send_json({"error": "Unauthorized: authentication required"}, status=401)
-                return False, None, None
-            return True, self.auth_principal, None
+            # Anonymous / unconfigured: fail closed!
+            self._send_json({"error": "Unauthorized: authentication required"}, status=401)
+            return False, None, None
 
     def _apply_cors_headers(self) -> None:
         """Apply restricted CORS headers, denying permissive wildcards."""
         origin = self.headers.get("Origin")
-        if origin:
+        if origin and origin != "null":
             if (
                 origin.startswith("http://127.0.0.1:")
+                or origin == "http://127.0.0.1"
                 or origin.startswith("http://localhost:")
+                or origin == "http://localhost"
+                or origin.startswith("http://[::1]:")
+                or origin == "http://[::1]"
                 or origin in self.allowed_origins
             ):
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Credentials", "true")
-                self.send_header("Vary", "Origin")
-            elif origin == "null":
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Vary", "Origin")
 
     def _send_json(self, data: Any, status: int = 200) -> None:
@@ -370,9 +402,16 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 return
 
         elif path in ("/api/pm/v1/projects", "/api/pm/v1/projects/"):
-            from mas.pm.discovery import get_project_discovery
+            from mas.tenancy import current_binding
+            from mas.pm.discovery import ProjectRegistryDiscovery, get_project_discovery
             try:
-                disc = get_project_discovery()
+                binding = current_binding()
+                if binding and hasattr(binding, "database"):
+                    disc = ProjectRegistryDiscovery(db=binding.database)
+                elif hasattr(self, "discovery") and self.discovery:
+                    disc = self.discovery
+                else:
+                    disc = get_project_discovery()
                 self._send_json(disc.get_projects_with_freshness())
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
@@ -482,6 +521,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "Endpoint not found")
 
     def do_POST(self):
+        if not self._validate_origin():
+            self._send_json({"error": "Forbidden: Untrusted origin"}, status=403)
+            return
+
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -558,8 +601,18 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     return
                 try:
                     identity = iam.verify_token(token)
-                    principal = f"{identity.tenant_id}:{identity.principal_id}"
-                    tenant_id = identity.tenant_id
+                    verified_principal = f"{identity.tenant_id}:{identity.principal_id}"
+                    verified_tenant = identity.tenant_id
+                    claimed_principal = payload.get("principal")
+                    claimed_tenant = payload.get("tenant_id")
+                    if claimed_principal and claimed_principal != verified_principal and claimed_principal != identity.principal_id:
+                        self._send_session_response({"error": "Forbidden: claimed principal does not match IAM credential"}, status=403)
+                        return
+                    if claimed_tenant and claimed_tenant != verified_tenant:
+                        self._send_session_response({"error": "Forbidden: claimed tenant does not match IAM credential"}, status=403)
+                        return
+                    principal = verified_principal
+                    tenant_id = verified_tenant
                     iam_token = token
                 except Exception as exc:
                     self._send_session_response({"error": f"Invalid IAM token: {exc}"}, status=401)
@@ -569,11 +622,21 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 if not token or not hmac.compare_digest(token, self.auth_token):
                     self._send_session_response({"error": "Invalid auth token"}, status=401)
                     return
-                principal = payload.get("principal") or self.auth_principal or "dashboard_operator"
-                tenant_id = payload.get("tenant_id") or getattr(self, "tenant_id", "default") or "default"
+                expected_principal = getattr(self, "auth_principal", "dashboard_operator")
+                expected_tenant = getattr(self, "tenant_id", "default") or "default"
+                claimed_principal = payload.get("principal")
+                claimed_tenant = payload.get("tenant_id")
+                if claimed_principal and claimed_principal != expected_principal:
+                    self._send_session_response({"error": "Forbidden: client cannot select principal"}, status=403)
+                    return
+                if claimed_tenant and claimed_tenant != expected_tenant:
+                    self._send_session_response({"error": "Forbidden: client cannot select tenant"}, status=403)
+                    return
+                principal = expected_principal
+                tenant_id = expected_tenant
             else:
-                principal = payload.get("principal") or self.auth_principal or "dashboard_operator"
-                tenant_id = payload.get("tenant_id") or getattr(self, "tenant_id", "default") or "default"
+                self._send_session_response({"error": "Authentication unconfigured on server"}, status=401)
+                return
 
             from mas.pm.session import SessionManager, make_session_cookie
             sm = getattr(self, "session_manager", None)
@@ -583,8 +646,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 principal=principal,
                 tenant_id=tenant_id,
                 iam_token=iam_token,
+                context=identity if iam else None,
             )
-            cookie_header = make_session_cookie(session_secret, secure=False)
+            host = self.headers.get("Host", self.server.server_address[0])
+            cookie_header = make_session_cookie(session_secret, host=host, headers=self.headers)
             self._send_session_response({
                 "success": True,
                 "principal": session_meta["principal"],
@@ -595,12 +660,22 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
 
         elif path in ("/api/pm/v1/session/logout", "/api/pm/v1/auth/logout"):
+            mode, principal, tenant_id, actions, session_data = self._resolve_session_or_auth()
+            if mode in ("UNAUTHORIZED", "ANONYMOUS", "EXPIRED_COOKIE"):
+                self._send_session_response({"error": "Unauthorized: authentication required for logout"}, status=401)
+                return
+            if mode == "COOKIE":
+                if not self._check_csrf(session_data):
+                    self._send_session_response({"error": "Forbidden: CSRF token missing or invalid"}, status=403)
+                    return
+
             from mas.pm.session import extract_session_cookie, make_clear_session_cookie, SessionManager
             session_secret = extract_session_cookie(self.headers)
             sm = getattr(self, "session_manager", None)
             if sm and session_secret:
                 sm.revoke_session(session_secret)
-            clear_cookie = make_clear_session_cookie(secure=False)
+            host = self.headers.get("Host", self.server.server_address[0])
+            clear_cookie = make_clear_session_cookie(host=host, headers=self.headers)
             self._send_session_response({"success": True}, status=200, cookie_header=clear_cookie)
             return
 
@@ -824,6 +899,26 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
 
     def _tenant_request(self, method):
         path = urlparse(self.path).path
+
+        # 1. Non-privileged public login page:
+        if method == "GET" and path in ("/portal/login.html", "/portal/login", "/login.html"):
+            repo_root = Path(__file__).resolve().parents[2]
+            login_file = repo_root / "portal" / "login.html"
+            if login_file.is_file():
+                content = login_file.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._apply_cors_headers()
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            else:
+                self.send_error(404, "login.html not found")
+                return
+
+        # 2. Session endpoints (unauthenticated query or login/logout):
         if method == "GET" and path in ("/api/pm/v1/session", "/api/pm/v1/session/"):
             super().do_GET()
             return
@@ -833,20 +928,55 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
 
         from mas.tenancy import tenant_scope
         auth = self.headers.get("Authorization", "")
-        token = auth[7:].strip() if auth.startswith("Bearer ") else None
-        if not auth:
+        token = None
+
+        if auth:
+            if not auth.startswith("Bearer "):
+                self._send_json({"error": "Unauthorized: invalid bearer token"}, status=401)
+                return
+            token = auth[7:].strip()
+            # If Bearer token is provided, do NOT fall back to cookie
+        else:
             from mas.pm.session import extract_session_cookie, SessionManager
             cookie_val = extract_session_cookie(self.headers)
             if cookie_val:
                 sm = getattr(self, "session_manager", None) or SessionManager(iam=self.iam)
-                sess = sm.get_session(cookie_val)
+                try:
+                    sess = sm.get_session(cookie_val)
+                except (OSError, sqlite3.Error):
+                    self._send_json({"error": "Identity authority unavailable"}, status=503)
+                    return
                 if sess and sess.get("tenant_id") == self.tenant_id:
                     if method == "POST":
                         csrf_hdr = self.headers.get("X-CSRF-Token")
                         if not SessionManager.verify_csrf(sess, csrf_hdr):
                             self._send_json({"error": "Forbidden: CSRF token missing or invalid"}, status=403)
                             return
-                    token = sess.get("iam_token")
+                    token = sess.get("tenant_context")
+                elif sess:
+                    self._send_json({"error": "Forbidden: session does not match tenant"}, status=403)
+                    return
+                else:
+                    if path.startswith("/portal/") or path in ("/portal", "/scrum", "/scrum.html"):
+                        self.send_response(302)
+                        self.send_header("Location", "/portal/login.html")
+                        self.end_headers()
+                        return
+                    self._send_json({"error": "Unauthorized: session missing or expired"}, status=401)
+                    return
+            else:
+                if path.startswith("/portal/") or path in ("/portal", "/scrum", "/scrum.html"):
+                    self.send_response(302)
+                    self.send_header("Location", "/portal/login.html")
+                    self.end_headers()
+                    return
+                self._send_json({"error": "Missing, invalid or unauthorized tenant credential"}, status=403)
+                return
+
+        if not token:
+            self._send_json({"error": "Missing, invalid or unauthorized tenant credential"}, status=403)
+            return
+
         try:
             with tenant_scope(self.iam, token, self.tenant_id, self.tenant_root) as binding:
                 path = urlparse(self.path).path
@@ -860,15 +990,24 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
                         if not isinstance(payload, dict):
                             raise ValueError("Expected a JSON object")
                         if path == "/api/identity/sessions/revoke":
-                            result = self.iam.revoke_session(token, payload.get("session_id", binding.identity.token_id))
+                            result = self.iam.revoke_session(token if isinstance(token, str) else None, payload.get("session_id", binding.identity.token_id))
                         else:
-                            result = self.iam.revoke_principal_sessions(token, payload.get("user_id"))
+                            result = self.iam.revoke_principal_sessions(token if isinstance(token, str) else None, payload.get("user_id"))
                         self._send_json({"success": True, "result": result})
                     except (ValueError, TypeError):
                         self._send_json({"error": "Malformed revocation request"}, status=400)
                     return
+
                 action = "storage:read" if method == "GET" else "storage:write"
                 binding.require(action)
+
+                if path.startswith("/portal/") or path in ("/portal", "/scrum", "/scrum.html"):
+                    if path == "/portal/snapshot.json":
+                        self._send_json({"error": "Endpoint lacks tenant isolation"}, status=403)
+                        return
+                    super().do_GET()
+                    return
+
                 if not path.startswith("/api/pm/"):
                     self._send_json({"error": "Endpoint lacks tenant isolation"}, status=403)
                     return
@@ -887,6 +1026,9 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
         self._tenant_request("GET")
 
     def do_POST(self):
+        if not self._validate_origin():
+            self._send_json({"error": "Forbidden: Untrusted origin"}, status=403)
+            return
         self._tenant_request("POST")
 
 
@@ -913,10 +1055,23 @@ class DashboardServer:
         self.allowed_origins = set(allowed_origins or [])
         self.static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-        # Each server owns its credentials, enterprise and cached artifacts.
-        # Class-wide mutation leaked state and tokens across concurrent servers.
+        # Each server owns its credentials, enterprise, database and discovery.
         from mas.pm.session import SessionManager
-        session_mgr = SessionManager(iam=iam)
+        from mas.pm.db import PMDatabase
+        from mas.pm.discovery import ProjectRegistryDiscovery
+
+        if tenant_root is not None:
+            db_path = Path(tenant_root).resolve() / "pm.db"
+            server_db = PMDatabase(db_path)
+        else:
+            server_db = PMDatabase()
+
+        session_mgr = SessionManager(db=server_db, iam=iam)
+        discovery = ProjectRegistryDiscovery(db=server_db)
+        self.db = server_db
+        self.session_manager = session_mgr
+        self.discovery = discovery
+
         handler = type("BoundDashboardRequestHandler", (TenantDashboardRequestHandler if iam is not None else DashboardRequestHandler,), {
             "iam": iam, "tenant_id": tenant_id,
             "tenant_root": Path(tenant_root).resolve() if tenant_root is not None else None,
@@ -929,6 +1084,8 @@ class DashboardServer:
             "latest_artifacts": None,
             "cio_audit_report": None,
             "session_manager": session_mgr,
+            "discovery": discovery,
+            "pm_db": server_db,
         })
 
         self.server = ThreadingHTTPServer((self.host, self.port), handler)

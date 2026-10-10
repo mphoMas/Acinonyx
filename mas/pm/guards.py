@@ -137,7 +137,7 @@ def validate_commit_scope(issue: Issue, commit_sha: str, workspace_root: Optiona
     clean_sha = commit_sha.strip()
     try:
         res = subprocess.run(
-            ["git", "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", clean_sha],
+            ["git", "diff-tree", "-m", "--root", "--no-commit-id", "--name-only", "-r", clean_sha],
             cwd=str(root),
             capture_output=True,
             text=True,
