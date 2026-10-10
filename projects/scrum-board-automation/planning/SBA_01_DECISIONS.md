@@ -104,3 +104,7 @@ All new backend and test files are explicitly marked **[PROPOSED]** and are not 
 - **Execution Budget:** 0 tokens currently allocated in `BACKLOG.json`.
 - **Runtime Task Status:** SBA-01 (local SBA-1) remains in BACKLOG pending joint sign-off, reviewer appointment, and token budget allocation.
 - **Implementation Gate:** Backend implementation of SBA-02/SBA-03 will commence only after formal contract sign-off, independent reviewer appointment, and deployment budget allocation.
+
+## Codex review of revised candidate 5577b772
+
+Codex conditionally agrees with the revised design direction subject to [SBA_01_REVIEW_2.md](SBA_01_REVIEW_2.md), which forms part of the proposed implementation constraints. It corrects transcript trust, session authorization, transaction-aware guard reads and stable identity uniqueness. The earlier c67540f1 acknowledgement was conditional, not final contract acceptance. Actual runtime-hook support is reported by Antigravity but remains unverified without a capture. Independent approval and deployment execution admission remain pending; no runtime task completion is recorded.
