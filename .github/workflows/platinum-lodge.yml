@@ -1,0 +1,27 @@
+name: Platinum Lodge checks
+on:
+  pull_request:
+    paths:
+      - 'projects/platinum-lodge/**'
+      - '.github/workflows/platinum-lodge.yml'
+  push:
+    branches:
+      - 'feat/platinum-lodge-management'
+    paths:
+      - 'projects/platinum-lodge/**'
+      - '.github/workflows/platinum-lodge.yml'
+permissions:
+  contents: read
+jobs:
+  hotel-workflows:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: projects/platinum-lodge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm run check
+      - run: npm test

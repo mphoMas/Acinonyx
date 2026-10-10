@@ -1,0 +1,17 @@
+{
+  "name": "platinum-lodge-management",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Platinum Lodge hotel operations with persistent SQLite storage",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check server.js && node --check public/app.js",
+    "backup": "node scripts/backup.mjs"
+  }
+}

@@ -1,0 +1,14 @@
+import {DatabaseSync,backup} from 'node:sqlite';
+import {mkdirSync,cpSync,existsSync,writeFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+const source=resolve(process.env.DATA_DIR||'data');
+if(!existsSync(join(source,'hotel.sqlite')))throw Error('No hotel database exists. Create a hotel account first.');
+const destination=resolve(process.argv[2]||join('backups',new Date().toISOString().replace(/[:.]/g,'-')));
+mkdirSync(destination,{recursive:true,mode:0o700});
+const db=new DatabaseSync(join(source,'hotel.sqlite'),{readOnly:true});
+await backup(db,join(destination,'hotel.sqlite'));db.close();
+if(existsSync(join(source,'uploads')))cpSync(join(source,'uploads'),join(destination,'uploads'),{recursive:true});
+const verify=new DatabaseSync(join(destination,'hotel.sqlite'),{readOnly:true});
+if(verify.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw Error('Backup integrity check failed.');verify.close();
+writeFileSync(join(destination,'backup-info.json'),JSON.stringify({created:new Date().toISOString(),format:1},null,2));
+console.log('Verified backup saved to '+destination);

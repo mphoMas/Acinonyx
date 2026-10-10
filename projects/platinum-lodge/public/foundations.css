@@ -1,0 +1,88 @@
+/* Operational design foundations. Keep hospitality identity; prioritize staff tasks. */
+:root {
+  --muted: #56675c;
+  --red: #943e2d;
+  --focus: #173b30;
+  --text-body: 14px;
+  --text-supporting: 12px;
+  --control-height: 44px;
+}
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  transform: translateY(-180%);
+  z-index: 200;
+  background: var(--green-dark);
+  color: white;
+  padding: 12px 18px;
+  border-radius: 6px;
+}
+.skip-link:focus { transform: none; }
+#workspace:focus { outline: none; }
+.nav-label, .brand .eyebrow, .eyebrow { font-size: 11px; color: var(--muted); }
+.nav button { color: var(--muted); min-height: var(--control-height); }
+.breadcrumb, .heading p, .panel-head p, .metric-top, .metric-bottom,
+.legend small, .room-type, .room .room-type, .room-bottom, .rooms-summary,
+.activity-item p, .activity-item small, .event-preview p, .gallery-card p,
+.footer-note, .inline-note, .notice, .demo-banner, .calendar-list p,
+.calendar-list small, .location, .user-card small, .welcome-foot,
+.welcome-form .divider { font-size: var(--text-supporting); }
+.breadcrumb, .metric-bottom, .footer-note, .metric-value small { color: var(--muted); }
+.button, .button.small, .link, .text-button, .tabs button, .lang,
+.filters input, .filters select, .search input, .field label,
+.field input, .field select, .field textarea, .settings-list label,
+.event-card p, .event-card .detail, .folio-header p { font-size: var(--text-body); }
+.button, .button.small, .link, .text-button, .tabs button,
+.lang, .filters input, .filters select, .field input, .field select,
+.field textarea, .user-card button, .mobile-menu, .modal-close,
+.demo-banner button { min-height: var(--control-height); }
+.user-card button, .mobile-menu, .modal-close { min-width: var(--control-height); }
+.tabs { flex-wrap: wrap; gap: 8px 20px; }
+th { font-size: var(--text-supporting); color: var(--muted); }
+td, td strong { font-size: var(--text-body); }
+td small, .field small, .badge, .tabs span { font-size: var(--text-supporting); }
+.badge { color: #36582f; }
+.badge.amber { color: #7b571d; }
+.badge.blue { color: #345d80; }
+.badge.red { color: var(--red); }
+.badge.gray { color: #52604f; }
+.notice { color: #705c2f; }
+.demo-banner { color: #45582e; }
+.form-error { color: var(--red); }
+.room .room-guest { height: auto; min-height: 20px; font-size: var(--text-body); }
+.heading > div, .panel-head > div { min-width: 0; }
+.dashboard-grid > *, .two-columns > *, .three-columns > *, .metrics > * { min-width: 0; }
+.heading, .panel-head { flex-wrap: wrap; }
+.navigation-close { display: none; }
+@media (max-width: 700px) {
+  .heading p, .demo-banner { font-size: var(--text-supporting); }
+  .button { white-space: normal; }
+  .room-grid { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+  .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics { grid-template-columns: minmax(0, 1fr); }
+  .navigation-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    min-width: var(--control-height);
+    min-height: var(--control-height);
+    font-size: 26px;
+  }
+  .sidebar { overflow-y: auto; }
+  .form-footer { flex-wrap: wrap; }
+  #toast { left: 16px; right: 16px; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media print { .skip-link { display: none !important; } }
