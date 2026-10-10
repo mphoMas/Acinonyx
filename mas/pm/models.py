@@ -179,3 +179,35 @@ class CFDSnapshot(BaseModel):
     verification_count: int
     judicial_review_count: int
     done_count: int
+
+
+class ProjectSource(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    project_id: str
+    repository_id: str
+    repository_owner: str
+    repository_name: str
+    configured_branch: str
+    root_path: str
+    planning_path: str
+    status: str = "active"  # "active" or "inactive"
+    source_revision: Optional[str] = None
+    last_successful_sync: Optional[str] = None
+    last_error: Optional[str] = None
+    is_stale: bool = False
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class TaskMapping(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    project_id: str
+    planning_reference: str
+    task_id: str
+    local_issue_id: str
+    local_issue_key: str
+    created_at: str = ""
+    updated_at: str = ""
+

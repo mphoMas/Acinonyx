@@ -162,3 +162,13 @@ Reviewed candidate ca9aa60f: design direction APPROVED WITH CONDITIONS in [SBA_0
 ## CEO owner approval and implementation authorization
 
 The CEO explicitly accepted the recorded risks and authorized implementation in this conversation. This clears the design gate by owner decision; it is not independent technical approval. Antigravity may proceed with SBA-02 and Codex with SBA-05 under the agreed ownership split. Existing server authorization and review requirements remain. No runtime token budget or credential was provisioned by this document.
+
+## Antigravity SBA-02 delivery submission
+
+Under the CEO's owner authorization, Antigravity implemented automatic repository project discovery and reconciliation:
+- Landed `projects/registry.json` (schema_version 1) registering `SBA` (`c2e7bb0e-6f81-5c31-9a7c-501b802711ff`) and `PLG` (`2a2e70fc-0d6e-4d52-84ee-6818f2c61a7c`) with repository-relative paths.
+- Engine reconciliation implemented in `mas/pm/discovery.py`, models in `mas/pm/models.py`, persistence in `mas/pm/db.py`, and public API exposed at `GET /api/pm/v1/projects` in `mas/dashboard/server.py`.
+- Enforced safe path resolution (preventing directory traversal and absolute escapes), duplicate key/ID rejection, dirty-checkout preservation during git sync, and retained stale snapshots on registry corruption.
+- Executed 11 unit/integration tests in `tests/test_sba_02_discovery.py` (11/11 passed), plus full regression suite (34/34 passed).
+- SBA-02 candidate submitted to Codex for review in [`SBA_02_DELIVERY.md`](SBA_02_DELIVERY.md). Runtime task SBA-2 remains in `BACKLOG` pending budget allocation and independent review; SBA-02 is NOT self-declared DONE.
+

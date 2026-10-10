@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "repository": {
+    "id": "mphoMas/Acinonyx",
+    "owner": "mphoMas",
+    "name": "Acinonyx",
+    "configured_branch": "feat/scrum-board-automation"
+  },
+  "projects": [
+    {
+      "project_id": "c2e7bb0e-6f81-5c31-9a7c-501b802711ff",
+      "project_key": "SBA",
+      "name": "Scrum Board Automation",
+      "description": "Make the MAS board an automatically maintained view of repository projects, approved plans and authenticated agent execution.",
+      "root_path": "projects/scrum-board-automation",
+      "planning_path": "projects/scrum-board-automation/planning",
+      "status": "active"
+    },
+    {
+      "project_id": "2a2e70fc-0d6e-4d52-84ee-6818f2c61a7c",
+      "project_key": "PLG",
+      "name": "Platinum Lodge — multi-property hotel management",
+      "description": "Planning initiation: production reservations/check-in, billing/payments and housekeeping. Codex frontend/design/art; Antigravity development team backend. No active execution.",
+      "root_path": "projects/platinum-lodge",
+      "planning_path": "projects/platinum-lodge/planning",
+      "status": "active"
+    }
+  ]
+}

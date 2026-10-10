@@ -220,6 +220,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "mode": "Live Model Gateway (OpenAI Compatible)",
             })
 
+        elif path in ("/api/pm/v1/projects", "/api/pm/v1/projects/"):
+            from mas.pm.discovery import get_project_discovery
+            try:
+                disc = get_project_discovery()
+                self._send_json(disc.get_projects_with_freshness())
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+
         elif path.startswith("/api/pm/projects"):
             from mas.pm.tools import get_pm_db
             try:
@@ -713,6 +721,16 @@ def run_dashboard(
                     previous = current
 
         threading.Thread(target=_watch_git_queue, name="mas-git-queue-sync", daemon=True).start()
+
+    # Synchronize repository project discovery (SBA-02)
+    from mas.pm.discovery import get_project_discovery
+    try:
+        discovery = get_project_discovery()
+        disc_res = discovery.sync()
+        print(f"📁 MAS-PM Project Discovery: {disc_res.get('total_registered', 0)} projects registered ({disc_res.get('status')})")
+        discovery.start_discovery_daemon(interval_seconds=30)
+    except Exception as exc:
+        print(f"⚠️  MAS-PM Project Discovery notice: {exc}")
 
     ent = enterprise or ConsultingEnterprise()
 

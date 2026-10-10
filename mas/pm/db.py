@@ -24,8 +24,10 @@ from mas.pm.models import (
     IssueType,
     PriorityLevel,
     Project,
+    ProjectSource,
     Sprint,
     SprintState,
+    TaskMapping,
 )
 
 DEFAULT_DB_PATH = Path(os.environ.get("MAS_PM_DB_PATH", "mas_pm.db"))
@@ -210,6 +212,45 @@ class PMDatabase:
                 );
                 """)
 
+                # SBA-02: Repository project sources
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_project_sources (
+                    project_id TEXT PRIMARY KEY,
+                    repository_id TEXT NOT NULL,
+                    repository_owner TEXT NOT NULL,
+                    repository_name TEXT NOT NULL,
+                    configured_branch TEXT NOT NULL,
+                    root_path TEXT NOT NULL,
+                    planning_path TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    source_revision TEXT,
+                    last_successful_sync TIMESTAMP,
+                    last_error TEXT,
+                    is_stale INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(project_id) REFERENCES pm_projects(id) ON DELETE CASCADE
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_project_sources_status ON pm_project_sources(status);")
+
+                # SBA-01 / SBA-02: Deployment task mappings
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_task_mappings (
+                    project_id TEXT NOT NULL REFERENCES pm_projects(id) ON DELETE CASCADE,
+                    planning_reference TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    local_issue_id TEXT NOT NULL REFERENCES pm_issues(id) ON DELETE CASCADE,
+                    local_issue_key TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT pk_task_mapping PRIMARY KEY (project_id, planning_reference),
+                    CONSTRAINT uq_task_mapping_task_id UNIQUE (project_id, task_id),
+                    CONSTRAINT uq_task_mapping_local_issue UNIQUE (project_id, local_issue_id),
+                    CONSTRAINT uq_task_mapping_local_key UNIQUE (project_id, local_issue_key)
+                );
+                """)
+
                 # Migrations for existing tables
                 try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN priority TEXT DEFAULT 'MEDIUM';")
@@ -364,6 +405,265 @@ class PMDatabase:
             ]
         finally:
             conn.close()
+
+    def update_project(
+        self,
+        project_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        token_budget: Optional[int] = None,
+    ) -> Optional[Project]:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            updates = ["updated_at = ?"]
+            params: list[Any] = [now]
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
+            if token_budget is not None:
+                updates.append("token_budget = ?")
+                params.append(token_budget)
+            params.append(project_id)
+            with conn:
+                conn.execute(
+                    f"UPDATE pm_projects SET {', '.join(updates)} WHERE id = ?",
+                    params,
+                )
+            return self.get_project(project_id)
+        finally:
+            conn.close()
+
+    # --- Project Source Operations (SBA-02) ---
+
+    def upsert_project_source(self, source: ProjectSource) -> ProjectSource:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO pm_project_sources (
+                        project_id, repository_id, repository_owner, repository_name, configured_branch,
+                        root_path, planning_path, status, source_revision, last_successful_sync,
+                        last_error, is_stale, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(project_id) DO UPDATE SET
+                        repository_id = excluded.repository_id,
+                        repository_owner = excluded.repository_owner,
+                        repository_name = excluded.repository_name,
+                        configured_branch = excluded.configured_branch,
+                        root_path = excluded.root_path,
+                        planning_path = excluded.planning_path,
+                        status = excluded.status,
+                        source_revision = excluded.source_revision,
+                        last_successful_sync = excluded.last_successful_sync,
+                        last_error = excluded.last_error,
+                        is_stale = excluded.is_stale,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        source.project_id,
+                        source.repository_id,
+                        source.repository_owner,
+                        source.repository_name,
+                        source.configured_branch,
+                        source.root_path,
+                        source.planning_path,
+                        source.status,
+                        source.source_revision,
+                        source.last_successful_sync or now,
+                        source.last_error,
+                        1 if source.is_stale else 0,
+                        source.created_at or now,
+                        now,
+                    ),
+                )
+            source.updated_at = now
+            return source
+        finally:
+            conn.close()
+
+    def get_project_source(self, project_id: str) -> Optional[ProjectSource]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_project_sources WHERE project_id = ?", (project_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return ProjectSource(
+                project_id=row["project_id"],
+                repository_id=row["repository_id"],
+                repository_owner=row["repository_owner"],
+                repository_name=row["repository_name"],
+                configured_branch=row["configured_branch"],
+                root_path=row["root_path"],
+                planning_path=row["planning_path"],
+                status=row["status"],
+                source_revision=row["source_revision"],
+                last_successful_sync=str(row["last_successful_sync"]) if row["last_successful_sync"] else None,
+                last_error=row["last_error"],
+                is_stale=bool(row["is_stale"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+        finally:
+            conn.close()
+
+    def list_project_sources(self) -> List[ProjectSource]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM pm_project_sources ORDER BY created_at ASC")
+            rows = cur.fetchall()
+            return [
+                ProjectSource(
+                    project_id=row["project_id"],
+                    repository_id=row["repository_id"],
+                    repository_owner=row["repository_owner"],
+                    repository_name=row["repository_name"],
+                    configured_branch=row["configured_branch"],
+                    root_path=row["root_path"],
+                    planning_path=row["planning_path"],
+                    status=row["status"],
+                    source_revision=row["source_revision"],
+                    last_successful_sync=str(row["last_successful_sync"]) if row["last_successful_sync"] else None,
+                    last_error=row["last_error"],
+                    is_stale=bool(row["is_stale"]),
+                    created_at=str(row["created_at"]),
+                    updated_at=str(row["updated_at"]),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def mark_project_source_inactive(self, project_id: str) -> None:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    "UPDATE pm_project_sources SET status = 'inactive', updated_at = ? WHERE project_id = ?",
+                    (now, project_id),
+                )
+        finally:
+            conn.close()
+
+    def update_project_source_error(self, project_id: str, error: str, is_stale: bool = True) -> None:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    "UPDATE pm_project_sources SET last_error = ?, is_stale = ?, updated_at = ? WHERE project_id = ?",
+                    (error, 1 if is_stale else 0, now, project_id),
+                )
+        finally:
+            conn.close()
+
+    # --- Task Mapping Operations (SBA-01 / SBA-02) ---
+
+    def upsert_task_mapping(self, mapping: TaskMapping) -> TaskMapping:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO pm_task_mappings (
+                        project_id, planning_reference, task_id, local_issue_id, local_issue_key, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(project_id, planning_reference) DO UPDATE SET
+                        task_id = excluded.task_id,
+                        local_issue_id = excluded.local_issue_id,
+                        local_issue_key = excluded.local_issue_key,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        mapping.project_id,
+                        mapping.planning_reference,
+                        mapping.task_id,
+                        mapping.local_issue_id,
+                        mapping.local_issue_key,
+                        mapping.created_at or now,
+                        now,
+                    ),
+                )
+            mapping.updated_at = now
+            return mapping
+        finally:
+            conn.close()
+
+    def get_task_mapping(self, project_id: str, planning_reference: str) -> Optional[TaskMapping]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute(
+                "SELECT * FROM pm_task_mappings WHERE project_id = ? AND planning_reference = ?",
+                (project_id, planning_reference),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return TaskMapping(
+                project_id=row["project_id"],
+                planning_reference=row["planning_reference"],
+                task_id=row["task_id"],
+                local_issue_id=row["local_issue_id"],
+                local_issue_key=row["local_issue_key"],
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+        finally:
+            conn.close()
+
+    def get_task_mapping_by_task_id(self, project_id: str, task_id: str) -> Optional[TaskMapping]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute(
+                "SELECT * FROM pm_task_mappings WHERE project_id = ? AND task_id = ?",
+                (project_id, task_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return TaskMapping(
+                project_id=row["project_id"],
+                planning_reference=row["planning_reference"],
+                task_id=row["task_id"],
+                local_issue_id=row["local_issue_id"],
+                local_issue_key=row["local_issue_key"],
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+        finally:
+            conn.close()
+
+    def list_task_mappings(self, project_id: str) -> List[TaskMapping]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute(
+                "SELECT * FROM pm_task_mappings WHERE project_id = ? ORDER BY planning_reference ASC",
+                (project_id,),
+            )
+            rows = cur.fetchall()
+            return [
+                TaskMapping(
+                    project_id=row["project_id"],
+                    planning_reference=row["planning_reference"],
+                    task_id=row["task_id"],
+                    local_issue_id=row["local_issue_id"],
+                    local_issue_key=row["local_issue_key"],
+                    created_at=str(row["created_at"]),
+                    updated_at=str(row["updated_at"]),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
 
     # --- Issue Operations ---
 
