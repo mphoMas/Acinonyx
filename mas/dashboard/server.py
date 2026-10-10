@@ -31,6 +31,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     cio_audit_report: Optional[dict] = None  # cached after first run
     auth_token: Optional[str] = None
     allowed_origins: set = set()
+    session_manager: Any = None
 
     def log_message(self, format, *args):
         # Silence default request console spam for a clean operational terminal
@@ -46,6 +47,89 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             import hmac
             return hmac.compare_digest(token, self.auth_token)
         return False
+
+    def _resolve_session_or_auth(self):
+        """
+        Resolves authentication via Bearer token or opaque cookie session.
+        Enforces strict rules:
+        - If Authorization: Bearer is present but invalid, immediately return UNAUTHORIZED (no silent fallback).
+        - If no Authorization header, inspects mas_session cookie.
+        - If mas_session cookie is valid, returns COOKIE auth mode.
+        - Otherwise returns ANONYMOUS.
+        Returns:
+            (mode, principal, tenant_id, permitted_actions, session_data)
+        """
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header:
+            if not auth_header.startswith("Bearer "):
+                return ("UNAUTHORIZED", None, None, None, None)
+            token = auth_header[7:].strip()
+            iam = getattr(self, "iam", None)
+            if iam:
+                try:
+                    identity = iam.verify_token(token)
+                    return ("BEARER", f"{identity.tenant_id}:{identity.principal_id}", identity.tenant_id, list(identity.scopes), None)
+                except Exception:
+                    return ("UNAUTHORIZED", None, None, None, None)
+            if self.auth_token:
+                import hmac
+                if hmac.compare_digest(token, self.auth_token):
+                    return ("BEARER", getattr(self, "auth_principal", "dashboard_operator"), getattr(self, "tenant_id", "default") or "default", ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"], None)
+                return ("UNAUTHORIZED", None, None, None, None)
+            return ("BEARER", getattr(self, "auth_principal", "dashboard_operator"), getattr(self, "tenant_id", "default") or "default", ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"], None)
+
+        # No Authorization header - inspect mas_session cookie
+        from mas.pm.session import extract_session_cookie, SessionManager
+        session_secret = extract_session_cookie(self.headers)
+        if session_secret:
+            sm = getattr(self, "session_manager", None)
+            if not sm:
+                sm = SessionManager(iam=getattr(self, "iam", None))
+            session_data = sm.get_session(session_secret)
+            if session_data:
+                return ("COOKIE", session_data["principal"], session_data["tenant_id"], session_data["permitted_actions"], session_data)
+            return ("EXPIRED_COOKIE", None, None, None, None)
+
+        return ("ANONYMOUS", None, None, None, None)
+
+    def _check_csrf(self, session_data: dict) -> bool:
+        from mas.pm.session import SessionManager
+        csrf_header = self.headers.get("X-CSRF-Token")
+        return SessionManager.verify_csrf(session_data, csrf_header)
+
+    def _send_session_response(self, data: Any, status: int = 200, cookie_header: Optional[str] = None) -> None:
+        response_bytes = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(response_bytes)))
+        if cookie_header:
+            self.send_header("Set-Cookie", cookie_header)
+        self._apply_cors_headers()
+        self.end_headers()
+        self.wfile.write(response_bytes)
+
+    def _authenticate_pm_mutation(self):
+        """Authenticates a PM mutation request. Validates CSRF for cookie sessions."""
+        mode, principal, tenant_id, actions, session_data = self._resolve_session_or_auth()
+        if mode == "UNAUTHORIZED":
+            self._send_json({"error": "Unauthorized: invalid bearer token"}, status=401)
+            return False, None, None
+        elif mode == "EXPIRED_COOKIE":
+            self._send_json({"error": "Unauthorized: session missing or expired"}, status=401)
+            return False, None, None
+        elif mode == "COOKIE":
+            if not self._check_csrf(session_data):
+                self._send_json({"error": "Forbidden: CSRF token missing or invalid"}, status=403)
+                return False, None, None
+            return True, principal, session_data
+        elif mode == "BEARER":
+            return True, principal, session_data
+        else:
+            if self.auth_token:
+                self._send_json({"error": "Unauthorized: authentication required"}, status=401)
+                return False, None, None
+            return True, self.auth_principal, None
 
     def _apply_cors_headers(self) -> None:
         """Apply restricted CORS headers, denying permissive wildcards."""
@@ -76,12 +160,13 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self._apply_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
 
         if path in ("/", "/index.html"):
             index_path = os.path.join(self.static_dir, "index.html")
@@ -128,6 +213,40 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "scrum.html not found")
                 return
+
+        if path.startswith("/portal/"):
+            rel_file = path[len("/portal/"):].lstrip("/")
+            if not rel_file:
+                rel_file = "scrum.html"
+            repo_root = Path(__file__).resolve().parents[2]
+            portal_dir = (repo_root / "portal").resolve()
+            target_file = (portal_dir / rel_file).resolve()
+            if target_file.is_relative_to(portal_dir) and target_file.is_file():
+                ext = target_file.suffix.lower()
+                content_types = {
+                    ".html": "text/html; charset=utf-8",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                    ".json": "application/json",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".svg": "image/svg+xml",
+                    ".ico": "image/x-icon",
+                }
+                ctype = content_types.get(ext, "application/octet-stream")
+                content = target_file.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._apply_cors_headers()
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            else:
+                self.send_error(404, f"Portal file not found: {rel_file}")
+                return
+
 
         # -----------------------------------------------------------------
         # REST API Endpoints
@@ -219,6 +338,36 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "endpoint": getattr(self.enterprise.llm_provider, "base_url", "none") if hasattr(self.enterprise, "llm_provider") else "none",
                 "mode": "Live Model Gateway (OpenAI Compatible)",
             })
+
+        elif path in ("/api/pm/v1/session", "/api/pm/v1/session/"):
+            mode, principal, tenant_id, actions, session_data = self._resolve_session_or_auth()
+            if mode == "UNAUTHORIZED":
+                self._send_session_response({"error": {"message": "Invalid bearer token"}}, status=401)
+                return
+            elif mode == "EXPIRED_COOKIE":
+                self._send_session_response({"error": {"message": "Session unavailable"}}, status=401)
+                return
+            elif mode == "COOKIE":
+                self._send_session_response({
+                    "principal": principal,
+                    "tenant_id": tenant_id or getattr(self, "tenant_id", "default") or "default",
+                    "permitted_actions": actions or ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"],
+                    "csrf_token": session_data["csrf_token"],
+                }, status=200)
+                return
+            elif mode == "BEARER":
+                import hashlib
+                csrf = hashlib.sha256(f"csrf:{principal}".encode()).hexdigest()
+                self._send_session_response({
+                    "principal": principal,
+                    "tenant_id": tenant_id or getattr(self, "tenant_id", "default") or "default",
+                    "permitted_actions": actions or ["storage:read", "storage:write", "tools:execute", "issues:create", "issues:transition"],
+                    "csrf_token": csrf,
+                }, status=200)
+                return
+            else:
+                self._send_session_response({"error": {"message": "Session unavailable"}}, status=401)
+                return
 
         elif path in ("/api/pm/v1/projects", "/api/pm/v1/projects/"):
             from mas.pm.discovery import get_project_discovery
@@ -336,9 +485,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        if not self._is_authenticated():
-            self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
-            return
+        if path in ("/api/engage", "/api/cio-audit/refresh", "/api/dispatch"):
+            if not self._is_authenticated():
+                self._send_json({"error": "Unauthorized: missing or invalid bearer token"}, status=401)
+                return
 
         if path == "/api/engage":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -392,17 +542,83 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "live_dispatch_enabled": self.enterprise.is_live_dispatch_enabled(),
             })
 
+        # --- Session Endpoints (SBA-05) ---
+
+        elif path in ("/api/pm/v1/session/login", "/api/pm/v1/auth/login"):
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8")) if body else {}
+
+            token = payload.get("token") or payload.get("bearer_token")
+            iam = getattr(self, "iam", None)
+            iam_token = None
+            if iam:
+                if not token:
+                    self._send_session_response({"error": "IAM token required for login"}, status=401)
+                    return
+                try:
+                    identity = iam.verify_token(token)
+                    principal = f"{identity.tenant_id}:{identity.principal_id}"
+                    tenant_id = identity.tenant_id
+                    iam_token = token
+                except Exception as exc:
+                    self._send_session_response({"error": f"Invalid IAM token: {exc}"}, status=401)
+                    return
+            elif self.auth_token:
+                import hmac
+                if not token or not hmac.compare_digest(token, self.auth_token):
+                    self._send_session_response({"error": "Invalid auth token"}, status=401)
+                    return
+                principal = payload.get("principal") or self.auth_principal or "dashboard_operator"
+                tenant_id = payload.get("tenant_id") or getattr(self, "tenant_id", "default") or "default"
+            else:
+                principal = payload.get("principal") or self.auth_principal or "dashboard_operator"
+                tenant_id = payload.get("tenant_id") or getattr(self, "tenant_id", "default") or "default"
+
+            from mas.pm.session import SessionManager, make_session_cookie
+            sm = getattr(self, "session_manager", None)
+            if not sm:
+                sm = SessionManager(iam=iam)
+            session_secret, session_meta = sm.create_session(
+                principal=principal,
+                tenant_id=tenant_id,
+                iam_token=iam_token,
+            )
+            cookie_header = make_session_cookie(session_secret, secure=False)
+            self._send_session_response({
+                "success": True,
+                "principal": session_meta["principal"],
+                "tenant_id": session_meta["tenant_id"],
+                "permitted_actions": session_meta["permitted_actions"],
+                "csrf_token": session_meta["csrf_token"],
+            }, status=200, cookie_header=cookie_header)
+            return
+
+        elif path in ("/api/pm/v1/session/logout", "/api/pm/v1/auth/logout"):
+            from mas.pm.session import extract_session_cookie, make_clear_session_cookie, SessionManager
+            session_secret = extract_session_cookie(self.headers)
+            sm = getattr(self, "session_manager", None)
+            if sm and session_secret:
+                sm.revoke_session(session_secret)
+            clear_cookie = make_clear_session_cookie(secure=False)
+            self._send_session_response({"success": True}, status=200, cookie_header=clear_cookie)
+            return
+
         # --- PM Board Endpoints ---
 
         elif path == "/api/pm/transition":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
 
             issue_key = payload.get("issue_key")
             target_state = payload.get("target_state")
-            caller_principal = self.auth_principal
-            if payload.get("caller_principal", caller_principal) != caller_principal:
+            caller_principal = actor
+            if "caller_principal" in payload and payload["caller_principal"] != caller_principal:
                 self._send_json({"error": "Caller identity must match authenticated dashboard principal"}, status=403)
                 return
             reason = payload.get("reason", "")
@@ -432,14 +648,18 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 }, status=400)
 
         elif path == "/api/pm/verdicts":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
 
             issue_key = payload.get("issue_key")
             verdict = payload.get("verdict")
-            reviewer_principal = self.auth_principal
-            if payload.get("reviewer_principal", reviewer_principal) != reviewer_principal:
+            reviewer_principal = actor
+            if "reviewer_principal" in payload and payload["reviewer_principal"] != reviewer_principal:
                 self._send_json({"error": "Reviewer identity must match authenticated dashboard principal"}, status=403)
                 return
             findings = payload.get("findings", {})
@@ -468,6 +688,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 }, status=403)
 
         elif path == "/api/pm/issues/create":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
@@ -486,24 +710,30 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "Issue title is required"}, status=400)
                 return
 
+            from mas.security import ExecutionContext
             from mas.pm.tools import pm_create_issue
             try:
-                result = pm_create_issue(
-                    project_key=project_key,
-                    title=title,
-                    description=description,
-                    issue_type=issue_type,
-                    priority=priority,
-                    sprint_id=sprint_id,
-                    assignee_principal=assignee_principal,
-                    appetite_tokens=appetite_tokens,
-                    path_whitelist=path_whitelist,
-                )
+                with ExecutionContext.scope(actor):
+                    result = pm_create_issue(
+                        project_key=project_key,
+                        title=title,
+                        description=description,
+                        issue_type=issue_type,
+                        priority=priority,
+                        sprint_id=sprint_id,
+                        assignee_principal=assignee_principal,
+                        appetite_tokens=appetite_tokens,
+                        path_whitelist=path_whitelist,
+                    )
                 self._send_json({"success": True, "result": result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
 
         elif path == "/api/pm/sprints/create":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
@@ -540,6 +770,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"success": True, "sprint": saved.model_dump()})
 
         elif path == "/api/pm/sprints/state":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
@@ -557,6 +791,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"success": True, "sprint_id": sprint_id, "state": state})
 
         elif path == "/api/pm/issues/assign_sprint":
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             payload = json.loads(body.decode("utf-8")) if body else {}
@@ -575,6 +813,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"success": True, "issue_key": issue.key, "sprint_id": sprint_id})
 
 
+
 class TenantDashboardRequestHandler(DashboardRequestHandler):
     """Tenant-bound PM API. Shared enterprise, portal and model routes fail closed."""
 
@@ -584,9 +823,30 @@ class TenantDashboardRequestHandler(DashboardRequestHandler):
         return bool(binding and binding.iam is self.iam and binding.identity.tenant_id == self.tenant_id)
 
     def _tenant_request(self, method):
+        path = urlparse(self.path).path
+        if method == "GET" and path in ("/api/pm/v1/session", "/api/pm/v1/session/"):
+            super().do_GET()
+            return
+        if method == "POST" and path in ("/api/pm/v1/session/login", "/api/pm/v1/auth/login", "/api/pm/v1/session/logout", "/api/pm/v1/auth/logout"):
+            super().do_POST()
+            return
+
         from mas.tenancy import tenant_scope
         auth = self.headers.get("Authorization", "")
         token = auth[7:].strip() if auth.startswith("Bearer ") else None
+        if not auth:
+            from mas.pm.session import extract_session_cookie, SessionManager
+            cookie_val = extract_session_cookie(self.headers)
+            if cookie_val:
+                sm = getattr(self, "session_manager", None) or SessionManager(iam=self.iam)
+                sess = sm.get_session(cookie_val)
+                if sess and sess.get("tenant_id") == self.tenant_id:
+                    if method == "POST":
+                        csrf_hdr = self.headers.get("X-CSRF-Token")
+                        if not SessionManager.verify_csrf(sess, csrf_hdr):
+                            self._send_json({"error": "Forbidden: CSRF token missing or invalid"}, status=403)
+                            return
+                    token = sess.get("iam_token")
         try:
             with tenant_scope(self.iam, token, self.tenant_id, self.tenant_root) as binding:
                 path = urlparse(self.path).path
@@ -655,6 +915,8 @@ class DashboardServer:
 
         # Each server owns its credentials, enterprise and cached artifacts.
         # Class-wide mutation leaked state and tokens across concurrent servers.
+        from mas.pm.session import SessionManager
+        session_mgr = SessionManager(iam=iam)
         handler = type("BoundDashboardRequestHandler", (TenantDashboardRequestHandler if iam is not None else DashboardRequestHandler,), {
             "iam": iam, "tenant_id": tenant_id,
             "tenant_root": Path(tenant_root).resolve() if tenant_root is not None else None,
@@ -666,7 +928,9 @@ class DashboardServer:
             "allowed_origins": self.allowed_origins,
             "latest_artifacts": None,
             "cio_audit_report": None,
+            "session_manager": session_mgr,
         })
+
         self.server = ThreadingHTTPServer((self.host, self.port), handler)
         self._thread: Optional[threading.Thread] = None
 

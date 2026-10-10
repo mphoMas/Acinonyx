@@ -251,6 +251,25 @@ class PMDatabase:
                 );
                 """)
 
+                # SBA-05: Authenticated browser sessions
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_sessions (
+                    token_hash TEXT PRIMARY KEY,
+                    csrf_token TEXT NOT NULL,
+                    principal TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    permitted_actions JSON NOT NULL,
+                    iam_token_hash TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at REAL NOT NULL,
+                    is_revoked INTEGER NOT NULL DEFAULT 0
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_sessions_principal ON pm_sessions(principal);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_sessions_revoked ON pm_sessions(is_revoked);")
+
+
                 # Migrations for existing tables
                 try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN priority TEXT DEFAULT 'MEDIUM';")
