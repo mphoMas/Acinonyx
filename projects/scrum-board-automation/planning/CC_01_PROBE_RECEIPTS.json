@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-10-11T08:20:05Z",
+  "probe_1_early_run_id": {
+    "codex": {
+      "supported": true,
+      "latency_seconds": 5.36,
+      "early_run_id_type": "thread_id",
+      "sample_id": "01a12a0b-8b1a-74e1-97d4-146af5c601ae",
+      "event_type": "thread.started"
+    },
+    "antigravity": {
+      "supported": true,
+      "latency_seconds": 11.88,
+      "early_run_id_type": "conversation_id",
+      "sample_id": "70b5bc3f-f831-40a7-84d9-708a0a673ebc",
+      "event_type": "init"
+    }
+  },
+  "probe_2_side_effects": {
+    "measurement": {
+      "initial_effects": 1,
+      "total_effects_after_retry": 2,
+      "duplicate_executed": true,
+      "runtime_verdict": "UNSUPPORTED_EXACTLY_ONCE",
+      "policy": "UNKNOWN_EXECUTION - coordinator MUST NOT automatically retry in-flight side effects."
+    }
+  },
+  "probe_3_crash_recovery": {
+    "state_before_launch": {
+      "outcome": "SAFE_RETRY",
+      "reason": "Process was not spawned; lease/intent not executed; idempotency key reusable."
+    },
+    "state_after_launch_before_id_persisted": {
+      "outcome": "UNKNOWN_EXECUTION",
+      "reason": "Process may have run side effects; run ID not recorded; automatic retry prohibited; requires coordinator reconciliation."
+    },
+    "state_after_id_persisted_before_completion": {
+      "outcome": "INTERRUPTED_IN_FLIGHT",
+      "reason": "Run ID known; cannot guarantee side-effect idempotency on resumption; session continuation is turn 2, not turn 1 replay."
+    }
+  },
+  "probe_4_cancellation": {
+    "os_killpg_sigterm": "Process group terminated cleanly",
+    "late_filesystem_writes": "None",
+    "containment_limitation": "Process groups isolate local OS descendants only; cannot cancel remote sidecars or independent network tasks without explicit adapter heartbeat/kill API."
+  },
+  "probe_5_adversarial_review": {
+    "candidate_changeset": "- return False\\n+ return True",
+    "reviewer_model": "codex-auto-review",
+    "verdict_detected": "REJECT",
+    "reviewer_response_snippet": "REJECT \u2014 the change reverses the function\u2019s behavior without supporting context, tests, or an identified defect justifying it.",
+    "verdict_authentic": true
+  }
+}
