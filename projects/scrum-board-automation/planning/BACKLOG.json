@@ -19,7 +19,8 @@
         "Define permitted transitions and separate reviewer authority; record acknowledgement before implementation."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "bb45e23a-cade-50ba-9d62-6178f694cf39"
     },
     {
       "source_key": "SBA-02",
@@ -40,7 +41,8 @@
         "Repeated scans are idempotent; renamed, removed and inaccessible sources are reported without deleting runtime history."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "3d55ca7d-849f-53b1-a624-2a630f5d85d3"
     },
     {
       "source_key": "SBA-03",
@@ -62,7 +64,8 @@
         "Updates preserve active work, evidence and review; ambiguous changes are surfaced instead of silently overwriting."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "b1719e91-62cc-5064-89ba-2186bb280fd3"
     },
     {
       "source_key": "SBA-04",
@@ -86,7 +89,8 @@
         "Demonstrate the adapter with actual Antigravity execution, not only a simulated producer."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "5bedfd90-ea76-5f8d-82ec-9e1025c1bb87"
     },
     {
       "source_key": "SBA-05",
@@ -106,7 +110,8 @@
         "Authorized action succeeds; unauthorized action remains denied; errors visible above drawers and stale governance notice corrected."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "1605f43f-5cf3-5ab7-a7e6-29b6e718bf01"
     },
     {
       "source_key": "SBA-06",
@@ -118,7 +123,8 @@
         "SBA-02",
         "SBA-03",
         "SBA-04",
-        "SBA-05"
+        "SBA-05",
+        "CC-07"
       ],
       "path_whitelist": [
         "portal/",
@@ -126,10 +132,13 @@
       ],
       "acceptance": [
         "Board reflects persisted agent events within five seconds on a healthy connection without manual refresh.",
-        "Show comments, notes, evidence provenance, blockers and independent review state; visibly report stale/disconnected data and reconnect safely."
+        "Show comments, notes, evidence provenance, blockers and independent review state; visibly report stale/disconnected data and reconnect safely.",
+        "Render coordinator progress, review requests, escalation and freshness; backend Antigravity, frontend Codex."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "5cfdecdd-4614-5368-99e1-dd0574225134",
+      "coordinator_reference": "CC-10"
     },
     {
       "source_key": "SBA-07",
@@ -138,7 +147,11 @@
       "delivery_owner": "Antigravity",
       "reviewer": "Independent reviewer distinct from implementation owner; appointment pending",
       "dependencies": [
-        "SBA-04"
+        "SBA-04",
+        "CC-08",
+        "CC-09",
+        "CC-11",
+        "CC-12"
       ],
       "path_whitelist": [
         "tests/",
@@ -148,10 +161,13 @@
       ],
       "acceptance": [
         "Restart and reconnect retain project/task history and resume event processing without duplicate tickets or transitions.",
-        "Reject cross-tenant writes, forged identity, replay, invalid transitions and fabricated completion evidence; attach actual executed results."
+        "Reject cross-tenant writes, forged identity, replay, invalid transitions and fabricated completion evidence; attach actual executed results.",
+        "Qualify coordinator crash/replay, conflicting edits, fabricated evidence, malicious artifact instructions, revoked access and emergency controls."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "50ad58cf-0e87-59eb-8ca5-8056efaaad35",
+      "coordinator_reference": "CC-13"
     },
     {
       "source_key": "SBA-08",
@@ -170,10 +186,14 @@
       "acceptance": [
         "Use one real approved project: CEO supplies details, architect publishes plan, CEO starts Antigravity once, agents work and board updates automatically.",
         "Capture native browser evidence of progress, comments, evidence and independently reviewed completion; no CEO SQL, import commands, ticket dragging or manual status maintenance.",
-        "Independent reviewer accepts the exact candidate; CEO approves rollout and rollback procedure."
+        "Independent reviewer accepts the exact candidate; CEO approves rollout and rollback procedure.",
+        "Demonstrate automatic reviewer invocation and deliberately rejected candidate correction/resubmission without CEO relay.",
+        "Restart and network interruption cause no duplicate work or lost handoffs; zero routine CEO import commands, ticket moves or repairs."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "da1721ca-9c75-5c27-9dbf-6c165dade857",
+      "coordinator_reference": "CC-14"
     },
     {
       "source_key": "SBA-09",
@@ -200,7 +220,289 @@
         "Demonstrate real startup, cancellation, restart and progress reporting; retain the manual pickup fallback."
       ],
       "status": "BACKLOG",
-      "appetite_tokens": 0
+      "appetite_tokens": 0,
+      "task_id": "9994fcd6-4b85-5a14-ae8c-f5a22d40d0b7",
+      "coordinator_reference": "CC-15"
+    },
+    {
+      "source_key": "CC-01",
+      "task_id": "7a2053e1-ac8a-5f37-81af-c193011a55ad",
+      "title": "Prove developer and reviewer runtime capabilities",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Demonstrate real supported start, status, result and cancellation operations for both runtimes.",
+        "Document unavailable operations and runtime versions; a notification or log watcher is not proof of dispatch."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-02",
+      "task_id": "6f1fbdf5-79cf-5230-9c4f-7536b7cd1554",
+      "title": "Define coordinator contracts and authority",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-01"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Version task admission, attempts, events, candidate verification, review, escalation and cancellation contracts.",
+        "Antigravity owns backend delivery; Codex supplies interface requirements; separate design review is recorded."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-03",
+      "task_id": "2d24631f-7f08-5925-a83b-2ea0ad6409f2",
+      "title": "Build durable coordinator state and outbox",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-02"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Persist dispatch intent, run references, leases, receipts and pending handoffs.",
+        "Crash/retry tests prove no lost acknowledged handoffs or duplicate effective dispatch; network calls remain outside write transactions."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-04",
+      "task_id": "669631e1-2cae-5c45-a823-998e98ab412b",
+      "title": "Implement authorized scheduling and task admission",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-03",
+        "SBA-03"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Select dependency-ready work with actual authenticated assignment, approved scope and execution allowance.",
+        "Reject missing authority and exhausted budgets; proposed planning budgets cannot grant execution."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-05",
+      "task_id": "a0202dcd-9c47-5c65-8116-a26e46afeb2c",
+      "title": "Implement Antigravity development runtime adapter",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-01",
+        "CC-03"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Start real admitted repository work and obtain attributable results and cancellation status.",
+        "Unknown execution is reconciled before retry; preserve dirty worktrees."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-06",
+      "task_id": "856a5a99-826e-5df3-ba48-0dddce9b3b73",
+      "title": "Implement verifier and reviewer runtime adapters",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-01",
+        "CC-03"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Invoke actual verification and separate reviewer runtimes against the exact candidate.",
+        "Fabricated success, changed candidates and builder self-approval cannot authorize completion."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-07",
+      "task_id": "8a720e07-c530-5f5e-a1ff-7f4d0287aa03",
+      "title": "Automate rejection correction and resubmission",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-04",
+        "CC-05",
+        "CC-06",
+        "SBA-04"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "A real rejected candidate returns to its builder, is corrected and resubmitted without CEO message relay.",
+        "Bound rework, spending and deadlines; completion uses existing guarded PM operations."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-08",
+      "task_id": "721e3be0-eea2-5b09-a8f2-91c390ee6de9",
+      "title": "Handle plan changes and stale approvals",
+      "priority": "HIGH",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-04",
+        "CC-07"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Stage active scope/acceptance changes for authorized reconciliation; preserve history.",
+        "Changed candidate or relevant plan invalidates applicable approval and cannot silently continue."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-09",
+      "task_id": "d40ba16a-18b3-56c0-b256-2594805c5a69",
+      "title": "Manage isolated workspaces and integrated candidates",
+      "priority": "HIGH",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-05",
+        "CC-06"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Avoid conflicting edits and preserve every contribution and dirty checkout.",
+        "Verify the combined candidate and retain a known-good rollback baseline."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-11",
+      "task_id": "4c6bf51d-78b3-518a-ae42-7016328a203f",
+      "title": "Implement pause cancellation and uncertainty controls",
+      "priority": "CRITICAL",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-03",
+        "CC-05"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Pause stops new dispatch; cancellation reports confirmed versus uncertain termination.",
+        "Revocation, outages and budget exhaustion stop safely; usage reservations remain until reconciliation."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
+    },
+    {
+      "source_key": "CC-12",
+      "task_id": "b9bb1b0b-ba3c-5b4a-921d-b6fcd64a285c",
+      "title": "Provide coordinator operations and recovery runbook",
+      "priority": "HIGH",
+      "delivery_owner": "Antigravity",
+      "reviewer": "Codex; separate design review required where Codex authors the design",
+      "dependencies": [
+        "CC-03",
+        "CC-11"
+      ],
+      "path_whitelist": [
+        "mas/",
+        "scripts/",
+        "tests/",
+        "projects/scrum-board-automation/planning/"
+      ],
+      "acceptance": [
+        "Provide health, alerts, backups, recovery and credential-rotation procedures with operational owner.",
+        "Demonstrate restart/restore without history loss or artificial completion."
+      ],
+      "status": "BACKLOG",
+      "appetite_tokens": 0,
+      "workstream": "Capable Coordinator"
     }
-  ]
+  ],
+  "workstream": "Capable Coordinator",
+  "workstream_priority": 1,
+  "coordinator_aliases": {
+    "CC-10": "SBA-06",
+    "CC-13": "SBA-07",
+    "CC-14": "SBA-08",
+    "CC-15": "SBA-09"
+  }
 }

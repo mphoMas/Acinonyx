@@ -31,3 +31,7 @@ This initial setup gap is part of SBA-02/SBA-03; the finished CEO workflow must 
 For each task record planning/local issue reference, authenticated delivery identity, candidate commit, changed paths, actual commands/results, unresolved issues and separate review. Keep credentials out of Git. Preserve dirty worktrees; do not force-reset the CEO's checkout. Merge conflicts and unavailable authentication are blockers to report, not reasons to skip controls.
 
 Pickup publication is not acknowledgement or execution. Only the actual Antigravity run establishes those facts.
+
+## Priority 1 update: Capable Coordinator
+
+Read COORDINATOR_WORKSTREAM.md and the unified BACKLOG.json. Start CC-01 runtime capability discovery while addressing SBA-03 review 62f51717. Reuse existing SBA-06/07/08/09 for CC-10/13/14/15; do not create duplicate projects, boards or packages. Remote runtime registration is not established by the cloud-local mapping.

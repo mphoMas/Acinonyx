@@ -1,9 +1,10 @@
-# Scrum Board Automation (SBA)
+# SBA — Capable Coordinator Priority 1
 
 Sponsor and final product authority: CEO, AcinonyxLabs. Architect and Scrum coordination: Codex.
 
 The board must become an automatically maintained operational view. The CEO supplies project details through conversation and, for now, starts Antigravity manually. Repository discovery, plan publication, task activity, comments, notes, evidence and guarded status updates must then flow into MAS-PM without CEO scripts or manual ticket maintenance.
 
+- [Unified coordinator workstream](planning/COORDINATOR_WORKSTREAM.md)
 - [Project plan and release acceptance](planning/PROJECT_PLAN.md)
 - [Antigravity pickup instructions](planning/ANTIGRAVITY_PICKUP.md)
 - [Prioritized backlog](planning/BACKLOG.md)

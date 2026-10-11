@@ -1,7 +1,19 @@
 {
   "database": "/workspace/Acinonyx/mas_pm.db",
   "project": "SBA",
-  "created": [],
+  "created": [
+    "SBA-10",
+    "SBA-11",
+    "SBA-12",
+    "SBA-13",
+    "SBA-14",
+    "SBA-15",
+    "SBA-16",
+    "SBA-17",
+    "SBA-18",
+    "SBA-19",
+    "SBA-20"
+  ],
   "key_mapping": {
     "SBA-01": "SBA-1",
     "SBA-02": "SBA-2",
@@ -11,9 +23,27 @@
     "SBA-06": "SBA-6",
     "SBA-07": "SBA-7",
     "SBA-08": "SBA-8",
-    "SBA-09": "SBA-9"
+    "SBA-09": "SBA-9",
+    "CC-01": "SBA-10",
+    "CC-02": "SBA-11",
+    "CC-03": "SBA-12",
+    "CC-04": "SBA-13",
+    "CC-05": "SBA-14",
+    "CC-06": "SBA-15",
+    "CC-07": "SBA-16",
+    "CC-08": "SBA-17",
+    "CC-09": "SBA-18",
+    "CC-11": "SBA-19",
+    "CC-12": "SBA-20"
   },
-  "records": 9,
-  "dependency_edges": 17,
-  "scope": "Local cloud board only; remote deployment synchronization not verified"
+  "records": 20,
+  "dependency_edges": 42,
+  "scope": "Local cloud board only; remote deployment synchronization not verified",
+  "coordinator_aliases": {
+    "CC-10": "SBA-6",
+    "CC-13": "SBA-7",
+    "CC-14": "SBA-8",
+    "CC-15": "SBA-9"
+  },
+  "workstream_priority": 1
 }
