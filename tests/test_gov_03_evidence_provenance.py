@@ -46,7 +46,7 @@ def test_evidence_auto_signs_provenance(test_db, test_issue):
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="a" * 64,
         uri="file://tests/sample.log",
-        payload={"exit_code": 0},
+        payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"exit_code": 0})},
     )
     saved = test_db.attach_evidence(ev)
 
@@ -59,6 +59,7 @@ def test_evidence_auto_signs_provenance(test_db, test_issue):
         content_hash="a" * 64,
         uri="file://tests/sample.log",
         signature=sig,
+        binding_payload=saved.payload,
     )
 
 
@@ -70,7 +71,7 @@ def test_sqlite_trigger_prevents_evidence_update(test_db, test_issue):
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="b" * 64,
         uri="file://tests/sample.log",
-        payload={"exit_code": 0},
+        payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"exit_code": 0})},
     )
     test_db.attach_evidence(ev)
 
@@ -89,7 +90,7 @@ def test_sqlite_trigger_prevents_evidence_delete(test_db, test_issue):
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="d" * 64,
         uri="file://tests/sample.log",
-        payload={"exit_code": 0},
+        payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"exit_code": 0})},
     )
     test_db.attach_evidence(ev)
 
@@ -112,7 +113,7 @@ def test_evidence_integrity_audit_detects_file_tampering(test_db, test_issue, tm
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash=initial_hash,
         uri=str(log_file),
-        payload={"exit_code": 0},
+        payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"exit_code": 0})},
     )
     test_db.attach_evidence(ev)
 
@@ -141,9 +142,15 @@ def test_guard_rejects_forged_provenance_signature(test_db, test_issue, tmp_path
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash=h,
         uri=str(log_file),
-        payload={"exit_code": 0, "provenance_signature": "forged_bad_signature_123"},
+        payload={"policy_version": 1, "candidate_commit_sha": "head", **({"exit_code": 0, "provenance_version": 2, "provenance_signature": "forged_bad_signature_123"})},
     )
-    test_db.attach_evidence(ev)
+    with pytest.raises(ValueError, match="signature"):
+        test_db.attach_evidence(ev)
+
+    # Simulate a forged stored record to independently test the guard.
+    class ForgedView:
+        def get_evidence_links(self, issue_id):
+            return [ev, *test_db.get_evidence_links(issue_id)]
 
     # Attach git commit evidence
     ev_git = EvidenceLink(
@@ -152,9 +159,9 @@ def test_guard_rejects_forged_provenance_signature(test_db, test_issue, tmp_path
         evidence_type=EvidenceType.GIT_COMMIT,
         content_hash="head",
         uri="git:commit:head",
-        payload={},
+        payload={"policy_version": 1, **({})},
     )
     test_db.attach_evidence(ev_git)
 
     with pytest.raises(UnverifiedWorkError, match="provenance signature verification failed"):
-        validate_evidence(test_db, test_issue, workspace_root=tmp_path, enforce_git_commit=False)
+        validate_evidence(ForgedView(), test_issue, workspace_root=tmp_path, enforce_git_commit=False)

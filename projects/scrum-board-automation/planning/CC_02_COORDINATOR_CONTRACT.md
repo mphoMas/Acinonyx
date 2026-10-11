@@ -1,6 +1,6 @@
 # CC-02 Capable Coordinator Contract Specification
 
-**Document Version:** 1.2.0-revised  
+**Document Version:** 1.3.0-correction
 **Delivery Owner:** Antigravity (Backend, Engine, Runtime Integration)  
 **Reviewer:** Codex (Frontend, UI/UX, Interface Requirements) / Independent Reviewer  
 **Status:** REVISED SPECIFICATION (Addressing Independent Review 3 Findings)  
@@ -14,7 +14,7 @@ The Capable Coordinator provides autonomous, resilient, and policy-governed disp
 - **Developer Runtime:** Google Antigravity CLI (`agy` headless process-group execution)
 - **Reviewer Runtime:** OpenAI Codex CLI (`codex exec` headless batch review)
 
-This specification defines the formal identity models, relational persistence schemas, monotonic fencing tokens, CAS dispatch claims, stale worker rejection, crash recovery boundaries, conservative budget settlement, execution containment limits, full 15-field versioned HMAC evidence envelopes, adapter contracts, event cursor tracking, and staged reconciliation protocols required to govern **CC-03** through **CC-15**.
+This specification defines the formal identity models, relational persistence schemas, monotonic fencing tokens, CAS dispatch claims, stale worker rejection, crash recovery boundaries, conservative budget settlement, execution containment limits, full versioned versioned HMAC evidence envelopes, adapter contracts, event cursor tracking, and staged reconciliation protocols required to govern **CC-03** through **CC-15**.
 
 ---
 
@@ -91,7 +91,7 @@ The coordinator enforces strict separation between session continuity, intent, e
 
 9. **Signed Evidence Identity (`evidence_id` [UUID], `content_hash` [SHA-256])**:
    - Cryptographically anchored record linking a Git commit SHA, test execution log, or benchmark receipt.
-   - Signed with HMAC-SHA256 (`provenance_signature`) across all 15 security-relevant identity and outcome fields.
+   - Signed with HMAC-SHA256 (`provenance_signature`) across all security-relevant identity and outcome fields.
 
 ### 2.2 Historical Identity Preservation & Collision-Checked Migration
 
@@ -114,23 +114,12 @@ To avoid silent identity reassignment or overwriting historical ticket keys (suc
 The coordinator persistence model expands `mas.pm.db` with durable outbox, attempt, run, and event tracking tables. All tables enforce relational integrity, foreign keys, and transactional boundaries.
 
 ```sql
--- CC-02 / CC-03: Task and Issue Identity Mapping Table
-CREATE TABLE IF NOT EXISTS pm_task_mappings (
-    mapping_id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
-    project_id TEXT NOT NULL,
-    task_id TEXT NOT NULL,                -- Stable planning UUID (from BACKLOG.json)
-    issue_id TEXT NOT NULL,               -- Deployment-local UUID (pm_issues.id)
-    planning_reference TEXT NOT NULL,     -- Human key (e.g. 'SBA-01', 'CC-02')
-    legacy_task_id TEXT,                  -- Historical prototype key (e.g. 'sba-uuid-sba-01')
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
-    CONSTRAINT uq_mapping_project_ref UNIQUE (project_id, planning_reference),
-    CONSTRAINT uq_mapping_issue UNIQUE (issue_id),
-    CONSTRAINT uq_mapping_task UNIQUE (task_id)
-);
-CREATE INDEX IF NOT EXISTS idx_task_mappings_task ON pm_task_mappings(task_id);
-CREATE INDEX IF NOT EXISTS idx_task_mappings_legacy ON pm_task_mappings(legacy_task_id);
+-- Existing pm_task_mappings remains authoritative; do not recreate or rename it.
+-- The redundant identity index enables composite ownership foreign keys.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coord_mapping_identity
+ON pm_task_mappings(project_id, task_id, local_issue_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coord_issue_project
+ON pm_issues(project_id, id);
 
 -- CC-02 / CC-03: Durable Coordinator Outbox Intents Table
 CREATE TABLE IF NOT EXISTS pm_coordinator_intents (
@@ -150,7 +139,9 @@ CREATE TABLE IF NOT EXISTS pm_coordinator_intents (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
-    CONSTRAINT uq_intent_issue_attempt UNIQUE (issue_id, attempt_id)
+    FOREIGN KEY(attempt_id, issue_id, task_id, project_id, tenant_id)
+        REFERENCES pm_coordinator_attempts(attempt_id, issue_id, task_id, project_id, tenant_id),
+    CONSTRAINT uq_intent_issue_attempt UNIQUE (issue_id, attempt_id, adapter_type)
 );
 CREATE INDEX IF NOT EXISTS idx_coord_intents_status ON pm_coordinator_intents(status, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_coord_intents_task ON pm_coordinator_intents(task_id);
@@ -158,6 +149,8 @@ CREATE INDEX IF NOT EXISTS idx_coord_intents_task ON pm_coordinator_intents(task
 -- CC-02 / CC-03: Execution Attempts Table
 CREATE TABLE IF NOT EXISTS pm_coordinator_attempts (
     attempt_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
     issue_id TEXT NOT NULL,
     task_id TEXT NOT NULL,
     attempt_seq INTEGER NOT NULL,
@@ -170,6 +163,10 @@ CREATE TABLE IF NOT EXISTS pm_coordinator_attempts (
     candidate_commit_sha TEXT,
     failure_reason TEXT,
     FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+FOREIGN KEY(project_id, task_id, issue_id)
+        REFERENCES pm_task_mappings(project_id, task_id, local_issue_id),
+    FOREIGN KEY(project_id, issue_id) REFERENCES pm_issues(project_id, id),
+    CONSTRAINT uq_attempt_identity UNIQUE (attempt_id, issue_id, task_id, project_id, tenant_id),
     CONSTRAINT uq_issue_attempt_seq UNIQUE (issue_id, attempt_seq)
 );
 CREATE INDEX IF NOT EXISTS idx_coord_attempts_issue ON pm_coordinator_attempts(issue_id);
@@ -177,6 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_coord_attempts_issue ON pm_coordinator_attempts(i
 -- CC-02 / CC-03: Physical Process Runs Table
 CREATE TABLE IF NOT EXISTS pm_coordinator_runs (
     run_id TEXT PRIMARY KEY,
+    intent_id TEXT NOT NULL REFERENCES pm_coordinator_intents(intent_id),
     attempt_id TEXT NOT NULL,
     fencing_token INTEGER NOT NULL,
     runtime_session_id TEXT,              -- conversation_id or thread_id
@@ -187,7 +185,7 @@ CREATE TABLE IF NOT EXISTS pm_coordinator_runs (
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ended_at TIMESTAMP,
     FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
-    CONSTRAINT uq_run_session UNIQUE (attempt_id, runtime_session_id)
+    CONSTRAINT uq_physical_dispatch UNIQUE (intent_id, fencing_token)
 );
 CREATE INDEX IF NOT EXISTS idx_coord_runs_attempt ON pm_coordinator_runs(attempt_id);
 
@@ -259,10 +257,13 @@ Before the worker executes `subprocess.Popen` or begins any CLI runtime dispatch
        lease_heartbeat_at = :now_epoch,
        updated_at = :now_iso
    WHERE intent_id = :intent_id
+     AND status = 'CLAIMED'
      AND worker_id = :worker_id
-     AND fencing_token = :assigned_fencing_token;
+     AND fencing_token = :assigned_fencing_token
+     AND lease_expires_at > :now_epoch;
    ```
-2. The worker inserts a pending attempt record into `pm_coordinator_attempts` with `status = 'RUNNING'`.
+2. Check exactly one affected row. In the SAME transaction, update the already-created attempt and insert the unique physical run record in SPAWNING state. On any failure roll back every update and do not spawn. Do not insert a second attempt at launch.
+3. After transaction commit, only this successful claimant may spawn once. Never retry Popen after an ambiguous outcome; reconcile PROCESSING as UNKNOWN_EXECUTION. The small commit-to-spawn interval is intentionally conservative: a crash may mark unlaunched work unknown, never duplicate it.
 3. If the worker host crashes during or immediately following process spawn, the persisted state in SQLite is already `PROCESSING`. Because `PROCESSING` intents are excluded from the CAS claim query, **no second worker can claim or redispatch the task**.
 
 ### 4.3 Expired Lease Reaper & Reconciliation Engine
@@ -278,6 +279,24 @@ A background reaper periodically inspects active leases where `lease_expires_at 
   - **Automatic re-claim and re-dispatch are strictly prohibited.**
   - The intent requires explicit coordinator reconciliation (`RECONCILE_UNKNOWN_EXECUTION`), verifying local process termination, settling token spend up to the point of lease loss, cleaning Git working tree state, and obtaining architect approval before a new attempt may be staged.
 
+### 4.3.1 Atomic lease retirement
+
+The reaper performs the following retirement and updates related run/attempt status in ONE transaction. It never creates a dispatch. The CLAIMED outcome is known-unlaunched only because every permitted spawn requires the guarded PROCESSING transition and run insertion above. Unexpected run records require UNKNOWN_EXECUTION instead of automatic recovery.
+
+```sql
+UPDATE pm_coordinator_intents
+SET status = CASE WHEN status = 'CLAIMED' THEN 'FAILED' ELSE 'UNKNOWN_EXECUTION' END,
+    fencing_token = fencing_token + 1,
+    worker_id = NULL,
+    updated_at = :now_iso
+WHERE intent_id = :intent_id
+  AND status IN ('CLAIMED', 'PROCESSING')
+  AND fencing_token = :expected_fencing_token
+  AND lease_expires_at <= :now_epoch;
+```
+
+Cancel/pause decisions similarly advance generation atomically, remove live worker authority and place potentially launched work in reconciliation. Late receipts are retained as quarantined observations for billing/recovery, not promoted to completion. Heartbeats require matching active state/worker/generation and a lease which has not expired; they cannot resurrect retired work.
+
 ### 4.4 Stale Worker Rejection via Monotonic Fencing
 
 When a worker completes execution and attempts to write completion state, candidate commits, or spend tokens, it MUST present its assigned `fencing_token`:
@@ -287,8 +306,10 @@ UPDATE pm_coordinator_intents
 SET status = 'COMPLETED',
     updated_at = :now_iso
 WHERE intent_id = :intent_id
+  AND status = 'PROCESSING'
   AND worker_id = :worker_id
-  AND fencing_token = :assigned_fencing_token;
+  AND fencing_token = :assigned_fencing_token
+  AND lease_expires_at > :now_epoch;
 ```
 
 If the lease was reclaimed or advanced by a reconciliation reaper during a long network pause, the fencing generation has advanced. The database update fails with zero rows updated.
@@ -310,7 +331,7 @@ The existing MAS-PM board FSM states (`BACKLOG`, `REFINED`, `STAGED`, `IN_PROGRE
 | `IN_PROGRESS` | `RUNNING` | `CLAIMED` / `PROCESSING` | Worker spawned CLI process; run ID tracked; lease active. |
 | `VERIFICATION` | `SUCCEEDED` | `COMPLETED` | Process exited code 0; candidate commit created; automated test log attached. |
 | `JUDICIAL_REVIEW` | `SUCCEEDED` | `COMPLETED` | Independent reviewer evaluating signed evidence. Separation of builder and judge enforced. |
-| `DONE` | `SUCCEEDED` | `COMPLETED` | Approved with cryptographic reviewer signature; closed. |
+| `DONE` | `SUCCEEDED` | `COMPLETED` | Verified task acceptance only; human production release authorization remains separate. |
 | `UNKNOWN_EXECUTION` | `UNKNOWN_EXECUTION` | `UNKNOWN_EXECUTION` | Process crashed or lease expired with untracked side effects. Automatic dispatch halted. |
 
 ### 5.2 Crash Recovery Boundaries
@@ -343,7 +364,7 @@ The existing MAS-PM board FSM states (`BACKLOG`, `REFINED`, `STAGED`, `IN_PROGRE
 
 ## 6. Versioned Canonical Evidence Signing Envelope
 
-To prevent client tampering or substitution of test execution results, evidence attached to an issue must adhere to a strict HMAC-SHA256 canonical structure binding all 15 security-relevant identity and outcome fields.
+To prevent client tampering or substitution of test execution results, evidence attached to an issue must adhere to a strict HMAC-SHA256 canonical structure binding all security-relevant identity and outcome fields.
 
 ### 6.1 Canonical Evidence Payload Specification
 
@@ -373,9 +394,9 @@ The payload contains the complete execution envelope:
 }
 ```
 
-### 6.2 Canonical Serialization & Signature Formula
+### 6.2 Canonical Serialization & Signature Formula (future coordinator envelope)
 
-1. **Serialization Standard:** The payload object is canonically serialized according to RFC 8785 (JSON Canonicalization Scheme - JCS) or deterministic lexicographical key sorting with no whitespace:
+1. **Serialization Standard:** The payload object is canonically serialized according to RFC 8785 (JSON Canonicalization Scheme - JCS) :
    $$\text{canonical\_bytes} = \text{JCS}(\text{payload})$$
 2. **Signature Formula:**
    $$\text{signature} = \text{hex}(\text{HMAC-SHA256}(K_{\text{evidence}}, \text{canonical\_bytes}))$$
@@ -386,9 +407,9 @@ The payload contains the complete execution envelope:
    - Every signed envelope includes a cryptographically random 128-bit hex `nonce`.
    - The coordinator verifies uniqueness against `pm_coordinator_evidence_receipts(nonce)` before admitting evidence. Duplicate nonces are rejected.
 5. **Signed Verdict Envelope (Reviewer):**
-   - Independent reviewers emit an analogous signed verdict envelope binding `verdict_id`, `issue_id`, `candidate_commit_sha`, `reviewer_principal`, `verdict` (`APPROVE` | `REJECT`), `rationale_hash`, `policy_version`, `timestamp`, and `nonce`.
+   - The trusted reviewer admission service signs a domain-separated `mas.coordinator.verdict.v1` envelope. It binds schema/key ID, tenant/project/issue/task/attempt/run/generation, candidate/base/policy, reviewer principal, verdict, rationale hash, timestamp and nonce. Agent processes never receive signing keys. Signatures attest admitted observations, not correctness of model reasoning.
 6. **Implementation Status:**
-   - *Current Implementation:* `mas/pm/guards.py` validates `policy_version`, `candidate_commit_sha` matching, and structural fields.
+   - *Current PM implementation:* evidence provenance version 2 signs the complete PM evidence payload using precisely Python JSON with sorted keys, compact separators, ASCII escapes, no NaN/Infinity and domain `mas.pm.evidence.v2`. Explicit positive policy binding is required; TEST_RUN_LOG must name a candidate matching Git evidence. Legacy records remain historical and cannot qualify verification. This PM representation is separate from the future RFC 8785 coordinator envelope; the two are not interchangeable.
    - *Proposed CC-07/CC-08 Enforcement:* Cryptographic signature verification via HMAC and nonce uniqueness is formalized in this contract and will be enforced upstream during CC-07/CC-08 transition gates.
 
 ---
@@ -440,11 +461,11 @@ The payload contains the complete execution envelope:
   "properties": {
     "attempt_id": { "type": "string" },
     "run_id": { "type": "string" },
-    "runtime_session_id": { "type": "string" },
+    "runtime_session_id": { "type": ["string", "null"] },
     "status": { "type": "string", "enum": ["SUCCEEDED", "FAILED", "INTERRUPTED", "TIMEOUT", "CANCELED"] },
-    "exit_code": { "type": "integer" },
+    "exit_code": { "type": ["integer", "null"] },
     "candidate_commit_sha": { "type": ["string", "null"] },
-    "tokens_billed": { "type": "integer", "minimum": 0 },
+    "tokens_billed": { "type": ["integer", "null"], "minimum": 0 },
     "duration_seconds": { "type": "number", "minimum": 0.0 },
     "artifacts": { "type": "array", "items": { "type": "object" } },
     "error_details": { "type": ["object", "null"] }
@@ -495,7 +516,7 @@ Adapters stream JSON / JSONL output from runtime processes. For each event emitt
    - If process was killed while filesystem writes or tool calls were in flight: intent transitions to `UNKNOWN_EXECUTION`.
 4. **Containment Reality:**
    - Process group signaling cleanly terminates local OS subprocesses.
-   - **Remote sidecars, out-of-process containers, or external network requests are NOT terminated by OS signals.** The coordinator relies on token quota exhaustion and lease timeouts for remote containment.
+   - **Remote sidecars, out-of-process containers, or external network requests are NOT terminated by OS signals.** Lease expiry revokes local admission authority; it does not stop remote work or billing. A provider-enforced spending cap or verified remote cancellation is required for bounded remote execution. Otherwise retain uncertainty and reservation holds, and escalate instead of asserting containment.
 
 ---
 
@@ -563,3 +584,16 @@ With this specification revised:
 - **CC-05 (Antigravity Developer Adapter):** Implement early `conversation_id` extraction with non-blocking bounded reads and process group isolation.
 - **CC-06 (Codex Reviewer Adapter):** Implement early `thread_id` extraction and automated Git commit semantic reviews.
 - **CC-07 / CC-08 (Candidate Verification & FSM Dispatch):** Wire automated verification evidence, cryptographic HMAC provenance checks, and separation of duties.
+
+
+## 12. Versioned additive migration and CC-03 acceptance gate
+
+This document is a corrected design proposal; coordinator tables/dispatch are not implemented by this change. CC-03 must use a transactional schema migration ledger (version, checksum, applied_at), integrity-checked backup and reopen tests. Inspect existing schema with PRAGMA before adding fields/indexes. Never reinterpret CREATE TABLE IF NOT EXISTS as migration. Existing pm_task_mappings columns remain project_id, planning_reference, task_id, local_issue_id, local_issue_key, created_at, updated_at.
+
+Preserve issue IDs, display keys, assignments, runtime history and evidence bytes. Canonicalizing historical non-UUID task IDs requires an approved one-to-one identity mapping, immutable legacy alias receipts and collision checks; pending active attempts prohibit identity cutover. Abort atomically on ambiguity. Do not silently rewrite the board during normal startup.
+
+Admission creates attempts and intents in one BEGIN IMMEDIATE transaction. Verified tenant binding chooses the private database. Cross-check tenant ownership, project, issue and mapping before insertion; never trust supplied tenant_id. Composite foreign keys above bind intent ownership to its attempt and attempts to the existing mapping. Enable foreign_keys for every connection. Evidence receipts must verify run->intent->attempt ownership and complete signed envelope before insertion. Enforce one physical spawn per intent/generation, one verdict/evidence nonce per domain/tenant/key, and retain independent developer/reviewer intent roles.
+
+Required recovery evidence before CC-03 acceptance: populated legacy database migration and reopen; unchanged history/identities; mismatched project/task/tenant rejection; concurrent claims; reaper versus pre-spawn CAS; cancel versus late result; expired heartbeat; crash before and after PROCESSING commit; duplicate physical-run insertion; unknown usage reservation hold. No automatic launch or production activation belongs to a storage migration.
+
+Signed evidence attachment remains a claim unless a trusted verifier actually executes and admits the candidate-specific checks. Automatic DONE requires that verifier, independent review and all current server gates. These contract corrections do not grant runtime authority or self-certify their author's implementation.

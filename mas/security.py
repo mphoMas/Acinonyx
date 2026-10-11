@@ -215,6 +215,7 @@ def sign_evidence_provenance(
     content_hash: str,
     uri: str,
     secret_key: Optional[str] = None,
+    binding_payload: Optional[Dict] = None,
 ) -> str:
     """
     GOV-03: Cryptographically signs evidence links with HMAC-SHA256 for tamper-evident provenance.
@@ -222,7 +223,20 @@ def sign_evidence_provenance(
     import hashlib
     import hmac
 
-    payload = f"{evidence_id}:{issue_id}:{evidence_type}:{content_hash}:{uri}"
+    if binding_payload is None:
+        payload = f"{evidence_id}:{issue_id}:{evidence_type}:{content_hash}:{uri}"
+    else:
+        import json
+        envelope = {
+            "domain": "mas.pm.evidence.v2",
+            "evidence_id": evidence_id,
+            "issue_id": issue_id,
+            "evidence_type": evidence_type,
+            "content_hash": content_hash,
+            "uri": uri,
+            "payload": {k: v for k, v in binding_payload.items() if k != "provenance_signature"},
+        }
+        payload = json.dumps(envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
     key = _signing_key(secret_key, "MAS_EVIDENCE_SECRET", "MAS_VERDICT_SECRET")
     return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -235,6 +249,7 @@ def verify_evidence_provenance(
     uri: str,
     signature: str,
     secret_key: Optional[str] = None,
+    binding_payload: Optional[Dict] = None,
 ) -> bool:
     """
     GOV-03: Verifies that an evidence record's cryptographic provenance signature is authentic.
@@ -250,6 +265,7 @@ def verify_evidence_provenance(
         content_hash=content_hash,
         uri=uri,
         secret_key=secret_key,
+        binding_payload=binding_payload,
     )
     return hmac.compare_digest(expected, signature.strip())
 

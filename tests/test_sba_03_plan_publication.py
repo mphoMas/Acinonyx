@@ -511,7 +511,7 @@ def test_active_work_preservation_and_reconciliation_tracking(temp_db: PMDatabas
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="sha256:abcd1234",
         uri="test_run.log",
-    )
+     payload={"policy_version": 1, "candidate_commit_sha": "a" * 40})
     temp_db.attach_evidence(evidence)
 
     # 3. Publish revision 2 modifying SBA-01 acceptance criteria and path scope, plus adding SBA-03
@@ -1184,7 +1184,7 @@ def test_reconciliation_proposal_superseded_rejection_and_audit(temp_db, sample_
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="h"*64,
         uri="test://run/1",
-    ))
+     payload={"policy_version": 1, "candidate_commit_sha": "a" * 40}))
 
     # 2. Proposal A (revision 2): modifies acceptance criteria and reviewer requirement
     req_a = PlanPublicationRequest(
@@ -1605,7 +1605,7 @@ def test_evidence_and_approval_invalidation_matrix(temp_db: PMDatabase, sample_p
     from mas.pm.fsm import FSMEngine
     from mas.pm.guards import validate_critic_verdicts, validate_evidence, UnverifiedWorkError
     from mas.pm.models import CriticVerdict, CriticVerdictType, EvidenceLink, EvidenceType, Issue
-    from mas.security import ExecutionContext, sign_verdict_payload, sign_evidence_provenance
+    from mas.security import ExecutionContext, sign_verdict_payload
 
     service = PlanPublisherService(temp_db)
     fsm = FSMEngine(temp_db)
@@ -1740,7 +1740,7 @@ def test_evidence_and_approval_invalidation_matrix(temp_db: PMDatabase, sample_p
             evidence_type=EvidenceType.GIT_COMMIT,
             content_hash=commit_sha,
             uri=f"git:commit:{commit_sha}",
-            payload={"policy_version": 1},
+            payload={"policy_version": 1, **({"policy_version": 1})},
         )
         temp_db.attach_evidence(ev_git)
 
@@ -1750,7 +1750,7 @@ def test_evidence_and_approval_invalidation_matrix(temp_db: PMDatabase, sample_p
             evidence_type=EvidenceType.TEST_RUN_LOG,
             content_hash=log_hash,
             uri=f"file://{log_file}",
-            payload={"policy_version": 1, "exit_code": 0, "candidate_commit_sha": commit_sha},
+            payload={"policy_version": 1, "candidate_commit_sha": commit_sha, **({"policy_version": 1, "exit_code": 0, "candidate_commit_sha": commit_sha})},
         )
         temp_db.attach_evidence(ev_log)
 
@@ -1841,3 +1841,20 @@ def test_evidence_and_approval_invalidation_matrix(temp_db: PMDatabase, sample_p
 
 
 
+
+
+@pytest.mark.parametrize('field', ['expected_proposal_rev', 'expected_base_policy_version'])
+@pytest.mark.parametrize('value', [True, '1', 1.0, None])
+def test_http_reconciliation_rejects_wrong_type_before_mutation(live_server, field, value):
+    _, port, auth_token = live_server
+    payload = {'decision': 'apply', 'expected_proposal_id': 'proposal',
+               'expected_proposal_rev': 1, 'expected_base_policy_version': 1}
+    payload[field] = value
+    request = urllib.request.Request(
+        f'http://127.0.0.1:{port}/api/pm/v1/projects/PLIVE/issues/missing/reconcile',
+        data=json.dumps(payload).encode(), method='POST',
+        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {auth_token}'},
+    )
+    with pytest.raises(urllib.error.HTTPError) as failure:
+        urllib.request.urlopen(request, timeout=3)
+    assert failure.value.code == 400

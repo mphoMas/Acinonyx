@@ -11,24 +11,6 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
-_trusted_admin_planning: ContextVar[bool] = ContextVar("trusted_admin_planning", default=False)
-
-
-def is_trusted_admin_planning() -> bool:
-    """Returns True if the current execution context has explicit administrative planning authorization enabled."""
-    return _trusted_admin_planning.get()
-
-
-@contextmanager
-def trusted_admin_planning_scope(enabled: bool = True):
-    """Context manager to explicitly grant trusted administrative planning authority to unbound calls."""
-    token = _trusted_admin_planning.set(enabled)
-    try:
-        yield
-    finally:
-        _trusted_admin_planning.reset(token)
-
-
 from mas.pm.db import DEFAULT_DB_PATH, PMDatabase
 from mas.pm.fsm import FSMEngine
 from mas.pm.guards import (
@@ -48,6 +30,24 @@ from mas.pm.models import (
     PriorityLevel,
     Project,
 )
+
+
+_trusted_admin_planning: ContextVar[bool] = ContextVar("trusted_admin_planning", default=False)
+
+
+def is_trusted_admin_planning() -> bool:
+    """Returns True if the current execution context has explicit administrative planning authorization enabled."""
+    return _trusted_admin_planning.get()
+
+
+@contextmanager
+def trusted_admin_planning_scope(enabled: bool = True):
+    """Context manager to explicitly grant trusted administrative planning authority to unbound calls."""
+    token = _trusted_admin_planning.set(enabled)
+    try:
+        yield
+    finally:
+        _trusted_admin_planning.reset(token)
 
 
 _GLOBAL_DB: Optional[PMDatabase] = None
@@ -292,8 +292,6 @@ def pm_attach_evidence(
         raise ValueError(f"Issue '{issue_key}' does not exist.")
 
     evidence_payload = dict(payload or {})
-    if "policy_version" not in evidence_payload:
-        evidence_payload["policy_version"] = issue.policy_version
 
     evidence = EvidenceLink(
         id=str(uuid.uuid4()),

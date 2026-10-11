@@ -89,9 +89,9 @@ def test_pm_sec_002_evidence_fail_closed(temp_pm_db, tmp_path, failure):
     log_file.write_text("Test run output")
     real_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     commit = "deadbeefcafe1234567890abcdef1234567890ab" if failure == "invalid_commit" else real_sha
-    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git", issue_id="i1", evidence_type=EvidenceType.GIT_COMMIT, content_hash=commit, uri=f"git:commit:{commit}"))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git", issue_id="i1", evidence_type=EvidenceType.GIT_COMMIT, content_hash=commit, uri=f"git:commit:{commit}", payload={"policy_version": 1}))
     uri = "file:///nonexistent/path/fake.log" if failure == "missing_log" else f"file://{log_file}"
-    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test", issue_id="i1", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=hashlib.sha256(log_file.read_bytes()).hexdigest(), uri=uri, payload={"exit_code": 1 if failure == "failed_tests" else 0}))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test", issue_id="i1", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=hashlib.sha256(log_file.read_bytes()).hexdigest(), uri=uri, payload={"policy_version": 1, "candidate_commit_sha": commit, **({"exit_code": 1 if failure == "failed_tests" else 0})}))
     messages = {"invalid_commit": "Git commit verification failed", "missing_log": "does not exist on disk", "failed_tests": "test run evidence indicates failure"}
     with ExecutionContext.scope("coder"), pytest.raises(UnverifiedWorkError, match=messages[failure]):
         FSMEngine(temp_pm_db).transition("EVD-1", IssueState.VERIFICATION, caller_principal="coder")
@@ -126,7 +126,7 @@ def test_pm_sec_003_scope_jail_git_changeset(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.GIT_COMMIT,
             content_hash=real_sha,
             uri=f"git:commit:{real_sha}",
-        )
+         payload={"policy_version": 1})
     )
     temp_pm_db.attach_evidence(
         EvidenceLink(
@@ -135,7 +135,7 @@ def test_pm_sec_003_scope_jail_git_changeset(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.TEST_RUN_LOG,
             content_hash=log_hash,
             uri=f"file://{log_file}",
-            payload={"exit_code": 0},
+            payload={"policy_version": 1, "candidate_commit_sha": real_sha, **({"exit_code": 0})},
         )
     )
 
@@ -282,7 +282,7 @@ def test_pm_gov_001_stale_verdict_invalidation_on_rework(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.GIT_COMMIT,
             content_hash=real_sha,
             uri=f"git:commit:{real_sha}",
-        )
+         payload={"policy_version": 1})
     )
     temp_pm_db.attach_evidence(
         EvidenceLink(
@@ -291,7 +291,7 @@ def test_pm_gov_001_stale_verdict_invalidation_on_rework(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.TEST_RUN_LOG,
             content_hash=log_hash,
             uri=f"file://{log_file}",
-            payload={"exit_code": 0},
+            payload={"policy_version": 1, "candidate_commit_sha": real_sha, **({"exit_code": 0})},
         )
     )
 

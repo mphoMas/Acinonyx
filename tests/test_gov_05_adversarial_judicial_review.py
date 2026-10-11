@@ -216,7 +216,7 @@ def test_adversarial_attack_direct_evidence_tampering(adversarial_env):
         evidence_type=EvidenceType.TEST_RUN_LOG,
         content_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         uri="artifacts/test.log",
-        payload={"tests": 5},
+        payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"tests": 5})},
     )
     db.attach_evidence(evidence)
 

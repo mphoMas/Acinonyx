@@ -1417,11 +1417,25 @@ class PMDatabase:
         conn = self._get_connection()
         try:
             now = datetime.now(timezone.utc).isoformat()
-            if "policy_version" not in evidence.payload:
-                cur_pol = conn.execute("SELECT policy_version FROM pm_issues WHERE id = ?", (evidence.issue_id,)).fetchone()
-                if cur_pol and cur_pol["policy_version"] is not None:
-                    evidence.payload["policy_version"] = int(cur_pol["policy_version"])
-
+            # Attachment is a claim, not proof of execution under today's policy.
+            # Callers must supply the policy they actually measured.
+            if type(evidence.payload.get("policy_version")) is not int or evidence.payload["policy_version"] < 1:
+                raise ValueError("Evidence requires an explicit positive integer policy_version")
+            ev_type = evidence.evidence_type.value if hasattr(evidence.evidence_type, "value") else str(evidence.evidence_type)
+            if ev_type == "GIT_COMMIT":
+                candidate = evidence.content_hash or evidence.uri.removeprefix("git:commit:")
+                supplied = evidence.payload.get("candidate_commit_sha", candidate)
+                if supplied != candidate:
+                    raise ValueError("Git evidence candidate binding contradicts its immutable reference")
+                evidence.payload["candidate_commit_sha"] = candidate
+            if ev_type == "TEST_RUN_LOG" and not (
+                isinstance(evidence.payload.get("candidate_commit_sha"), str)
+                and evidence.payload["candidate_commit_sha"].strip()
+            ):
+                raise ValueError("Test evidence requires an explicit candidate_commit_sha")
+            if evidence.payload.get("provenance_signature") and evidence.payload.get("provenance_version") != 2:
+                raise ValueError("Legacy signatures cannot admit new evidence; retain legacy records as history")
+            evidence.payload["provenance_version"] = 2
             if not evidence.payload.get("provenance_signature"):
                 from mas.security import sign_evidence_provenance
                 ev_type_val = evidence.evidence_type.value if hasattr(evidence.evidence_type, "value") else str(evidence.evidence_type)
@@ -1431,7 +1445,15 @@ class PMDatabase:
                     evidence_type=ev_type_val,
                     content_hash=evidence.content_hash,
                     uri=evidence.uri,
+                    binding_payload=evidence.payload,
                 )
+            else:
+                from mas.security import verify_evidence_provenance
+                if not verify_evidence_provenance(
+                    evidence.id, evidence.issue_id, ev_type, evidence.content_hash, evidence.uri,
+                    evidence.payload["provenance_signature"], binding_payload=evidence.payload,
+                ):
+                    raise ValueError("Evidence signature does not match its bound payload")
             with conn:
                 conn.execute(
                     """
@@ -1507,6 +1529,7 @@ class PMDatabase:
                     content_hash=lnk.content_hash,
                     uri=lnk.uri,
                     signature=sig,
+                    binding_payload=lnk.payload if lnk.payload.get("provenance_version") == 2 else None,
                 )
                 if not item_status["signature_valid"]:
                     report["valid"] = False

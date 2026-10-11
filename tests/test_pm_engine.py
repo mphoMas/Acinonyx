@@ -149,7 +149,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.GIT_COMMIT,
             content_hash=head_sha,
             uri=f"git:commit:{head_sha}",
-        )
+         payload={"policy_version": 1})
     )
     temp_pm_db.attach_evidence(
         EvidenceLink(
@@ -158,7 +158,7 @@ def test_full_happy_path_fsm_lifecycle(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.TEST_RUN_LOG,
             content_hash=log_hash,
             uri=f"file://{log_file}",
-            payload={"exit_code": 0, "passed": 12, "failed": 0},
+            payload={"policy_version": 1, "candidate_commit_sha": head_sha, **({"exit_code": 0, "passed": 12, "failed": 0})},
         )
     )
 
@@ -379,7 +379,7 @@ def test_evidence_integrity_sha256_verification(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.GIT_COMMIT,
             content_hash=head_sha,
             uri=f"git:commit:{head_sha}",
-        )
+         payload={"policy_version": 1})
     )
 
     # Attach with TAMPERED hash
@@ -390,7 +390,7 @@ def test_evidence_integrity_sha256_verification(temp_pm_db, tmp_path):
             evidence_type=EvidenceType.TEST_RUN_LOG,
             content_hash="tampered_fake_hash_9999",
             uri=f"file://{test_log}",
-            payload={"exit_code": 0},
+            payload={"policy_version": 1, "candidate_commit_sha": head_sha, **({"exit_code": 0})},
         )
     )
 
@@ -409,8 +409,8 @@ def test_evidence_integrity_sha256_verification(temp_pm_db, tmp_path):
         conn.close()
     # A clean independent issue with genuine evidence may pass verification.
     temp_pm_db.create_issue(Issue(id="i2", project_id=proj.id, key="CORE-2", title="Valid evidence", current_state=IssueState.IN_PROGRESS, assignee_principal="senior_engineer"))
-    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git-valid", issue_id="i2", evidence_type=EvidenceType.GIT_COMMIT, content_hash=head_sha, uri=f"git:commit:{head_sha}"))
-    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test-valid", issue_id="i2", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=correct_hash, uri=f"file://{test_log}", payload={"exit_code": 0}))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-git-valid", issue_id="i2", evidence_type=EvidenceType.GIT_COMMIT, content_hash=head_sha, uri=f"git:commit:{head_sha}", payload={"policy_version": 1}))
+    temp_pm_db.attach_evidence(EvidenceLink(id="ev-test-valid", issue_id="i2", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=correct_hash, uri=f"file://{test_log}", payload={"policy_version": 1, "candidate_commit_sha": head_sha, **({"exit_code": 0})}))
     step = fsm.transition("CORE-2", IssueState.VERIFICATION, caller_principal="senior_engineer")
     assert step.current_state == IssueState.VERIFICATION
 

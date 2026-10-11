@@ -17,6 +17,7 @@ Enforces:
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import json
 from pathlib import PurePosixPath
 import uuid

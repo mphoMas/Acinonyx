@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
-import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -389,7 +388,7 @@ class PlanRecord(BaseModel):
 
 
 class PlanReconciliationRequest(BaseModel):
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     decision: str = Field(..., description="Reconciliation decision: 'apply' or 'reject'")
     expected_proposal_id: str = Field(..., min_length=1, description="Immutable proposal identity")

@@ -118,7 +118,7 @@ def test_pm_backup_restores_evidence_verdict_and_immutability(tmp_path):
     issue = db.create_issue(Issue(id="i", project_id="p", key="RST-1", title="Restore", current_state=IssueState.VERIFICATION))
     log = tmp_path / "evidence.log"
     log.write_text("trusted test fixture")
-    db.attach_evidence(EvidenceLink(id="e", issue_id="i", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=hashlib.sha256(log.read_bytes()).hexdigest(), uri=str(log), payload={"exit_code": 0}))
+    db.attach_evidence(EvidenceLink(id="e", issue_id="i", evidence_type=EvidenceType.TEST_RUN_LOG, content_hash=hashlib.sha256(log.read_bytes()).hexdigest(), uri=str(log), payload={"policy_version": 1, "candidate_commit_sha": "a" * 40, **({"exit_code": 0})}))
     with ExecutionContext.scope("qa_critic"):
         db.record_verdict(CriticVerdict(id="v", issue_id="i", reviewer_principal="qa_critic", verdict=CriticVerdictType.PASS))
     with sqlite3.connect(db.db_path) as source, sqlite3.connect(tmp_path / "restored.db") as destination:

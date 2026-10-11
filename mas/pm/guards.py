@@ -245,7 +245,9 @@ def validate_evidence(
     valid_links = []
     for lnk in links:
         link_policy = lnk.payload.get("policy_version")
-        if link_policy is not None and link_policy != issue.policy_version:
+        if type(link_policy) is not int or link_policy != issue.policy_version:
+            continue
+        if lnk.payload.get("provenance_version") != 2:
             continue
         valid_links.append(lnk)
 
@@ -271,7 +273,7 @@ def validate_evidence(
     for link in valid_links:
         if link.evidence_type == EvidenceType.TEST_RUN_LOG and expected_commit:
             test_commit = link.payload.get("candidate_commit_sha") or link.payload.get("commit_sha")
-            if test_commit and test_commit.strip() != expected_commit:
+            if not isinstance(test_commit, str) or test_commit.strip() != expected_commit:
                 raise UnverifiedWorkError(
                     f"Candidate commit mismatch for {link.id} on {issue.key}: "
                     f"test log is bound to commit '{test_commit}', but git evidence specifies '{expected_commit}'."
@@ -290,6 +292,7 @@ def validate_evidence(
                 content_hash=link.content_hash,
                 uri=link.uri,
                 signature=sig,
+                binding_payload=link.payload,
             ):
                 raise UnverifiedWorkError(
                     f"Evidence provenance signature verification failed for link {link.id} on {issue.key}: "
