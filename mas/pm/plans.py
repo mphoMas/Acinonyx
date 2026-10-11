@@ -805,12 +805,12 @@ class PlanPublisherService:
         self,
         project_id_or_key: str,
         issue_id_or_key: str,
-        decision: str,  # "apply" or "reject"
+        decision: str,  # mandatory: "apply" or "reject"
         actor: str,
+        expected_proposal_id: str,
+        expected_proposal_rev: int,
+        expected_base_policy_version: int,
         tenant_id: str = "default",
-        expected_proposal_id: Optional[str] = None,
-        expected_proposal_rev: Optional[int] = None,
-        expected_base_policy_version: Optional[int] = None,
     ) -> Issue:
         """
         Explicit reconciliation for active tasks with staged scope/acceptance/reviewer changes.
@@ -820,9 +820,20 @@ class PlanPublisherService:
         In both cases, has_pending_reconciliation is cleared, and an immutable audit record is stored.
         Fails with StaleProposalError (HTTP 409) if expected proposal_id, proposal_rev, or base_policy_version mismatch.
         """
+        if decision is None or not isinstance(decision, str) or not decision.strip():
+            raise PlanValidationError("Reconciliation decision is required and cannot be empty (must be 'apply' or 'reject').")
         decision_clean = decision.lower().strip()
         if decision_clean not in ("apply", "reject"):
-            raise ValueError(f"Invalid reconciliation decision '{decision}': must be 'apply' or 'reject'.")
+            raise PlanValidationError(f"Invalid reconciliation decision '{decision}': must be 'apply' or 'reject'.")
+
+        if expected_proposal_id is None or not isinstance(expected_proposal_id, str) or not expected_proposal_id.strip():
+            raise PlanValidationError("expected_proposal_id is required, non-null, and must be a non-empty string.")
+
+        if expected_proposal_rev is None or not isinstance(expected_proposal_rev, int) or isinstance(expected_proposal_rev, bool):
+            raise PlanValidationError("expected_proposal_rev is required, non-null, and must be an integer.")
+
+        if expected_base_policy_version is None or not isinstance(expected_base_policy_version, int) or isinstance(expected_base_policy_version, bool):
+            raise PlanValidationError("expected_base_policy_version is required, non-null, and must be an integer.")
 
         with self.db.atomic_transaction() as conn:
             project = self.db.get_project(project_id_or_key, conn=conn) or self.db.get_project_by_key(project_id_or_key, conn=conn)
@@ -833,23 +844,25 @@ class PlanPublisherService:
             if not issue or issue.project_id != project.id:
                 raise ValueError(f"Issue '{issue_id_or_key}' not found in project '{project.key}'.")
 
-            if not issue.has_pending_reconciliation:
-                return issue
+            if not issue.has_pending_reconciliation or not issue.staged_proposal_id:
+                raise StaleProposalError(
+                    f"No pending staged proposal for issue '{issue.key}'. Expected proposal '{expected_proposal_id}' cannot be reconciled."
+                )
 
             # Version-bound decision validation: fail closed if decision targets obsolete proposal
-            if expected_proposal_id is not None and expected_proposal_id != issue.staged_proposal_id:
+            if expected_proposal_id != issue.staged_proposal_id:
                 raise StaleProposalError(
                     f"Decision proposal ID mismatch: expected '{expected_proposal_id}', "
                     f"current staged proposal is '{issue.staged_proposal_id}'."
                 )
 
-            if expected_proposal_rev is not None and expected_proposal_rev != issue.staged_proposal_rev:
+            if expected_proposal_rev != issue.staged_proposal_rev:
                 raise StaleProposalError(
                     f"Decision proposal revision mismatch: expected revision {expected_proposal_rev}, "
                     f"current staged proposal revision is {issue.staged_proposal_rev}."
                 )
 
-            if expected_base_policy_version is not None and expected_base_policy_version != issue.policy_version:
+            if expected_base_policy_version != issue.policy_version:
                 raise StaleProposalError(
                     f"Decision base policy version mismatch: expected version {expected_base_policy_version}, "
                     f"current issue policy version is {issue.policy_version}."
@@ -874,7 +887,6 @@ class PlanPublisherService:
             invalidated_evidence_count = 0
 
             if decision_clean == "apply":
-                new_policy_version = issue.policy_version + 1
                 effective_crit = (
                     issue.staged_acceptance_criteria
                     if issue.staged_acceptance_criteria is not None
@@ -892,17 +904,20 @@ class PlanPublisherService:
                 else:
                     effective_rev = issue.reviewer_requirement
 
-                # Check if evidence/approvals are affected and need invalidation
+                # Check if policy scope, criteria, or reviewer requirements changed
                 scope_or_crit_changed = (
                     sorted(effective_crit) != sorted(issue.acceptance_criteria) or
                     sorted(effective_paths) != sorted(issue.path_whitelist) or
                     effective_rev != issue.reviewer_requirement
                 )
-                if scope_or_crit_changed:
-                    # Invalidate prior approvals by incrementing rework_cycle and resetting reflexion_attempts
-                    cur_ev = conn.execute("SELECT COUNT(*) as cnt FROM pm_evidence_links WHERE issue_id = ?", (issue.id,))
-                    row_ev = cur_ev.fetchone()
-                    invalidated_evidence_count = int(row_ev["cnt"]) if row_ev else 0
+
+                new_policy_version = issue.policy_version + (1 if scope_or_crit_changed else 0)
+                rework_delta = 1 if scope_or_crit_changed else 0
+                new_rework_cycle = issue.rework_cycle + rework_delta
+
+                cur_ev = conn.execute("SELECT COUNT(*) as cnt FROM pm_evidence_links WHERE issue_id = ?", (issue.id,))
+                row_ev = cur_ev.fetchone()
+                invalidated_evidence_count = int(row_ev["cnt"]) if row_ev else 0
 
                 conn.execute(
                     """
@@ -918,7 +933,8 @@ class PlanPublisherService:
                         staged_proposal_id = NULL,
                         staged_proposal_rev = NULL,
                         has_pending_reconciliation = 0,
-                        rework_cycle = rework_cycle + (CASE WHEN ? > 0 THEN 1 ELSE 0 END),
+                        rework_cycle = ?,
+                        reflexion_attempts = (CASE WHEN ? > 0 THEN 0 ELSE reflexion_attempts END),
                         updated_at = ?
                     WHERE id = ?
                     """,
@@ -927,7 +943,8 @@ class PlanPublisherService:
                         json.dumps(effective_paths),
                         effective_rev,
                         new_policy_version,
-                        invalidated_evidence_count,
+                        new_rework_cycle,
+                        rework_delta,
                         now,
                         issue.id,
                     ),

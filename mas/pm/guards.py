@@ -241,17 +241,41 @@ def validate_evidence(
     if not links:
         raise UnverifiedWorkError(f"Issue {issue.key} has no attached evidence. Cannot transition to VERIFICATION.")
 
-    has_git = any(lnk.evidence_type == EvidenceType.GIT_COMMIT for lnk in links)
-    has_test = any(lnk.evidence_type == EvidenceType.TEST_RUN_LOG for lnk in links)
+    # Filter out evidence bound to older/mismatched policy versions (preserve historical record, reject stale)
+    valid_links = []
+    for lnk in links:
+        link_policy = lnk.payload.get("policy_version")
+        if link_policy is not None and link_policy != issue.policy_version:
+            continue
+        valid_links.append(lnk)
+
+    if not valid_links:
+        raise UnverifiedWorkError(
+            f"Issue {issue.key} has no valid evidence matching current policy version {issue.policy_version}. "
+            f"All existing evidence is stale and was admitted under older policy version(s)."
+        )
+
+    has_git = any(lnk.evidence_type == EvidenceType.GIT_COMMIT for lnk in valid_links)
+    has_test = any(lnk.evidence_type == EvidenceType.TEST_RUN_LOG for lnk in valid_links)
 
     if not has_git:
-        raise UnverifiedWorkError(f"Issue {issue.key} lacks mandatory GIT_COMMIT evidence.")
+        raise UnverifiedWorkError(f"Issue {issue.key} lacks mandatory GIT_COMMIT evidence for policy version {issue.policy_version}.")
     if not has_test:
-        raise UnverifiedWorkError(f"Issue {issue.key} lacks mandatory TEST_RUN_LOG evidence.")
+        raise UnverifiedWorkError(f"Issue {issue.key} lacks mandatory TEST_RUN_LOG evidence for policy version {issue.policy_version}.")
 
     root = (workspace_root or Path.cwd()).resolve()
 
-    for link in links:
+    git_link = next((lnk for lnk in valid_links if lnk.evidence_type == EvidenceType.GIT_COMMIT), None)
+    expected_commit = (git_link.content_hash or git_link.uri.replace("git:commit:", "")).strip() if git_link else None
+
+    for link in valid_links:
+        if link.evidence_type == EvidenceType.TEST_RUN_LOG and expected_commit:
+            test_commit = link.payload.get("candidate_commit_sha") or link.payload.get("commit_sha")
+            if test_commit and test_commit.strip() != expected_commit:
+                raise UnverifiedWorkError(
+                    f"Candidate commit mismatch for {link.id} on {issue.key}: "
+                    f"test log is bound to commit '{test_commit}', but git evidence specifies '{expected_commit}'."
+                )
         # GOV-03: Provenance signature verification
         sig = link.payload.get("provenance_signature")
         if not sig:

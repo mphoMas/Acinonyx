@@ -149,3 +149,59 @@ class PlanPublisherClient:
         req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode("utf-8"))
+
+    def reconcile_staged_changes(
+        self,
+        project_id_or_key: str,
+        issue_id_or_key: str,
+        decision: str,
+        expected_proposal_id: str,
+        expected_proposal_rev: int,
+        expected_base_policy_version: int,
+    ) -> Dict[str, Any]:
+        """
+        Reconciles staged changes on an active issue via POST /api/pm/v1/projects/{project_id}/issues/{issue_key}/reconcile.
+        Mandatory version bindings and explicit decision must be provided.
+        """
+        from mas.pm.plans import StaleProposalError, PlanValidationError, ProjectNotFoundError, PlanError
+
+        url = f"{self.base_url}/api/pm/v1/projects/{project_id_or_key}/issues/{issue_id_or_key}/reconcile"
+        payload = {
+            "decision": decision,
+            "expected_proposal_id": expected_proposal_id,
+            "expected_proposal_rev": expected_proposal_rev,
+            "expected_base_policy_version": expected_base_policy_version,
+        }
+        payload_bytes = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Content-Length": str(len(payload_bytes)),
+        }
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+
+        req = urllib.request.Request(url, data=payload_bytes, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            try:
+                err_json = json.loads(err_body)
+                msg = err_json.get("error", {}).get("message", err_body)
+                code = err_json.get("error", {}).get("code", "")
+            except Exception:
+                msg = err_body
+                code = ""
+
+            if e.code == 409:
+                raise StaleProposalError(msg)
+            elif e.code == 400:
+                raise PlanValidationError(msg)
+            elif e.code == 404:
+                raise ProjectNotFoundError(msg)
+            elif e.code in (401, 403):
+                raise PermissionError(f"HTTP {e.code}: {msg}")
+            else:
+                raise PlanError(f"HTTP {e.code}: {msg}", code=code)
+

@@ -1087,13 +1087,20 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": {"code": "malformed", "message": f"Malformed JSON: {e}"}}, status=400)
                 return
 
-            decision = payload.get("decision", "apply")
-            expected_proposal_id = payload.get("expected_proposal_id") or payload.get("proposal_id")
-            expected_proposal_rev = payload.get("expected_proposal_rev") or payload.get("proposal_rev")
-            expected_base_policy_version = payload.get("expected_base_policy_version") or payload.get("base_policy_version")
-
-            from mas.pm.plans import PlanPublisherService, ProjectNotFoundError, StaleProposalError
+            from mas.pm.models import PlanReconciliationRequest
+            from mas.pm.plans import PlanPublisherService, PlanValidationError, ProjectNotFoundError, StaleProposalError
             from mas.pm.tools import get_pm_db
+
+            try:
+                recon_req = PlanReconciliationRequest(**payload)
+            except Exception as e:
+                self._send_json({"error": {"code": "bad_request", "message": f"Invalid reconciliation request: {e}"}}, status=400)
+                return
+
+            decision = recon_req.decision
+            expected_proposal_id = recon_req.expected_proposal_id
+            expected_proposal_rev = recon_req.expected_proposal_rev
+            expected_base_policy_version = recon_req.expected_base_policy_version
             db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
             publisher = PlanPublisherService(db)
 
@@ -1163,7 +1170,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False}}, status=409)
             except ProjectNotFoundError as e:
                 self._send_json({"error": {"code": "not_found", "message": str(e)}}, status=404)
-            except ValueError as e:
+            except (PlanValidationError, ValueError) as e:
                 self._send_json({"error": {"code": "bad_request", "message": str(e)}}, status=400)
             except Exception as e:
                 self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)

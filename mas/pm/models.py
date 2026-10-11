@@ -387,3 +387,23 @@ class PlanRecord(BaseModel):
     tasks_count: int = 0
     created_at: str = ""
 
+
+class PlanReconciliationRequest(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    decision: str = Field(..., description="Reconciliation decision: 'apply' or 'reject'")
+    expected_proposal_id: str = Field(..., min_length=1, description="Immutable proposal identity")
+    expected_proposal_rev: int = Field(..., ge=1, description="Immutable proposal revision")
+    expected_base_policy_version: int = Field(..., ge=1, description="Expected base policy version of the issue")
+
+    @field_validator("decision")
+    @classmethod
+    def validate_decision(cls, v: str) -> str:
+        if not isinstance(v, str):
+            raise ValueError("decision must be a string")
+        clean = v.strip().lower()
+        if clean not in ("apply", "reject"):
+            raise ValueError(f"decision must be 'apply' or 'reject', got '{v}'")
+        return clean
+
+

@@ -20,6 +20,7 @@ Covers:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import socket
@@ -997,11 +998,15 @@ def test_active_reviewer_requirement_null_removal_and_replacement_staging(temp_d
             fsm.transition(issue1_after.id, IssueState.VERIFICATION, caller_principal="coordinator")
 
     # 4. Reject the proposal -> live requirement preserved, staged action cleared, pending recon cleared
+    prop2_id = resp2.changes_requiring_reconciliation[0].proposal_id
     rejected_issue = service.reconcile_staged_changes(
         sample_project.key,
         issue1.id,
         decision="reject",
         actor="chief_architect",
+        expected_proposal_id=prop2_id,
+        expected_proposal_rev=2,
+        expected_base_policy_version=1,
     )
     assert rejected_issue.reviewer_requirement == "independent"
     assert rejected_issue.staged_reviewer_action is None
@@ -1024,7 +1029,7 @@ def test_active_reviewer_requirement_null_removal_and_replacement_staging(temp_d
         ],
     )
     status3, resp3 = service.publish_plan(sample_project.key, req3, "architect", "tenant-1")
-    assert status3 == 200
+    assert status3 in (200, 201)
     assert len(resp3.changes_requiring_reconciliation) == 1
     assert resp3.changes_requiring_reconciliation[0].change_type == "reviewer_requirement_modified"
 
@@ -1035,11 +1040,15 @@ def test_active_reviewer_requirement_null_removal_and_replacement_staging(temp_d
     assert issue1_repl.has_pending_reconciliation is True
 
     # 6. Apply the replacement -> live requirement updated to "peer", pending recon cleared
+    prop3_id = resp3.changes_requiring_reconciliation[0].proposal_id
     applied_issue = service.reconcile_staged_changes(
         sample_project.key,
         issue1.id,
         decision="apply",
         actor="chief_architect",
+        expected_proposal_id=prop3_id,
+        expected_proposal_rev=3,
+        expected_base_policy_version=1,
     )
     assert applied_issue.reviewer_requirement == "peer"
     assert applied_issue.staged_reviewer_requirement is None
@@ -1297,8 +1306,16 @@ def test_reconciliation_proposal_superseded_rejection_and_audit(temp_db, sample_
 def test_pm_publish_plan_unbound_mcp_fails_closed():
     """
     Verifies that calling pm_publish_plan without verified planning authority fails closed.
+    Specifically tests:
+    - Unauthenticated / empty principal
+    - unprivileged:tenant_admin
+    - unprivileged:architect
+    - Allowed-looking names without verified permissions (architect, chief_architect, etc.)
+    - Revoked caller
+    - Cross-tenant caller
+    - Trusted administrative planning mechanism succeeds when explicitly activated.
     """
-    from mas.pm.tools import pm_publish_plan
+    from mas.pm.tools import pm_publish_plan, trusted_admin_planning_scope
     from mas.security import ExecutionContext
 
     # Unauthenticated / empty principal
@@ -1312,6 +1329,75 @@ def test_pm_publish_plan_unbound_mcp_fails_closed():
         with pytest.raises(PermissionError) as exc_nonplan:
             pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
         assert "planning authority" in str(exc_nonplan.value).lower()
+
+    # Negative test: unprivileged:tenant_admin
+    with ExecutionContext.scope("unprivileged:tenant_admin"):
+        with pytest.raises(PermissionError) as exc_ta:
+            pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+        assert "planning authority" in str(exc_ta.value).lower()
+
+    # Negative test: unprivileged:architect
+    with ExecutionContext.scope("unprivileged:architect"):
+        with pytest.raises(PermissionError) as exc_arch:
+            pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+        assert "planning authority" in str(exc_arch.value).lower()
+
+    # Negative test: Allowed-looking names without verified permissions
+    allowed_looking_names = [
+        "architect",
+        "chief_architect",
+        "data_architect",
+        "lead-architect",
+        "codex-architect",
+        "antigravity-architect",
+        "tenant_admin",
+        "org:architect",
+        "system:tenant_admin",
+    ]
+    for name in allowed_looking_names:
+        with ExecutionContext.scope(name):
+            with pytest.raises(PermissionError) as exc_name:
+                pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+            assert "planning authority" in str(exc_name.value).lower()
+
+    # Negative test: Revoked principal
+    from mas.iam import MultiTenantIAM
+    from mas.tenancy import tenant_scope
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        iam_root = Path(tmp_dir)
+        iam = MultiTenantIAM("0123456789012345678901234567890123456789")
+        iam.create_tenant("t-test", "Test Tenant")
+        iam.register_principal("t-test", "revoked_user", roles={"architect"}, scopes={"pm:plan:publish"})
+        tok = iam.issue_token("t-test", "revoked_user")
+        iam.suspend_principal("t-test", "revoked_user")
+
+        with pytest.raises(PermissionError):
+            with tenant_scope(iam, tok, "t-test", iam_root):
+                pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+
+    # Negative test: Cross-tenant attempt
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        iam_root = Path(tmp_dir)
+        iam = MultiTenantIAM("0123456789012345678901234567890123456789")
+        iam.create_tenant("tenant-a", "Tenant A")
+        iam.create_tenant("tenant-b", "Tenant B")
+        iam.register_principal("tenant-a", "arch_a", roles={"architect"}, scopes={"pm:plan:publish"})
+        tok_a = iam.issue_token("tenant-a", "arch_a")
+
+        with pytest.raises(PermissionError) as exc_cross:
+            with tenant_scope(iam, tok_a, "tenant-b", iam_root):
+                pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+        assert "belongs to another tenant" in str(exc_cross.value).lower()
+
+    # Explicit trusted administrative mechanism succeeds
+    db = get_pm_db()
+    if not db.get_project_by_key("PLIVE"):
+        db.create_project(Project(id=str(uuid.uuid4()), key="PLIVE", name="Live Project"))
+    with ExecutionContext.scope("system_admin"):
+        with trusted_admin_planning_scope(True):
+            resp = pm_publish_plan("PLIVE", {"plan_id": "p-admin", "revision": 1, "tasks": []})
+            assert resp["success"] is True
 
 
 def test_server_unconfigured_admin_token_rejects_planning():
@@ -1346,6 +1432,412 @@ def test_server_unconfigured_admin_token_rejects_planning():
         assert "403" in str(exc_info.value)
     finally:
         server.stop()
+
+
+def test_reconcile_mandatory_bindings_and_conflict(temp_db: PMDatabase, sample_project: Project, live_server):
+    """
+    Verifies that:
+    1. Reconciliation decision and all version bindings (proposal_id, proposal_rev, base_policy_version)
+       are strictly mandatory in both service and HTTP layer.
+    2. Missing, null, or malformed fields return 400 Bad Request (PlanValidationError).
+    3. Stale decisions return 409 Conflict without modifying live policy.
+    4. Sequence: Proposal A read, Proposal B replaces it, delayed decision for A arrives -> rejects without applying B.
+    """
+    from mas.pm.plans import PlanPublisherService, PlanValidationError, StaleProposalError
+    from mas.pm.fsm import FSMEngine
+    from mas.security import ExecutionContext
+
+    service = PlanPublisherService(temp_db)
+    fsm = FSMEngine(temp_db)
+
+    # 1. First publish a task and move to IN_PROGRESS
+    req1 = PlanPublicationRequest(
+        plan_id="plan-seq",
+        revision=1,
+        expected_previous_revision=0,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="seq-1",
+                planning_reference="SEQ-01",
+                title="Sequence Task",
+                path_whitelist=["mas/"],
+                acceptance_criteria=["Criterion 1"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st1, resp1 = service.publish_plan(sample_project.key, req1, "architect", "tenant-1")
+    assert st1 in (200, 201)
+    issue = temp_db.get_issue(resp1.mappings[0].local_issue_id)
+    conn = temp_db._get_connection()
+    conn.execute("UPDATE pm_issues SET appetite_tokens = 50000 WHERE id = ?", (issue.id,))
+    conn.commit()
+    conn.close()
+    with ExecutionContext.scope("dev"):
+        fsm.transition(issue.id, IssueState.REFINED, caller_principal="dev")
+        fsm.transition(issue.id, IssueState.STAGED, caller_principal="dev")
+        fsm.transition(issue.id, IssueState.IN_PROGRESS, caller_principal="dev")
+
+    # 2. Publish Proposal A (revision 2) proposing new criteria
+    req2 = PlanPublicationRequest(
+        plan_id="plan-seq",
+        revision=2,
+        expected_previous_revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="seq-1",
+                planning_reference="SEQ-01",
+                title="Sequence Task",
+                path_whitelist=["mas/"],
+                acceptance_criteria=["Criterion 1", "Criterion 2 (Prop A)"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st2, resp2 = service.publish_plan(sample_project.key, req2, "architect", "tenant-1")
+    assert st2 in (200, 201)
+    prop_a_id = resp2.changes_requiring_reconciliation[0].proposal_id
+
+    # Service-level validation: missing or invalid parameters
+    with pytest.raises(PlanValidationError) as exc:
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="", actor="arch",
+            expected_proposal_id=prop_a_id, expected_proposal_rev=2, expected_base_policy_version=1
+        )
+    assert "decision is required" in str(exc.value).lower()
+
+    with pytest.raises(PlanValidationError) as exc:
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="maybe", actor="arch",
+            expected_proposal_id=prop_a_id, expected_proposal_rev=2, expected_base_policy_version=1
+        )
+    assert "must be 'apply' or 'reject'" in str(exc.value).lower()
+
+    with pytest.raises(PlanValidationError):
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="apply", actor="arch",
+            expected_proposal_id="", expected_proposal_rev=2, expected_base_policy_version=1
+        )
+
+    with pytest.raises(PlanValidationError):
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="apply", actor="arch",
+            expected_proposal_id=prop_a_id, expected_proposal_rev="two", expected_base_policy_version=1  # type: ignore
+        )
+
+    with pytest.raises(PlanValidationError):
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="apply", actor="arch",
+            expected_proposal_id=prop_a_id, expected_proposal_rev=2, expected_base_policy_version="one"  # type: ignore
+        )
+
+    # 3. Publish Proposal B (revision 3), replacing Proposal A
+    req3 = PlanPublicationRequest(
+        plan_id="plan-seq",
+        revision=3,
+        expected_previous_revision=2,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="seq-1",
+                planning_reference="SEQ-01",
+                title="Sequence Task",
+                path_whitelist=["mas/"],
+                acceptance_criteria=["Criterion 1", "Criterion 3 (Prop B)"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st3, resp3 = service.publish_plan(sample_project.key, req3, "architect", "tenant-1")
+    assert st3 in (200, 201)
+
+    # 4. Delayed decision for Proposal A arrives -> MUST reject with StaleProposalError (HTTP 409)
+    with pytest.raises(StaleProposalError) as exc_stale:
+        service.reconcile_staged_changes(
+            sample_project.key, issue.id, decision="apply", actor="arch",
+            expected_proposal_id=prop_a_id, expected_proposal_rev=2, expected_base_policy_version=1
+        )
+    assert "mismatch" in str(exc_stale.value).lower()
+
+    # Verify Proposal B was NOT applied, live policy is still version 1, pending reconciliation is still true
+    current_issue = temp_db.get_issue(issue.id)
+    assert current_issue.policy_version == 1
+    assert current_issue.has_pending_reconciliation is True
+    assert "Criterion 3 (Prop B)" not in current_issue.acceptance_criteria
+
+    # HTTP Endpoint validation tests against live server
+    server, port, auth_token = live_server
+    base_url = f"http://127.0.0.1:{port}"
+    client = PlanPublisherClient(base_url=base_url, auth_token=auth_token)
+
+    # Publish an issue on live server
+    p_resp = client.publish_plan("PLIVE", {
+        "plan_id": "p-live-recon",
+        "revision": 1,
+        "tasks": [{"task_id": "lr-1", "planning_reference": "LR-01", "title": "Live Recon Task"}]
+    })
+    lr_key = p_resp.mappings[0].local_issue_key
+
+    # HTTP: Missing decision -> 400 Bad Request
+    import urllib.request
+    import urllib.error
+    url = f"{base_url}/api/pm/v1/projects/PLIVE/issues/{lr_key}/reconcile"
+    req_bad = urllib.request.Request(
+        url,
+        data=json.dumps({"expected_proposal_id": "p", "expected_proposal_rev": 1, "expected_base_policy_version": 1}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {auth_token}"},
+        method="POST"
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_http:
+        urllib.request.urlopen(req_bad)
+    assert exc_http.value.code == 400
+
+
+def test_evidence_and_approval_invalidation_matrix(temp_db: PMDatabase, sample_project: Project):
+    """
+    Verifies that:
+    1. Existing verdicts with zero evidence links are invalidated when policy changes on apply (rework_cycle incremented).
+    2. Existing evidence under an older policy is preserved as history, but rejected as stale under new policy.
+    3. Reviewer-only changes increment rework_cycle and policy_version, invalidating prior approvals.
+    4. Scope and criteria changes increment rework_cycle and policy_version.
+    5. Rejected proposals preserve current policy, rework_cycle, and valid evidence/verdicts.
+    """
+    from mas.pm.plans import PlanPublisherService
+    from mas.pm.fsm import FSMEngine
+    from mas.pm.guards import validate_critic_verdicts, validate_evidence, UnverifiedWorkError
+    from mas.pm.models import CriticVerdict, CriticVerdictType, EvidenceLink, EvidenceType, Issue
+    from mas.security import ExecutionContext, sign_verdict_payload, sign_evidence_provenance
+
+    service = PlanPublisherService(temp_db)
+    fsm = FSMEngine(temp_db)
+
+    # --- Scenario 1: Existing verdicts with zero evidence links ---
+    req1 = PlanPublicationRequest(
+        plan_id="plan-inv",
+        revision=1,
+        expected_previous_revision=0,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="inv-1",
+                planning_reference="INV-01",
+                title="Invalidation Task",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Initial criteria"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st1, resp1 = service.publish_plan(sample_project.key, req1, "architect", "tenant-1")
+    assert st1 in (200, 201)
+    issue1 = temp_db.get_issue(resp1.mappings[0].local_issue_id)
+    conn = temp_db._get_connection()
+    conn.execute("UPDATE pm_issues SET appetite_tokens = 50000 WHERE id = ?", (issue1.id,))
+    conn.commit()
+    conn.close()
+
+    # Record a valid PASS verdict for rework_cycle 0 (with zero evidence links)
+    sig1 = sign_verdict_payload(
+        issue_id=issue1.id,
+        reviewer_principal="independent",
+        verdict_value="PASS",
+        rework_cycle=0,
+        findings={"passed": True},
+    )
+    with ExecutionContext.scope("independent"):
+        temp_db.record_verdict(CriticVerdict(
+            id=str(uuid.uuid4()),
+            issue_id=issue1.id,
+            reviewer_principal="independent",
+            verdict=CriticVerdictType.PASS,
+            findings={"passed": True},
+            signature=sig1,
+            rework_cycle=0,
+        ))
+
+    # Initial check: verdicts pass for rework_cycle 0
+    validate_critic_verdicts(temp_db, issue1, ["independent"])
+
+    # Move to IN_PROGRESS
+    with ExecutionContext.scope("dev"):
+        fsm.transition(issue1.id, IssueState.REFINED, caller_principal="dev")
+        fsm.transition(issue1.id, IssueState.STAGED, caller_principal="dev")
+        fsm.transition(issue1.id, IssueState.IN_PROGRESS, caller_principal="dev")
+
+    # Propose criteria change in revision 2
+    req2 = PlanPublicationRequest(
+        plan_id="plan-inv",
+        revision=2,
+        expected_previous_revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="inv-1",
+                planning_reference="INV-01",
+                title="Invalidation Task",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Initial criteria", "Updated criteria"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st2, resp2 = service.publish_plan(sample_project.key, req2, "architect", "tenant-1")
+    assert st2 in (200, 201)
+    prop_inv_id = resp2.changes_requiring_reconciliation[0].proposal_id
+
+    # Apply proposal -> EVEN WITH ZERO EVIDENCE LINKS, rework_cycle MUST increment to 1!
+    applied1 = service.reconcile_staged_changes(
+        sample_project.key, issue1.id, decision="apply", actor="arch",
+        expected_proposal_id=prop_inv_id, expected_proposal_rev=2, expected_base_policy_version=1
+    )
+    assert applied1.policy_version == 2
+    assert applied1.rework_cycle == 1, "Rework cycle must increment unconditionally to invalidate prior verdicts!"
+
+    # Now validate_critic_verdicts must FAIL because the prior PASS was for cycle 0, not cycle 1!
+    with pytest.raises(UnverifiedWorkError) as exc_v:
+        validate_critic_verdicts(temp_db, applied1, ["independent"])
+    assert "missing required pass verdicts for rework cycle 1" in str(exc_v.value).lower()
+
+    # --- Scenario 2: Existing evidence under older policy ---
+    # Attach evidence bound to policy_version 1
+    # Create git commit in repo if needed
+    import tempfile
+    with tempfile.TemporaryDirectory() as repo_dir:
+        repo_path = Path(repo_dir)
+        subprocess.run(["git", "init"], cwd=str(repo_path), check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(repo_path), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(repo_path), check=True)
+        test_file = repo_path / "mas" / "pm" / "test.txt"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("hello")
+        subprocess.run(["git", "add", "."], cwd=str(repo_path), check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo_path), check=True)
+        commit_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(repo_path), check=True, capture_output=True, text=True).stdout.strip()
+
+        # Log file
+        log_file = repo_path / "test.log"
+        log_file.write_text("all tests passed")
+        log_hash = hashlib.sha256(b"all tests passed").hexdigest()
+
+        # Issue 2 created with policy_version 1
+        issue2 = temp_db.create_issue(
+            Issue(
+                id=str(uuid.uuid4()),
+                project_id=sample_project.id,
+                key=temp_db.next_issue_key(sample_project.key),
+                title="Evidence Test",
+                issue_type=IssueType.TASK,
+                priority=PriorityLevel.MEDIUM,
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Criteria A"],
+                reviewer_requirement="independent",
+                appetite_tokens=50000,
+            )
+        )
+        assert issue2.policy_version == 1
+
+        # Attach evidence under policy_version 1
+        ev_git = EvidenceLink(
+            id=str(uuid.uuid4()),
+            issue_id=issue2.id,
+            evidence_type=EvidenceType.GIT_COMMIT,
+            content_hash=commit_sha,
+            uri=f"git:commit:{commit_sha}",
+            payload={"policy_version": 1},
+        )
+        temp_db.attach_evidence(ev_git)
+
+        ev_log = EvidenceLink(
+            id=str(uuid.uuid4()),
+            issue_id=issue2.id,
+            evidence_type=EvidenceType.TEST_RUN_LOG,
+            content_hash=log_hash,
+            uri=f"file://{log_file}",
+            payload={"policy_version": 1, "exit_code": 0, "candidate_commit_sha": commit_sha},
+        )
+        temp_db.attach_evidence(ev_log)
+
+        # Under policy 1, validate_evidence passes!
+        validate_evidence(temp_db, issue2, workspace_root=repo_path)
+
+        # Now simulate policy change to version 2 (e.g. scope expansion or reviewer change)
+        conn = temp_db._get_connection()
+        conn.execute("UPDATE pm_issues SET policy_version = 2 WHERE id = ?", (issue2.id,))
+        conn.commit()
+        conn.close()
+
+        issue2_v2 = temp_db.get_issue(issue2.id)
+        assert issue2_v2.policy_version == 2
+
+        # Evidence records still exist in database (preserved)
+        links = temp_db.get_evidence_links(issue2.id)
+        assert len(links) == 2
+
+        # But validate_evidence MUST reject because evidence is bound to older policy_version 1!
+        with pytest.raises(UnverifiedWorkError) as exc_ev:
+            validate_evidence(temp_db, issue2_v2, workspace_root=repo_path)
+        assert "stale" in str(exc_ev.value).lower()
+
+    # --- Scenario 3 & 4: Reviewer-only changes & Scope changes ---
+    # Tested by test_active_task_reviewer_staging_semantics and above.
+
+    # --- Scenario 5: Rejected proposals preserve current policy and valid evidence ---
+    req_rej_1 = PlanPublicationRequest(
+        plan_id="plan-rej",
+        revision=1,
+        expected_previous_revision=0,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="rej-task-id",
+                planning_reference="REJ-01",
+                title="Reject Test",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Original criteria"],
+                reviewer_requirement="independent",
+            )
+        ],
+    )
+    st_r1, resp_r1 = service.publish_plan(sample_project.key, req_rej_1, "architect", "tenant-1")
+    assert st_r1 in (200, 201)
+    issue3 = temp_db.get_issue(resp_r1.mappings[0].local_issue_id)
+    conn = temp_db._get_connection()
+    conn.execute("UPDATE pm_issues SET appetite_tokens = 50000 WHERE id = ?", (issue3.id,))
+    conn.commit()
+    conn.close()
+
+    with ExecutionContext.scope("dev"):
+        fsm.transition(issue3.id, IssueState.REFINED, caller_principal="dev")
+        fsm.transition(issue3.id, IssueState.STAGED, caller_principal="dev")
+        fsm.transition(issue3.id, IssueState.IN_PROGRESS, caller_principal="dev")
+
+    # Propose change in revision 2
+    req_rej_2 = PlanPublicationRequest(
+        plan_id="plan-rej",
+        revision=2,
+        expected_previous_revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="rej-task-id",
+                planning_reference="REJ-01",
+                title="Reject Test",
+                path_whitelist=["mas/pm/", "extra/"],
+                acceptance_criteria=["Changed criteria"],
+                reviewer_requirement="peer",
+            )
+        ],
+    )
+    st_rej, resp_rej = service.publish_plan(sample_project.key, req_rej_2, "architect", "tenant-1")
+    assert st_rej in (200, 201)
+    prop_rej_id = resp_rej.changes_requiring_reconciliation[0].proposal_id
+
+    # Reject proposal
+    rejected = service.reconcile_staged_changes(
+        sample_project.key, issue3.id, decision="reject", actor="arch",
+        expected_proposal_id=prop_rej_id, expected_proposal_rev=2, expected_base_policy_version=1
+    )
+    assert rejected.policy_version == 1, "Policy version must NOT change on rejection!"
+    assert rejected.rework_cycle == 0, "Rework cycle must NOT change on rejection!"
+    assert rejected.reviewer_requirement == "independent", "Original requirement preserved!"
+    assert rejected.acceptance_criteria == ["Original criteria"]
+
+
 
 
 

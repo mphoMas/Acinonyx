@@ -4,10 +4,30 @@ mas.pm.tools: MCP Tool registrations for the MAS Project Management Engine (MAS-
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 import uuid
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+
+_trusted_admin_planning: ContextVar[bool] = ContextVar("trusted_admin_planning", default=False)
+
+
+def is_trusted_admin_planning() -> bool:
+    """Returns True if the current execution context has explicit administrative planning authorization enabled."""
+    return _trusted_admin_planning.get()
+
+
+@contextmanager
+def trusted_admin_planning_scope(enabled: bool = True):
+    """Context manager to explicitly grant trusted administrative planning authority to unbound calls."""
+    token = _trusted_admin_planning.set(enabled)
+    try:
+        yield
+    finally:
+        _trusted_admin_planning.reset(token)
+
 
 from mas.pm.db import DEFAULT_DB_PATH, PMDatabase
 from mas.pm.fsm import FSMEngine
@@ -271,13 +291,17 @@ def pm_attach_evidence(
     if not issue:
         raise ValueError(f"Issue '{issue_key}' does not exist.")
 
+    evidence_payload = dict(payload or {})
+    if "policy_version" not in evidence_payload:
+        evidence_payload["policy_version"] = issue.policy_version
+
     evidence = EvidenceLink(
         id=str(uuid.uuid4()),
         issue_id=issue.id,
         evidence_type=EvidenceType(evidence_type.upper()),
         content_hash=content_hash,
         uri=uri,
-        payload=payload or {},
+        payload=evidence_payload,
     )
     saved = database.attach_evidence(evidence)
     return {
@@ -442,12 +466,12 @@ def pm_publish_plan(
         tenant_id = "default"
         if not actor or not actor.strip():
             raise PermissionError("Unauthenticated operation: pm_publish_plan requires an authenticated execution context.")
-        # Non-empty actor string alone does NOT grant planning authority!
-        # Unbound callers must be explicitly authorized architects/planners
-        UNBOUND_PLANNING_PRINCIPALS = {"architect", "data_architect", "chief_architect", "lead-architect", "codex-architect", "antigravity-architect"}
-        if actor not in UNBOUND_PLANNING_PRINCIPALS and not actor.endswith((":architect", ":tenant_admin")):
+        # Fail closed: Do NOT grant permission based on principal name or suffix (:architect, :tenant_admin).
+        # Unbound callers are denied unless an explicitly defined trusted administrative mechanism supplies authority.
+        if not is_trusted_admin_planning():
             raise PermissionError(
-                f"Principal '{actor}' lacks verified planning authority (requires verified architect identity or authenticated tenant planning binding)."
+                f"Principal '{actor}' lacks verified planning authority. Unbound publication denied: "
+                "requires verified tenant planning binding or explicit administrative authorization."
             )
 
     if isinstance(plan_payload, str):

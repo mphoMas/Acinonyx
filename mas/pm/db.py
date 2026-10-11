@@ -1417,6 +1417,11 @@ class PMDatabase:
         conn = self._get_connection()
         try:
             now = datetime.now(timezone.utc).isoformat()
+            if "policy_version" not in evidence.payload:
+                cur_pol = conn.execute("SELECT policy_version FROM pm_issues WHERE id = ?", (evidence.issue_id,)).fetchone()
+                if cur_pol and cur_pol["policy_version"] is not None:
+                    evidence.payload["policy_version"] = int(cur_pol["policy_version"])
+
             if not evidence.payload.get("provenance_signature"):
                 from mas.security import sign_evidence_provenance
                 ev_type_val = evidence.evidence_type.value if hasattr(evidence.evidence_type, "value") else str(evidence.evidence_type)
