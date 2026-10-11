@@ -249,6 +249,7 @@ class TaskMapping(BaseModel):
     task_id: str
     local_issue_id: str
     local_issue_key: str
+    legacy_task_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -404,5 +405,87 @@ class PlanReconciliationRequest(BaseModel):
         if clean not in ("apply", "reject"):
             raise ValueError(f"decision must be 'apply' or 'reject', got '{v}'")
         return clean
+
+
+class CoordinatorAttempt(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    attempt_id: str
+    tenant_id: str
+    project_id: str
+    issue_id: str
+    task_id: str
+    attempt_seq: int
+    status: str
+    fencing_token: int = 1
+    started_at: str = ""
+    finished_at: Optional[str] = None
+    budget_tokens_allocated: int = 0
+    budget_tokens_spent: int = 0
+    candidate_commit_sha: Optional[str] = None
+    failure_reason: Optional[str] = None
+
+
+class CoordinatorIntent(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    intent_id: str
+    tenant_id: str
+    project_id: str
+    issue_id: str
+    task_id: str
+    attempt_id: str
+    adapter_type: str
+    status: str
+    fencing_token: int = 1
+    worker_id: Optional[str] = None
+    lease_expires_at: Optional[float] = None
+    lease_heartbeat_at: Optional[float] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class CoordinatorRun(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    run_id: str
+    intent_id: str
+    attempt_id: str
+    fencing_token: int
+    runtime_session_id: Optional[str] = None
+    process_pid: Optional[int] = None
+    process_pgid: Optional[int] = None
+    status: str
+    exit_code: Optional[int] = None
+    started_at: str = ""
+    ended_at: Optional[str] = None
+
+
+class CoordinatorEvent(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    event_id: Optional[int] = None
+    run_id: str
+    cursor_seq: int
+    event_type: str
+    event_payload: Dict[str, Any] = Field(default_factory=dict)
+    emitted_at: str = ""
+
+
+class CoordinatorEvidenceReceipt(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    evidence_id: str
+    issue_id: str
+    task_id: str
+    attempt_id: str
+    run_id: str
+    candidate_commit_sha: str
+    nonce: str
+    key_id: str
+    signature: str
+    canonical_payload: Dict[str, Any] = Field(default_factory=dict)
+    created_at: str = ""
 
 

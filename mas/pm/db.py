@@ -47,6 +47,8 @@ class PMDatabase:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self.init_schema()
+        from mas.pm.coordinator import CoordinatorStore
+        self.coordinator = CoordinatorStore(self)
 
     def _get_connection(self) -> sqlite3.Connection:
         from mas.tenancy import current_binding
@@ -477,12 +479,136 @@ class PMDatabase:
                 CREATE TRIGGER IF NOT EXISTS trg_prevent_self_review
                 BEFORE INSERT ON pm_critic_verdicts
                 BEGIN
-                    SELECT CASE
+                SELECT CASE
                         WHEN NEW.reviewer_principal = (SELECT assignee_principal FROM pm_issues WHERE id = NEW.issue_id)
                         THEN RAISE(ABORT, 'SeparationOfDutiesViolation: Issue assignee cannot record a review verdict on their own work.')
                     END;
                 END;
                 """)
+
+                # CC-02 / CC-03: Additive column migration for pm_task_mappings
+                try:
+                    conn.execute("ALTER TABLE pm_task_mappings ADD COLUMN legacy_task_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_task_mappings_legacy ON pm_task_mappings(legacy_task_id);")
+
+                # CC-02 / CC-03: Coordinator Persistence & Outbox State
+                conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_coord_mapping_identity
+                ON pm_task_mappings(project_id, task_id, local_issue_id);
+                """)
+                conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_coord_issue_project
+                ON pm_issues(project_id, id);
+                """)
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    issue_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    attempt_seq INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN_EXECUTION', 'CANCELED')),
+                    fencing_token INTEGER NOT NULL DEFAULT 1,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TIMESTAMP,
+                    budget_tokens_allocated INTEGER NOT NULL DEFAULT 0,
+                    budget_tokens_spent INTEGER NOT NULL DEFAULT 0,
+                    candidate_commit_sha TEXT,
+                    failure_reason TEXT,
+                    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+                    FOREIGN KEY(project_id, task_id, issue_id)
+                        REFERENCES pm_task_mappings(project_id, task_id, local_issue_id),
+                    FOREIGN KEY(project_id, issue_id) REFERENCES pm_issues(project_id, id),
+                    CONSTRAINT uq_attempt_identity UNIQUE (attempt_id, issue_id, task_id, project_id, tenant_id),
+                    CONSTRAINT uq_issue_attempt_seq UNIQUE (issue_id, attempt_seq)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_attempts_issue ON pm_coordinator_attempts(issue_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_attempts_task ON pm_coordinator_attempts(task_id);")
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_intents (
+                    intent_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    issue_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    attempt_id TEXT NOT NULL,
+                    adapter_type TEXT NOT NULL CHECK(adapter_type IN ('antigravity', 'codex', 'synthetic')),
+                    status TEXT NOT NULL CHECK(status IN ('PENDING', 'CLAIMED', 'PROCESSING', 'COMPLETED', 'FAILED', 'UNKNOWN_EXECUTION', 'CANCELED', 'CANCEL_REQUESTED')),
+                    fencing_token INTEGER NOT NULL DEFAULT 1,
+                    worker_id TEXT,
+                    lease_expires_at REAL,
+                    lease_heartbeat_at REAL,
+                    payload JSON NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+                    FOREIGN KEY(attempt_id, issue_id, task_id, project_id, tenant_id)
+                        REFERENCES pm_coordinator_attempts(attempt_id, issue_id, task_id, project_id, tenant_id),
+                    CONSTRAINT uq_intent_issue_attempt UNIQUE (issue_id, attempt_id, adapter_type)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_intents_status ON pm_coordinator_intents(status, lease_expires_at);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_intents_task ON pm_coordinator_intents(task_id);")
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_runs (
+                    run_id TEXT PRIMARY KEY,
+                    intent_id TEXT NOT NULL REFERENCES pm_coordinator_intents(intent_id),
+                    attempt_id TEXT NOT NULL,
+                    fencing_token INTEGER NOT NULL,
+                    runtime_session_id TEXT,
+                    process_pid INTEGER,
+                    process_pgid INTEGER,
+                    status TEXT NOT NULL CHECK(status IN ('SPAWNING', 'STREAMING', 'EXITED', 'INTERRUPTED', 'KILLED')),
+                    exit_code INTEGER,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ended_at TIMESTAMP,
+                    FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
+                    CONSTRAINT uq_physical_dispatch UNIQUE (intent_id, fencing_token)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_runs_attempt ON pm_coordinator_runs(attempt_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_runs_intent ON pm_coordinator_runs(intent_id);")
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    cursor_seq INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    event_payload JSON NOT NULL,
+                    emitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(run_id) REFERENCES pm_coordinator_runs(run_id) ON DELETE CASCADE,
+                    CONSTRAINT uq_run_cursor UNIQUE (run_id, cursor_seq)
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_events_run ON pm_coordinator_events(run_id, cursor_seq);")
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_evidence_receipts (
+                    evidence_id TEXT PRIMARY KEY,
+                    issue_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    attempt_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    candidate_commit_sha TEXT NOT NULL,
+                    nonce TEXT NOT NULL UNIQUE,
+                    key_id TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    canonical_payload JSON NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+                    FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
+                    FOREIGN KEY(run_id) REFERENCES pm_coordinator_runs(run_id) ON DELETE CASCADE
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_evidence_issue ON pm_coordinator_evidence_receipts(issue_id);")
         finally:
             conn.close()
 
@@ -812,6 +938,7 @@ class PMDatabase:
                 task_id=row["task_id"],
                 local_issue_id=row["local_issue_id"],
                 local_issue_key=row["local_issue_key"],
+                legacy_task_id=row["legacy_task_id"] if "legacy_task_id" in row.keys() else None,
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
             )
@@ -844,6 +971,7 @@ class PMDatabase:
                 task_id=row["task_id"],
                 local_issue_id=row["local_issue_id"],
                 local_issue_key=row["local_issue_key"],
+                legacy_task_id=row["legacy_task_id"] if "legacy_task_id" in row.keys() else None,
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
             )
@@ -874,6 +1002,7 @@ class PMDatabase:
                     task_id=row["task_id"],
                     local_issue_id=row["local_issue_id"],
                     local_issue_key=row["local_issue_key"],
+                    legacy_task_id=row["legacy_task_id"] if "legacy_task_id" in row.keys() else None,
                     created_at=str(row["created_at"]),
                     updated_at=str(row["updated_at"]),
                 )
