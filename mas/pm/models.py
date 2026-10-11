@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+import uuid
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class IssueState(str, Enum):
@@ -121,6 +122,10 @@ class Issue(BaseModel):
     proposed_delivery_owner: Optional[str] = None
     reviewer_requirement: Optional[str] = None
     proposed_budget_tokens: Optional[int] = None
+    staged_acceptance_criteria: Optional[List[str]] = None
+    staged_path_whitelist: Optional[List[str]] = None
+    staged_reviewer_requirement: Optional[str] = None
+    has_pending_reconciliation: bool = False
     created_at: str = ""
     updated_at: str = ""
 
@@ -220,7 +225,7 @@ class TaskMapping(BaseModel):
 
 
 class PlanTaskDefinition(BaseModel):
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(frozen=False, extra="forbid")
 
     task_id: str
     planning_reference: str
@@ -235,11 +240,46 @@ class PlanTaskDefinition(BaseModel):
     reviewer_requirement: Optional[str] = None
     path_whitelist: List[str] = Field(default_factory=list)
     proposed_budget: Optional[Dict[str, Any]] = None
-    proposed_budget_tokens: Optional[int] = None
+    proposed_budget_tokens: Optional[int] = Field(default=None, ge=0)
+
+    @field_validator("task_id")
+    @classmethod
+    def validate_task_id(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("task_id cannot be empty")
+        return clean
+
+    @field_validator("planning_reference")
+    @classmethod
+    def validate_planning_ref(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("planning_reference cannot be empty")
+        return clean
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("title cannot be empty")
+        if len(clean) > 256:
+            raise ValueError("title exceeds maximum length of 256 characters")
+        return clean
+
+    @field_validator("proposed_budget")
+    @classmethod
+    def validate_proposed_budget(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if v is not None and "tokens" in v:
+            tokens_val = v["tokens"]
+            if not isinstance(tokens_val, int) or tokens_val < 0:
+                raise ValueError("proposed_budget['tokens'] must be a non-negative finite integer")
+        return v
 
 
 class PlanPublicationRequest(BaseModel):
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(frozen=False, extra="forbid")
 
     schema_version: int = 1
     plan_id: str
@@ -248,6 +288,21 @@ class PlanPublicationRequest(BaseModel):
     source_commit: Optional[str] = None
     scope_reference: Optional[str] = None
     tasks: List[PlanTaskDefinition] = Field(default_factory=list)
+
+    @field_validator("plan_id")
+    @classmethod
+    def validate_plan_id(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("plan_id cannot be empty")
+        return clean
+
+    @field_validator("revision")
+    @classmethod
+    def validate_revision(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("revision must be >= 1")
+        return v
 
 
 class PlanMapping(BaseModel):

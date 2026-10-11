@@ -343,7 +343,23 @@ class PMDatabase:
                 except sqlite3.OperationalError:
                     pass
                 try:
-                    conn.execute("ALTER TABLE pm_issues ADD COLUMN proposed_budget_tokens INTEGER DEFAULT 50000;")
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN proposed_budget_tokens INTEGER DEFAULT 0;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_acceptance_criteria JSON;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_path_whitelist JSON;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_reviewer_requirement TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN has_pending_reconciliation INTEGER DEFAULT 0;")
                 except sqlite3.OperationalError:
                     pass
                 try:
@@ -843,8 +859,9 @@ class PMDatabase:
                     priority, sprint_id, parent_id, assignee_principal, appetite_tokens, appetite_timeout_s,
                     tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
                     task_id, planning_reference, acceptance_criteria, proposed_delivery_owner, reviewer_requirement,
-                    proposed_budget_tokens, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    proposed_budget_tokens, staged_acceptance_criteria, staged_path_whitelist, staged_reviewer_requirement,
+                    has_pending_reconciliation, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     issue.id,
@@ -871,7 +888,11 @@ class PMDatabase:
                     json.dumps(issue.acceptance_criteria),
                     issue.proposed_delivery_owner,
                     issue.reviewer_requirement,
-                    issue.proposed_budget_tokens or issue.appetite_tokens,
+                    issue.proposed_budget_tokens if issue.proposed_budget_tokens is not None else 0,
+                    json.dumps(issue.staged_acceptance_criteria) if issue.staged_acceptance_criteria is not None else None,
+                    json.dumps(issue.staged_path_whitelist) if issue.staged_path_whitelist is not None else None,
+                    issue.staged_reviewer_requirement,
+                    1 if issue.has_pending_reconciliation else 0,
                     issue.created_at or now,
                     now,
                 ),
@@ -918,6 +939,10 @@ class PMDatabase:
         proposed_delivery_owner: Optional[str],
         reviewer_requirement: Optional[str],
         proposed_budget_tokens: Optional[int],
+        staged_acceptance_criteria: Optional[List[str]] = None,
+        staged_path_whitelist: Optional[List[str]] = None,
+        staged_reviewer_requirement: Optional[str] = None,
+        has_pending_reconciliation: bool = False,
         conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         """Updates plan-defined fields of an issue, preserving runtime state, tokens, and active assignment."""
@@ -928,7 +953,9 @@ class PMDatabase:
                 UPDATE pm_issues
                 SET title = ?, description = ?, issue_type = ?, priority = ?, parent_id = ?,
                     path_whitelist = ?, acceptance_criteria = ?, proposed_delivery_owner = ?,
-                    reviewer_requirement = ?, proposed_budget_tokens = ?, updated_at = ?
+                    reviewer_requirement = ?, proposed_budget_tokens = ?,
+                    staged_acceptance_criteria = ?, staged_path_whitelist = ?,
+                    staged_reviewer_requirement = ?, has_pending_reconciliation = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -942,6 +969,10 @@ class PMDatabase:
                     proposed_delivery_owner,
                     reviewer_requirement,
                     proposed_budget_tokens,
+                    json.dumps(staged_acceptance_criteria) if staged_acceptance_criteria is not None else None,
+                    json.dumps(staged_path_whitelist) if staged_path_whitelist is not None else None,
+                    staged_reviewer_requirement,
+                    1 if has_pending_reconciliation else 0,
                     now,
                     issue_id,
                 ),
@@ -1647,6 +1678,19 @@ class PMDatabase:
             if ("acceptance_criteria" in row.keys() and row["acceptance_criteria"])
             else []
         )
+        staged_acceptance_criteria = (
+            json.loads(row["staged_acceptance_criteria"])
+            if ("staged_acceptance_criteria" in row.keys() and row["staged_acceptance_criteria"])
+            else None
+        )
+        staged_path_whitelist = (
+            json.loads(row["staged_path_whitelist"])
+            if ("staged_path_whitelist" in row.keys() and row["staged_path_whitelist"])
+            else None
+        )
+        staged_reviewer_requirement = row["staged_reviewer_requirement"] if "staged_reviewer_requirement" in row.keys() else None
+        has_pending_reconciliation = bool(row["has_pending_reconciliation"]) if "has_pending_reconciliation" in row.keys() else False
+
         return Issue(
             id=row["id"],
             project_id=row["project_id"],
@@ -1673,6 +1717,10 @@ class PMDatabase:
             proposed_delivery_owner=row["proposed_delivery_owner"] if "proposed_delivery_owner" in row.keys() else None,
             reviewer_requirement=row["reviewer_requirement"] if "reviewer_requirement" in row.keys() else None,
             proposed_budget_tokens=row["proposed_budget_tokens"] if "proposed_budget_tokens" in row.keys() else None,
+            staged_acceptance_criteria=staged_acceptance_criteria,
+            staged_path_whitelist=staged_path_whitelist,
+            staged_reviewer_requirement=staged_reviewer_requirement,
+            has_pending_reconciliation=has_pending_reconciliation,
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

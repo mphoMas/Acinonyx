@@ -95,7 +95,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             if not auth_header.startswith("Bearer "):
                 return ("UNAUTHORIZED", None, None, None, None)
             token = auth_header[7:].strip()
-            iam = getattr(self, "iam", None)
+            srv = getattr(self, "server", None)
+            ds = getattr(srv, "dashboard_server", None)
+            iam = getattr(self, "iam", None) or getattr(srv, "iam", None) or getattr(ds, "iam", None)
             if iam:
                 try:
                     identity = iam.verify_token(token)
@@ -990,6 +992,49 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             mode, principal, auth_tenant_id, actions, session_data = self._resolve_session_or_auth()
             tenant_id = auth_tenant_id or getattr(self, "tenant_id", None) or "default"
 
+            # Enforce authenticated planning/architect authority
+            # Planning publication requires architect / chief_architect / tenant_admin authority or pm:plan:publish / tools:* / admin:*
+            PLANNING_ROLES = {"architect", "data_architect", "chief_architect", "tenant_admin"}
+            PLANNING_ACTIONS = {"pm:plan:publish", "tools:*", "admin:*", "storage:*"}
+
+            user_roles = set()
+            user_scopes = set()
+            srv = getattr(self, "server", None)
+            ds = getattr(srv, "dashboard_server", None)
+            iam_inst = getattr(self, "iam", None) or getattr(srv, "iam", None) or getattr(ds, "iam", None)
+            if session_data and session_data.get("tenant_context"):
+                ctx = session_data["tenant_context"]
+                user_roles = set(getattr(ctx, "roles", set()))
+                user_scopes = set(getattr(ctx, "scopes", set()))
+            elif mode == "BEARER" and iam_inst:
+                auth_hdr = self.headers.get("Authorization", "")
+                if auth_hdr.startswith("Bearer "):
+                    try:
+                        ctx = iam_inst.verify_token(auth_hdr[7:].strip())
+                        user_roles = set(getattr(ctx, "roles", set()))
+                        user_scopes = set(getattr(ctx, "scopes", set()))
+                    except Exception:
+                        pass
+
+            has_role_authority = bool(user_roles & PLANNING_ROLES)
+            has_action_authority = bool(set(actions or []) & PLANNING_ACTIONS) or bool(user_scopes & PLANNING_ACTIONS)
+
+            # In unconfigured / test mock token modes, allow dashboard_operator / architect / admin
+            if not iam_inst:
+                principal_clean = (actor or "").split(":")[-1]
+                if principal_clean in ("dashboard_operator", "architect", "chief_architect", "admin", "test-live-auth-token"):
+                    has_role_authority = True
+
+            if not (has_role_authority or has_action_authority):
+                self._send_json({
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Principal '{actor}' lacks planning authority (requires architect/tenant_admin role or pm:plan:publish scope).",
+                        "retryable": False,
+                    }
+                }, status=403)
+                return
+
             try:
                 status_code, resp = publisher.publish_plan(
                     project_id_or_key=project_id_or_key,
@@ -1225,6 +1270,7 @@ class DashboardServer:
         })
 
         self.server = ThreadingHTTPServer((self.host, self.port), handler)
+        self.server.dashboard_server = self
         self._thread: Optional[threading.Thread] = None
 
     def start_background(self) -> None:

@@ -107,18 +107,24 @@ def compute_request_hash(data: Dict[str, Any]) -> str:
 def validate_path_scope(path: str) -> str:
     """
     Validates that a path is safe:
-    - Relative (not starting with '/' or drive letter)
-    - No '..' directory traversal components
+    - No NUL characters
+    - Relative (not starting with '/' or '\\' or drive letter)
+    - No '..' directory traversal components (posix or windows backslash)
     - Returns normalized posix path
     """
+    if "\0" in path:
+        raise UnsafePathError(f"Unsafe path '{path}': NUL characters are strictly forbidden")
+
     cleaned = path.strip()
     if not cleaned:
         raise UnsafePathError("Empty path specification in path_whitelist")
 
+    # Reject backslash traversal specifically
+    norm_slashes = cleaned.replace("\\", "/")
     if cleaned.startswith("/") or cleaned.startswith("\\") or (len(cleaned) >= 2 and cleaned[1] == ":"):
         raise UnsafePathError(f"Unsafe absolute path '{path}': paths must be relative to repository root")
 
-    pure = PurePosixPath(cleaned)
+    pure = PurePosixPath(norm_slashes)
     for part in pure.parts:
         if part == "..":
             raise UnsafePathError(f"Unsafe path '{path}': directory traversal ('..') is strictly forbidden")
@@ -126,87 +132,149 @@ def validate_path_scope(path: str) -> str:
     return str(pure)
 
 
-def detect_dependency_cycles(tasks: List[PlanTaskDefinition], existing_refs: Set[str]) -> None:
+def validate_effective_dependency_graph(
+    project_id: str,
+    tasks: List[PlanTaskDefinition],
+    existing_mappings: List[TaskMapping],
+    conn: sqlite3.Connection,
+) -> None:
     """
-    Detects cycles in the plan's dependency graph using depth-first search cycle detection.
+    Builds the complete effective dependency graph combining existing persisted issues
+    in the database and the tasks in the incoming plan revision.
+    Validates against cycles using DFS cycle detection.
     Raises CycleDetectedError if a cycle is found.
     """
-    # Graph maps each task reference to the list of task references it depends on (blockers)
-    # A -> B means A depends on B (B must complete before A can start)
-    graph: Dict[str, List[str]] = {}
-    known_nodes: Set[str] = set()
+    # Map all aliases (task_id, planning_reference, local_issue_key, local_issue_id) to canonical node_id (local_issue_id or planned task_id)
+    canonical: Dict[str, str] = {}
+    for m in existing_mappings:
+        canonical[m.task_id] = m.local_issue_id
+        canonical[m.planning_reference] = m.local_issue_id
+        canonical[m.local_issue_key] = m.local_issue_id
+        canonical[m.local_issue_id] = m.local_issue_id
 
+    # For new planned tasks not yet in existing_mappings:
     for task in tasks:
-        known_nodes.add(task.task_id)
-        known_nodes.add(task.planning_reference)
+        t_id = task.task_id.strip()
+        p_ref = task.planning_reference.strip()
+        if t_id in canonical:
+            c_node = canonical[t_id]
+            canonical[p_ref] = c_node
+        else:
+            canonical[t_id] = t_id
+            canonical[p_ref] = t_id
 
+    # Graph: node_id -> set of blocker node_ids (node depends on blocker)
+    # Load all existing dependencies for this project from DB
+    cur = conn.execute(
+        """
+        SELECT d.blocker_id, d.blocked_id
+        FROM pm_dependencies d
+        JOIN pm_issues i ON d.blocked_id = i.id
+        WHERE i.project_id = ?
+        """,
+        (project_id,),
+    )
+    graph: Dict[str, Set[str]] = {}
+    for row in cur.fetchall():
+        blocker = row["blocker_id"]
+        blocked = row["blocked_id"]
+        graph.setdefault(blocked, set()).add(blocker)
+
+    # For every task in the incoming plan, override its dependency set in the effective graph
     for task in tasks:
-        node_id = task.task_id
-        graph[node_id] = []
+        node_id = canonical[task.task_id.strip()]
+        new_deps: Set[str] = set()
         for dep in task.dependencies:
             dep_clean = dep.strip()
-            if dep_clean == task.task_id or dep_clean == task.planning_reference:
+            target_node = canonical.get(dep_clean)
+            if not target_node:
+                # Target not in canonical map - will be caught by unknown target validation
+                target_node = dep_clean
+            if target_node == node_id:
                 raise CycleDetectedError(f"Task '{task.planning_reference}' cannot depend on itself")
-            graph[node_id].append(dep_clean)
+            new_deps.add(target_node)
+        graph[node_id] = new_deps
 
-    # 0 = unvisited, 1 = visiting (in recursion stack), 2 = visited
-    state: Dict[str, int] = {}
+    # Detect cycles across all nodes in the effective graph
+    state: Dict[str, int] = {}  # 0=unvisited, 1=visiting, 2=visited
 
     def dfs(node: str, path: List[str]) -> None:
         state[node] = 1
         path.append(node)
-
-        # Resolve node if it's a planning_reference alias
-        deps = graph.get(node, [])
-        for neighbor in deps:
-            # If neighbor is outside current plan (i.e. existing DB task), it's a leaf for this cycle check
-            if neighbor not in graph:
-                # Could be a planning_reference mapping to a task_id in graph
-                found_task = next((t.task_id for t in tasks if t.planning_reference == neighbor), None)
-                if found_task:
-                    neighbor = found_task
-                else:
-                    continue
-
-            n_state = state.get(neighbor, 0)
+        for blocker in graph.get(node, ()):
+            n_state = state.get(blocker, 0)
             if n_state == 1:
-                cycle_str = " -> ".join(path + [neighbor])
+                cycle_str = " -> ".join(path + [blocker])
                 raise CycleDetectedError(f"Cyclic dependency detected: {cycle_str}")
             elif n_state == 0:
-                dfs(neighbor, path)
-
+                dfs(blocker, path)
         path.pop()
         state[node] = 2
 
-    for node in graph:
+    all_nodes = list(graph.keys())
+    for node in all_nodes:
         if state.get(node, 0) == 0:
             dfs(node, [])
 
 
-def detect_hierarchy_cycles(tasks: List[PlanTaskDefinition]) -> None:
+def validate_effective_hierarchy(
+    project_id: str,
+    tasks: List[PlanTaskDefinition],
+    existing_mappings: List[TaskMapping],
+    conn: sqlite3.Connection,
+) -> None:
     """
-    Detects parent-child cycles among tasks in the plan.
-    Raises CycleDetectedError if a cycle is found.
+    Validates parent hierarchy across incoming tasks and existing issues.
+    Rejects unknown parents and detects hierarchy cycles.
     """
-    task_by_id = {t.task_id: t for t in tasks}
-    task_by_ref = {t.planning_reference: t for t in tasks}
+    canonical: Dict[str, str] = {}
+    for m in existing_mappings:
+        canonical[m.task_id] = m.local_issue_id
+        canonical[m.planning_reference] = m.local_issue_id
+        canonical[m.local_issue_key] = m.local_issue_id
+        canonical[m.local_issue_id] = m.local_issue_id
 
     for task in tasks:
-        if not task.parent_task_id:
-            continue
-        visited = {task.task_id, task.planning_reference}
-        curr_parent_id = task.parent_task_id.strip()
+        t_id = task.task_id.strip()
+        p_ref = task.planning_reference.strip()
+        if t_id in canonical:
+            c_node = canonical[t_id]
+            canonical[p_ref] = c_node
+        else:
+            canonical[t_id] = t_id
+            canonical[p_ref] = t_id
 
-        while curr_parent_id:
-            if curr_parent_id in visited:
-                raise CycleDetectedError(f"Hierarchy cycle detected involving task '{task.planning_reference}' and parent '{curr_parent_id}'")
-            visited.add(curr_parent_id)
+    # Load existing parent pointers for project issues
+    cur = conn.execute(
+        "SELECT id, parent_id FROM pm_issues WHERE project_id = ?",
+        (project_id,),
+    )
+    parent_map: Dict[str, Optional[str]] = {row["id"]: row["parent_id"] for row in cur.fetchall()}
 
-            parent_task = task_by_id.get(curr_parent_id) or task_by_ref.get(curr_parent_id)
-            if parent_task:
-                curr_parent_id = (parent_task.parent_task_id or "").strip()
+    for task in tasks:
+        node_id = canonical[task.task_id.strip()]
+        if task.parent_task_id:
+            parent_raw = task.parent_task_id.strip()
+            if not parent_raw:
+                parent_map[node_id] = None
             else:
-                break
+                if parent_raw not in canonical:
+                    raise PlanValidationError(
+                        f"Task '{task.planning_reference}' references unknown parent '{parent_raw}'"
+                    )
+                parent_map[node_id] = canonical[parent_raw]
+        else:
+            parent_map[node_id] = None
+
+    # Cycle check in parent_map
+    for node in parent_map:
+        visited = set()
+        curr = node
+        while curr:
+            if curr in visited:
+                raise CycleDetectedError(f"Hierarchy cycle detected involving node '{curr}'")
+            visited.add(curr)
+            curr = parent_map.get(curr)
 
 
 class PlanPublisherService:
@@ -292,14 +360,17 @@ class PlanPublisherService:
                     f"cannot contradict existing mapping with '{t_id}'"
                 )
 
-        # 5. Check hierarchy cycles and dependency cycles
+        # 5. Verify dependencies and parents reference known tasks (either in plan or existing in project)
         all_known_refs = set(mapping_by_ref.keys()) | set(mapping_by_task_id.keys())
-        detect_hierarchy_cycles(request.tasks)
-        detect_dependency_cycles(request.tasks, all_known_refs)
-
-        # 6. Verify dependencies reference known tasks (either in plan or existing in project)
         valid_targets = seen_task_ids | seen_planning_refs | all_known_refs
         for task in request.tasks:
+            if task.parent_task_id:
+                p_clean = task.parent_task_id.strip()
+                if p_clean and p_clean not in valid_targets:
+                    raise PlanValidationError(
+                        f"Task '{task.planning_reference}' references unknown parent '{p_clean}'. "
+                        "Parents must resolve within the same project plan or existing project issues."
+                    )
             for dep in task.dependencies:
                 dep_clean = dep.strip()
                 if dep_clean not in valid_targets:
@@ -368,13 +439,40 @@ class PlanPublisherService:
                     f"Concurrent publication detected: current plan revision advanced to {locked_rev}."
                 )
 
+            # Re-read and revalidate existing mappings inside transaction
+            locked_mappings = self.db.list_task_mappings(project.id, conn=conn)
+            locked_by_task_id = {m.task_id: m for m in locked_mappings}
+            locked_by_ref = {m.planning_reference: m for m in locked_mappings}
+
+            for task in request.tasks:
+                t_id = task.task_id.strip()
+                p_ref = task.planning_reference.strip()
+
+                m1 = locked_by_task_id.get(t_id)
+                if m1 and m1.planning_reference != p_ref:
+                    raise ContradictoryIdentityError(
+                        f"Task ID '{t_id}' is already mapped to planning reference '{m1.planning_reference}' on issue {m1.local_issue_key}; "
+                        f"cannot contradict existing mapping with '{p_ref}'"
+                    )
+
+                m2 = locked_by_ref.get(p_ref)
+                if m2 and m2.task_id != t_id:
+                    raise ContradictoryIdentityError(
+                        f"Planning reference '{p_ref}' is already mapped to task ID '{m2.task_id}' on issue {m2.local_issue_key}; "
+                        f"cannot contradict existing mapping with '{t_id}'"
+                    )
+
+            # Validate effective hierarchy and dependency graph inside transaction lock
+            validate_effective_hierarchy(project.id, request.tasks, locked_mappings, conn)
+            validate_effective_dependency_graph(project.id, request.tasks, locked_mappings, conn)
+
             # Failure injection point: during_validation
             if test_injected_failure_stage == "during_validation":
                 raise RuntimeError("Injected failure during validation")
 
             # In-transaction lookup dictionaries for parent and dependency resolution
             ref_to_issue_id: Dict[str, str] = {}
-            for m in existing_mappings:
+            for m in locked_mappings:
                 ref_to_issue_id[m.planning_reference] = m.local_issue_id
                 ref_to_issue_id[m.task_id] = m.local_issue_id
 
@@ -394,7 +492,7 @@ class PlanPublisherService:
                 budget_tokens = (
                     task.proposed_budget_tokens
                     if task.proposed_budget_tokens is not None
-                    else (task.proposed_budget.get("tokens") if isinstance(task.proposed_budget, dict) and "tokens" in task.proposed_budget else 50000)
+                    else (task.proposed_budget.get("tokens") if isinstance(task.proposed_budget, dict) and "tokens" in task.proposed_budget else 0)
                 )
 
                 # Format description: ensure delivery owner and allocation tag are structured
@@ -414,9 +512,17 @@ class PlanPublisherService:
                         raise PlanValidationError(f"Mapped issue '{existing_map.local_issue_key}' not found in database")
 
                     # Check active work reconciliation requirements
-                    if issue.current_state != IssueState.BACKLOG:
+                    is_active = (issue.current_state != IssueState.BACKLOG)
+                    staged_crit = None
+                    staged_paths = None
+                    staged_rev = None
+                    has_pending_recon = False
+
+                    if is_active:
                         # 1. Did acceptance criteria change?
                         if sorted(issue.acceptance_criteria) != sorted(task.acceptance_criteria):
+                            staged_crit = task.acceptance_criteria
+                            has_pending_recon = True
                             reconciliations.append(ReconciliationItem(
                                 task_id=t_id,
                                 planning_reference=p_ref,
@@ -431,6 +537,8 @@ class PlanPublisherService:
 
                         # 2. Did path whitelist change?
                         if sorted(issue.path_whitelist) != sorted(task.path_whitelist):
+                            staged_paths = task.path_whitelist
+                            has_pending_recon = True
                             reconciliations.append(ReconciliationItem(
                                 task_id=t_id,
                                 planning_reference=p_ref,
@@ -443,7 +551,17 @@ class PlanPublisherService:
                                 ),
                             ))
 
-                    # Update plan-defined fields preserving runtime status, tokens, assignee, evidence
+                        # 3. Did reviewer requirement change?
+                        if issue.reviewer_requirement != task.reviewer_requirement:
+                            staged_rev = task.reviewer_requirement
+                            has_pending_recon = True
+
+                    # Effective fields to apply to live issue
+                    # If active, preserve existing live scope and acceptance criteria!
+                    effective_paths = issue.path_whitelist if (is_active and staged_paths is not None) else task.path_whitelist
+                    effective_crit = issue.acceptance_criteria if (is_active and staged_crit is not None) else task.acceptance_criteria
+                    effective_rev = issue.reviewer_requirement if (is_active and staged_rev is not None) else task.reviewer_requirement
+
                     self.db.update_issue_from_plan(
                         issue_id=issue.id,
                         title=task.title.strip(),
@@ -451,11 +569,15 @@ class PlanPublisherService:
                         issue_type=task.type,
                         priority=task.priority,
                         parent_id=issue.parent_id,  # Resolved in second pass
-                        path_whitelist=task.path_whitelist,
-                        acceptance_criteria=task.acceptance_criteria,
+                        path_whitelist=effective_paths,
+                        acceptance_criteria=effective_crit,
                         proposed_delivery_owner=task.proposed_delivery_owner,
-                        reviewer_requirement=task.reviewer_requirement,
+                        reviewer_requirement=effective_rev,
                         proposed_budget_tokens=budget_tokens,
+                        staged_acceptance_criteria=staged_crit,
+                        staged_path_whitelist=staged_paths,
+                        staged_reviewer_requirement=staged_rev,
+                        has_pending_reconciliation=has_pending_recon,
                         conn=conn,
                     )
 
@@ -475,6 +597,7 @@ class PlanPublisherService:
                     new_key = self.db.next_issue_key(project.key, conn=conn)
                     new_id = str(uuid.uuid4())
 
+                    # Proposed budget does NOT grant execution appetite! Initial appetite is 0.
                     new_issue = Issue(
                         id=new_id,
                         project_id=project.id,
@@ -486,7 +609,7 @@ class PlanPublisherService:
                         priority=task.priority,
                         parent_id=None,  # Resolved in second pass
                         assignee_principal=None,  # Proposed delivery owner DOES NOT grant runtime permissions!
-                        appetite_tokens=budget_tokens,
+                        appetite_tokens=0,        # Initial execution appetite is strictly 0!
                         tokens_spent=0,
                         reflexion_attempts=0,
                         rework_cycle=0,
@@ -531,7 +654,7 @@ class PlanPublisherService:
                 p_ref = task.planning_reference.strip()
                 my_issue_id = ref_to_issue_id[t_id]
 
-                # Update parent if specified
+                # Update parent: if specified, set parent; if None or empty, clear existing parent
                 if task.parent_task_id:
                     parent_ref = task.parent_task_id.strip()
                     parent_issue_id = ref_to_issue_id.get(parent_ref)
@@ -540,8 +663,14 @@ class PlanPublisherService:
                             "UPDATE pm_issues SET parent_id = ? WHERE id = ?",
                             (parent_issue_id, my_issue_id),
                         )
+                else:
+                    conn.execute(
+                        "UPDATE pm_issues SET parent_id = NULL WHERE id = ?",
+                        (my_issue_id,),
+                    )
 
-                # Add dependencies
+                # Reconcile dependencies: replace dependencies for updated tasks
+                conn.execute("DELETE FROM pm_dependencies WHERE blocked_id = ?", (my_issue_id,))
                 for dep in task.dependencies:
                     dep_ref = dep.strip()
                     blocker_issue_id = ref_to_issue_id.get(dep_ref)

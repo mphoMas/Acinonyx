@@ -68,9 +68,18 @@ class DependencyUnresolvedError(PMGuardError):
     pass
 
 
-class AssignmentAuthorizationError(PMGuardError):
-    """Raised when an agent attempts an unauthorized task reassignment."""
+class PendingReconciliationError(PMGuardError):
+    """Raised when an issue has pending unapproved scope/acceptance reconciliation."""
     pass
+
+
+def validate_pending_reconciliation(issue: Issue) -> None:
+    """Gates transition if the issue has unapproved staged changes pending reconciliation."""
+    if issue.has_pending_reconciliation:
+        raise PendingReconciliationError(
+            f"Issue {issue.key} has pending plan reconciliation (staged scope or acceptance criteria changes). "
+            "Explicit coordinator/reviewer reconciliation decision is required before advancing."
+        )
 
 
 # Default Column WIP Limits (governed by Little's Law)

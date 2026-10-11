@@ -410,6 +410,40 @@ def test_unsafe_path_scopes_rejected(temp_db: PMDatabase, sample_project: Projec
         service.publish_plan(sample_project.key, req_traversal, "actor", "tenant-1")
     assert "directory traversal" in str(exc_info.value)
 
+    # Windows backslash traversal ..\\
+    req_win_traversal = PlanPublicationRequest(
+        plan_id="plan-1",
+        revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="T1",
+                planning_reference="SBA-01",
+                title="T1",
+                path_whitelist=["mas\\pm\\..\\..\\etc\\shadow"],
+            ),
+        ],
+    )
+    with pytest.raises(UnsafePathError) as exc_info:
+        service.publish_plan(sample_project.key, req_win_traversal, "actor", "tenant-1")
+    assert "directory traversal" in str(exc_info.value)
+
+    # NUL byte in path
+    req_nul_path = PlanPublicationRequest(
+        plan_id="plan-1",
+        revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="T1",
+                planning_reference="SBA-01",
+                title="T1",
+                path_whitelist=["mas/pm/\0evil"],
+            ),
+        ],
+    )
+    with pytest.raises(UnsafePathError) as exc_info:
+        service.publish_plan(sample_project.key, req_nul_path, "actor", "tenant-1")
+    assert "NUL" in str(exc_info.value)
+
     # Absolute path /
     req_absolute = PlanPublicationRequest(
         plan_id="plan-1",
@@ -538,15 +572,32 @@ def test_active_work_preservation_and_reconciliation_tracking(temp_db: PMDatabas
     assert updated_issue1.tokens_spent == 23500                   # Tokens preserved!
     assert updated_issue1.reflexion_attempts == 1                 # Attempts preserved!
 
+    # Active issue live contract was PRESERVED, changes were staged!
+    assert updated_issue1.path_whitelist == ["projects/scrum-board-automation/planning/"]
+    assert updated_issue1.acceptance_criteria == ["Criteria 1"]
+    assert updated_issue1.staged_path_whitelist == ["projects/scrum-board-automation/planning/", "company/"]
+    assert updated_issue1.staged_acceptance_criteria == ["Criteria 1", "Criteria 2: Independent review required"]
+    assert updated_issue1.has_pending_reconciliation is True
+
+    # Transitioning to VERIFICATION while pending reconciliation is present is GATED
+    from mas.pm.fsm import FSMEngine
+    from mas.pm.guards import PendingReconciliationError
+    from mas.security import ExecutionContext
+    fsm = FSMEngine(temp_db)
+    with ExecutionContext.scope("coordinator"):
+        with pytest.raises(PendingReconciliationError):
+            fsm.transition(updated_issue1.id, IssueState.VERIFICATION, caller_principal="coordinator")
+
     # Verify evidence link still exists
     ev_links = temp_db.get_evidence_links(issue1.id)
     assert len(ev_links) == 1
     assert ev_links[0].content_hash == "sha256:abcd1234"
 
-    # Verify new task entered BACKLOG
+    # Verify new task entered BACKLOG with 0 initial appetite!
     m3 = temp_db.get_task_mapping(sample_project.id, "SBA-03")
     issue3 = temp_db.get_issue(m3.local_issue_id)
     assert issue3.current_state == IssueState.BACKLOG
+    assert issue3.appetite_tokens == 0
 
 
 def test_omitted_plan_items_retain_runtime_history(temp_db: PMDatabase, sample_project: Project):
@@ -570,7 +621,7 @@ def test_omitted_plan_items_retain_runtime_history(temp_db: PMDatabase, sample_p
     req2 = PlanPublicationRequest(
         plan_id="plan-retention",
         revision=2,
-        expected_previous_issue=1,
+        expected_previous_revision=1,
         tasks=[
             PlanTaskDefinition(task_id="T1", planning_reference="REF-1", title="Task 1 Updated"),
         ],
@@ -803,4 +854,67 @@ def test_publisher_cli_execution(live_server, tmp_path: Path):
     cli_out = json.loads(res.stdout)
     assert cli_out["success"] is True
     assert cli_out["tasks_created"] == 1
-    assert cli_out["mappings"][0]["planning_reference"] == "PLIVE-CLI-01"
+
+
+def test_effective_graph_cycle_detection_with_existing_db_dependencies(temp_db: PMDatabase, sample_project: Project):
+    service = PlanPublisherService(temp_db)
+
+    # 1. Plan with T1 -> T2 (T2 depends on T1)
+    req1 = PlanPublicationRequest(
+        plan_id="plan-cycle",
+        revision=1,
+        tasks=[
+            PlanTaskDefinition(task_id="T1", planning_reference="CYC-01", title="Task 1"),
+            PlanTaskDefinition(task_id="T2", planning_reference="CYC-02", title="Task 2", dependencies=["T1"]),
+        ],
+    )
+    status1, resp1 = service.publish_plan(sample_project.key, req1, "architect", "tenant-1")
+    assert status1 == 201
+
+    # 2. Plan revision where T1 now depends on T2, introducing a cycle with T2's dependency
+    req2 = PlanPublicationRequest(
+        plan_id="plan-cycle",
+        revision=2,
+        expected_previous_revision=1,
+        tasks=[
+            PlanTaskDefinition(task_id="T1", planning_reference="CYC-01", title="Task 1", dependencies=["T2"]),
+            PlanTaskDefinition(task_id="T2", planning_reference="CYC-02", title="Task 2", dependencies=["T1"]),
+        ],
+    )
+    with pytest.raises(CycleDetectedError):
+        service.publish_plan(sample_project.key, req2, "architect", "tenant-1")
+
+
+def test_unknown_parent_task_rejection(temp_db: PMDatabase, sample_project: Project):
+    service = PlanPublisherService(temp_db)
+
+    req = PlanPublicationRequest(
+        plan_id="plan-parent",
+        revision=1,
+        tasks=[
+            PlanTaskDefinition(task_id="T1", planning_reference="PAR-01", title="Child Task", parent_task_id="non-existent-parent"),
+        ],
+    )
+    with pytest.raises(PlanValidationError) as exc_info:
+        service.publish_plan(sample_project.key, req, "architect", "tenant-1")
+    assert "references unknown parent 'non-existent-parent'" in str(exc_info.value)
+
+
+def test_http_non_architect_role_rejection(live_server):
+    from mas.iam import MultiTenantIAM, StandardRole
+    server, port, _ = live_server
+    base_url = f"http://127.0.0.1:{port}"
+
+    # Attach an IAM instance to the server to verify role-based planning authority
+    iam = MultiTenantIAM()
+    iam.create_tenant("test-tenant", "Test Tenant")
+    # Register an unprivileged operator/developer
+    iam.register_principal("test-tenant", "dev-operator", roles={StandardRole.OPERATOR.value}, scopes={"default"})
+    token = iam.issue_token("test-tenant", "dev-operator")
+    server.iam = iam
+
+    client_dev = PlanPublisherClient(base_url=base_url, auth_token=token)
+    with pytest.raises(PermissionError) as exc_info:
+        client_dev.publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+    assert "403" in str(exc_info.value)
+

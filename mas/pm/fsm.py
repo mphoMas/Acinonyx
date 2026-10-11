@@ -17,6 +17,7 @@ from mas.pm.guards import (
     validate_critic_verdicts,
     validate_dependencies,
     validate_evidence,
+    validate_pending_reconciliation,
     validate_scope_jail,
     validate_wip_limit,
 )
@@ -127,6 +128,7 @@ class FSMEngine:
                     validate_wip_limit(self.db, issue.project_id, target_state.value, issue.assignee_principal, conn=conn)
 
                 elif current == IssueState.IN_PROGRESS and target_state == IssueState.VERIFICATION:
+                    validate_pending_reconciliation(issue)
                     validate_evidence(self.db, issue, enforce_git_commit=enforce_git_commit)
                     validate_wip_limit(self.db, issue.project_id, target_state.value, conn=conn)
 
@@ -136,6 +138,7 @@ class FSMEngine:
                     validate_wip_limit(self.db, issue.project_id, target_state.value, conn=conn)
 
                 elif current == IssueState.JUDICIAL_REVIEW and target_state == IssueState.DONE:
+                    validate_pending_reconciliation(issue)
                     validate_dependencies(self.db, issue, conn=conn)
                     assert_separation_of_builder_and_judge(issue, caller_principal)
                     validate_critic_verdicts(self.db, issue, stage5_critics)
