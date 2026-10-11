@@ -442,6 +442,13 @@ def pm_publish_plan(
         tenant_id = "default"
         if not actor or not actor.strip():
             raise PermissionError("Unauthenticated operation: pm_publish_plan requires an authenticated execution context.")
+        # Non-empty actor string alone does NOT grant planning authority!
+        # Unbound callers must be explicitly authorized architects/planners
+        UNBOUND_PLANNING_PRINCIPALS = {"architect", "data_architect", "chief_architect", "lead-architect", "codex-architect", "antigravity-architect"}
+        if actor not in UNBOUND_PLANNING_PRINCIPALS and not actor.endswith((":architect", ":tenant_admin")):
+            raise PermissionError(
+                f"Principal '{actor}' lacks verified planning authority (requires verified architect identity or authenticated tenant planning binding)."
+            )
 
     if isinstance(plan_payload, str):
         plan_dict = json.loads(plan_payload)

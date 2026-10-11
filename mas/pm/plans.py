@@ -99,6 +99,12 @@ class ProjectNotFoundError(PlanError):
         super().__init__(message, code="not_found", retryable=False, details=details)
 
 
+class StaleProposalError(PlanError):
+    """Raised when reconciliation is attempted against an obsolete proposal revision or conflicting policy version (HTTP 409)."""
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, code="stale_proposal", retryable=False, details=details)
+
+
 def compute_request_hash(data: Dict[str, Any]) -> str:
     """Computes a deterministic SHA-256 hash of the canonical request payload."""
     canonical_json = json.dumps(data, sort_keys=True, separators=(",", ":"))
@@ -521,6 +527,9 @@ class PlanPublisherService:
                     has_pending_recon = False
 
                     if is_active:
+                        proposal_id_val = f"prop_{project.id}_{request.plan_id}_{request.revision}"
+                        proposal_rev_val = request.revision
+
                         # 1. Did acceptance criteria change?
                         if sorted(issue.acceptance_criteria) != sorted(task.acceptance_criteria):
                             staged_crit = task.acceptance_criteria
@@ -532,9 +541,12 @@ class PlanPublisherService:
                                 current_state=issue.current_state.value,
                                 change_type="acceptance_criteria_modified",
                                 description=(
-                                    f"Active issue {issue.key} in state {issue.current_state.value} has modified acceptance criteria "
-                                    "requiring explicit coordinator/reviewer reconciliation."
+                                     f"Active issue {issue.key} in state {issue.current_state.value} has modified acceptance criteria "
+                                     "requiring explicit coordinator/reviewer reconciliation."
                                 ),
+                                proposal_id=proposal_id_val,
+                                proposal_rev=proposal_rev_val,
+                                base_policy_version=issue.policy_version,
                             ))
 
                         # 2. Did path whitelist change?
@@ -548,9 +560,12 @@ class PlanPublisherService:
                                 current_state=issue.current_state.value,
                                 change_type="path_whitelist_modified",
                                 description=(
-                                    f"Active issue {issue.key} in state {issue.current_state.value} has modified path scope "
-                                    "requiring explicit coordinator/reviewer reconciliation."
+                                     f"Active issue {issue.key} in state {issue.current_state.value} has modified path scope "
+                                     "requiring explicit coordinator/reviewer reconciliation."
                                 ),
+                                proposal_id=proposal_id_val,
+                                proposal_rev=proposal_rev_val,
+                                base_policy_version=issue.policy_version,
                             ))
 
                         # 3. Did reviewer requirement change?
@@ -569,6 +584,9 @@ class PlanPublisherService:
                                         f"Active issue {issue.key} in state {issue.current_state.value} proposes removing reviewer requirement "
                                         f"('{issue.reviewer_requirement}' -> null); preserved live until authorized reconciliation."
                                     ),
+                                    proposal_id=proposal_id_val,
+                                    proposal_rev=proposal_rev_val,
+                                    base_policy_version=issue.policy_version,
                                 ))
                             else:
                                 staged_rev = task.reviewer_requirement
@@ -583,6 +601,9 @@ class PlanPublisherService:
                                         f"Active issue {issue.key} in state {issue.current_state.value} proposes replacing reviewer requirement "
                                         f"('{issue.reviewer_requirement}' -> '{task.reviewer_requirement}'); preserved live until authorized reconciliation."
                                     ),
+                                    proposal_id=proposal_id_val,
+                                    proposal_rev=proposal_rev_val,
+                                    base_policy_version=issue.policy_version,
                                 ))
 
                     # Effective fields to apply to live issue
@@ -594,6 +615,9 @@ class PlanPublisherService:
                         if (is_active and staged_rev_action != StagedReviewerAction.NONE.value)
                         else task.reviewer_requirement
                     )
+
+                    staged_prop_id = f"prop_{project.id}_{request.plan_id}_{request.revision}" if has_pending_recon else None
+                    staged_prop_rev = request.revision if has_pending_recon else None
 
                     self.db.update_issue_from_plan(
                         issue_id=issue.id,
@@ -611,6 +635,8 @@ class PlanPublisherService:
                         staged_path_whitelist=staged_paths,
                         staged_reviewer_requirement=staged_rev,
                         staged_reviewer_action=staged_rev_action if staged_rev_action != StagedReviewerAction.NONE.value else None,
+                        staged_proposal_id=staged_prop_id,
+                        staged_proposal_rev=staged_prop_rev,
                         has_pending_reconciliation=has_pending_recon,
                         conn=conn,
                     )
@@ -782,13 +808,17 @@ class PlanPublisherService:
         decision: str,  # "apply" or "reject"
         actor: str,
         tenant_id: str = "default",
+        expected_proposal_id: Optional[str] = None,
+        expected_proposal_rev: Optional[int] = None,
+        expected_base_policy_version: Optional[int] = None,
     ) -> Issue:
         """
         Explicit reconciliation for active tasks with staged scope/acceptance/reviewer changes.
         Requires planner/architect authority.
-        decision='apply': applies staged changes to live issue and clears staged fields.
+        decision='apply': applies staged changes to live issue and clears staged fields, incrementing policy_version.
         decision='reject': discards staged changes, keeps current live issue fields, and clears staged fields.
-        In both cases, has_pending_reconciliation is cleared.
+        In both cases, has_pending_reconciliation is cleared, and an immutable audit record is stored.
+        Fails with StaleProposalError (HTTP 409) if expected proposal_id, proposal_rev, or base_policy_version mismatch.
         """
         decision_clean = decision.lower().strip()
         if decision_clean not in ("apply", "reject"):
@@ -806,8 +836,45 @@ class PlanPublisherService:
             if not issue.has_pending_reconciliation:
                 return issue
 
+            # Version-bound decision validation: fail closed if decision targets obsolete proposal
+            if expected_proposal_id is not None and expected_proposal_id != issue.staged_proposal_id:
+                raise StaleProposalError(
+                    f"Decision proposal ID mismatch: expected '{expected_proposal_id}', "
+                    f"current staged proposal is '{issue.staged_proposal_id}'."
+                )
+
+            if expected_proposal_rev is not None and expected_proposal_rev != issue.staged_proposal_rev:
+                raise StaleProposalError(
+                    f"Decision proposal revision mismatch: expected revision {expected_proposal_rev}, "
+                    f"current staged proposal revision is {issue.staged_proposal_rev}."
+                )
+
+            if expected_base_policy_version is not None and expected_base_policy_version != issue.policy_version:
+                raise StaleProposalError(
+                    f"Decision base policy version mismatch: expected version {expected_base_policy_version}, "
+                    f"current issue policy version is {issue.policy_version}."
+                )
+
             now = datetime.now(timezone.utc).isoformat()
+            base_policy = {
+                "policy_version": issue.policy_version,
+                "acceptance_criteria": issue.acceptance_criteria,
+                "path_whitelist": issue.path_whitelist,
+                "reviewer_requirement": issue.reviewer_requirement,
+            }
+            proposal_meta = {
+                "staged_proposal_id": issue.staged_proposal_id,
+                "staged_proposal_rev": issue.staged_proposal_rev,
+                "staged_acceptance_criteria": issue.staged_acceptance_criteria,
+                "staged_path_whitelist": issue.staged_path_whitelist,
+                "staged_reviewer_requirement": issue.staged_reviewer_requirement,
+                "staged_reviewer_action": issue.staged_reviewer_action,
+            }
+
+            invalidated_evidence_count = 0
+
             if decision_clean == "apply":
+                new_policy_version = issue.policy_version + 1
                 effective_crit = (
                     issue.staged_acceptance_criteria
                     if issue.staged_acceptance_criteria is not None
@@ -825,17 +892,33 @@ class PlanPublisherService:
                 else:
                     effective_rev = issue.reviewer_requirement
 
+                # Check if evidence/approvals are affected and need invalidation
+                scope_or_crit_changed = (
+                    sorted(effective_crit) != sorted(issue.acceptance_criteria) or
+                    sorted(effective_paths) != sorted(issue.path_whitelist) or
+                    effective_rev != issue.reviewer_requirement
+                )
+                if scope_or_crit_changed:
+                    # Invalidate prior approvals by incrementing rework_cycle and resetting reflexion_attempts
+                    cur_ev = conn.execute("SELECT COUNT(*) as cnt FROM pm_evidence_links WHERE issue_id = ?", (issue.id,))
+                    row_ev = cur_ev.fetchone()
+                    invalidated_evidence_count = int(row_ev["cnt"]) if row_ev else 0
+
                 conn.execute(
                     """
                     UPDATE pm_issues
                     SET acceptance_criteria = ?,
                         path_whitelist = ?,
                         reviewer_requirement = ?,
+                        policy_version = ?,
                         staged_acceptance_criteria = NULL,
                         staged_path_whitelist = NULL,
                         staged_reviewer_requirement = NULL,
                         staged_reviewer_action = NULL,
+                        staged_proposal_id = NULL,
+                        staged_proposal_rev = NULL,
                         has_pending_reconciliation = 0,
+                        rework_cycle = rework_cycle + (CASE WHEN ? > 0 THEN 1 ELSE 0 END),
                         updated_at = ?
                     WHERE id = ?
                     """,
@@ -843,10 +926,19 @@ class PlanPublisherService:
                         json.dumps(effective_crit),
                         json.dumps(effective_paths),
                         effective_rev,
+                        new_policy_version,
+                        invalidated_evidence_count,
                         now,
                         issue.id,
                     ),
                 )
+                after_policy = {
+                    "policy_version": new_policy_version,
+                    "acceptance_criteria": effective_crit,
+                    "path_whitelist": effective_paths,
+                    "reviewer_requirement": effective_rev,
+                }
+                resulting_version = new_policy_version
             else:  # reject
                 conn.execute(
                     """
@@ -855,12 +947,37 @@ class PlanPublisherService:
                         staged_path_whitelist = NULL,
                         staged_reviewer_requirement = NULL,
                         staged_reviewer_action = NULL,
+                        staged_proposal_id = NULL,
+                        staged_proposal_rev = NULL,
                         has_pending_reconciliation = 0,
                         updated_at = ?
                     WHERE id = ?
                     """,
                     (now, issue.id),
                 )
+                after_policy = dict(base_policy)
+                resulting_version = issue.policy_version
+
+            # Write immutable reconciliation audit record
+            from mas.pm.models import ReconciliationAuditRecord
+            audit_record = ReconciliationAuditRecord(
+                tenant_id=tenant_id,
+                project_id=project.id,
+                issue_id=issue.id,
+                issue_key=issue.key,
+                decision=decision_clean,
+                actor=actor,
+                proposal_id=issue.staged_proposal_id,
+                proposal_rev=issue.staged_proposal_rev,
+                base_policy_version=issue.policy_version,
+                resulting_policy_version=resulting_version,
+                before_policy={"base": base_policy, "proposal": proposal_meta},
+                after_policy=after_policy,
+                evidence_invalidated_count=invalidated_evidence_count,
+                created_at=now,
+            )
+            self.db.record_reconciliation_audit(audit_record, conn=conn)
 
             return self.db.get_issue(issue.id, conn=conn)
+
 

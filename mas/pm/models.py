@@ -132,9 +132,32 @@ class Issue(BaseModel):
     staged_path_whitelist: Optional[List[str]] = None
     staged_reviewer_requirement: Optional[str] = None
     staged_reviewer_action: Optional[str] = None  # None | "NONE" | "REPLACE" | "REMOVE"
+    policy_version: int = 1
+    staged_proposal_id: Optional[str] = None
+    staged_proposal_rev: Optional[int] = None
     has_pending_reconciliation: bool = False
     created_at: str = ""
     updated_at: str = ""
+
+
+class ReconciliationAuditRecord(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: Optional[int] = None
+    tenant_id: str
+    project_id: str
+    issue_id: str
+    issue_key: str
+    decision: str  # "apply" | "reject"
+    actor: str
+    proposal_id: Optional[str] = None
+    proposal_rev: Optional[int] = None
+    base_policy_version: int
+    resulting_policy_version: int
+    before_policy: Dict[str, Any]
+    after_policy: Dict[str, Any]
+    evidence_invalidated_count: int = 0
+    created_at: str = ""
 
 
 class TransitionHistory(BaseModel):
@@ -330,6 +353,9 @@ class ReconciliationItem(BaseModel):
     current_state: str
     change_type: str
     description: str
+    proposal_id: Optional[str] = None
+    proposal_rev: Optional[int] = None
+    base_policy_version: int = 1
 
 
 class PlanPublicationResponse(BaseModel):

@@ -1027,8 +1027,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 configured_scopes = getattr(self, "auth_scopes", None) or getattr(srv, "auth_scopes", None)
                 if configured_scopes:
                     user_scopes.update(configured_scopes)
-                elif getattr(self, "allow_admin_token_planning", True):
-                    # Default administrative server token grants planning authority
+                elif getattr(self, "allow_admin_token_planning", False):
+                    # Explicitly configured administrative server token grants planning authority
                     user_scopes.add("pm:plan:publish")
 
             has_role_authority = bool(user_roles & PLANNING_ROLES)
@@ -1088,7 +1088,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 return
 
             decision = payload.get("decision", "apply")
-            from mas.pm.plans import PlanPublisherService, ProjectNotFoundError
+            expected_proposal_id = payload.get("expected_proposal_id") or payload.get("proposal_id")
+            expected_proposal_rev = payload.get("expected_proposal_rev") or payload.get("proposal_rev")
+            expected_base_policy_version = payload.get("expected_base_policy_version") or payload.get("base_policy_version")
+
+            from mas.pm.plans import PlanPublisherService, ProjectNotFoundError, StaleProposalError
             from mas.pm.tools import get_pm_db
             db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
             publisher = PlanPublisherService(db)
@@ -1122,7 +1126,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 configured_scopes = getattr(self, "auth_scopes", None) or getattr(srv, "auth_scopes", None)
                 if configured_scopes:
                     user_scopes.update(configured_scopes)
-                elif getattr(self, "allow_admin_token_planning", True):
+                elif getattr(self, "allow_admin_token_planning", False):
                     user_scopes.add("pm:plan:publish")
 
             has_role_authority = bool(user_roles & PLANNING_ROLES)
@@ -1138,6 +1142,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     decision=decision,
                     actor=actor,
                     tenant_id=auth_tenant_id or getattr(self, "tenant_id", None) or "default",
+                    expected_proposal_id=expected_proposal_id,
+                    expected_proposal_rev=expected_proposal_rev,
+                    expected_base_policy_version=expected_base_policy_version,
                 )
                 self._send_json({
                     "success": True,
@@ -1145,12 +1152,15 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         "id": updated_issue.id,
                         "key": updated_issue.key,
                         "current_state": updated_issue.current_state.value,
+                        "policy_version": updated_issue.policy_version,
                         "path_whitelist": updated_issue.path_whitelist,
                         "acceptance_criteria": updated_issue.acceptance_criteria,
                         "reviewer_requirement": updated_issue.reviewer_requirement,
                         "has_pending_reconciliation": updated_issue.has_pending_reconciliation,
                     }
                 }, status=200)
+            except StaleProposalError as e:
+                self._send_json({"error": {"code": e.code, "message": str(e), "retryable": False}}, status=409)
             except ProjectNotFoundError as e:
                 self._send_json({"error": {"code": "not_found", "message": str(e)}}, status=404)
             except ValueError as e:
@@ -1319,6 +1329,7 @@ class DashboardServer:
         auth_token: Optional[str] = None,
         allowed_origins: Optional[List[str]] = None,
         *, iam=None, tenant_id: Optional[str] = None, tenant_root: Optional[Path] = None,
+        allow_admin_token_planning: bool = False,
     ) -> None:
         if any(value is not None for value in (iam, tenant_id, tenant_root)) and not all(value is not None for value in (iam, tenant_id, tenant_root)):
             raise ValueError("Tenant dashboard requires IAM, tenant ID and storage root")
@@ -1326,6 +1337,7 @@ class DashboardServer:
         self.host = host
         self.port = port
         self.auth_token = auth_token or os.environ.get("MAS_DASHBOARD_TOKEN")
+        self.allow_admin_token_planning = allow_admin_token_planning
         self.allowed_origins = set(allowed_origins or [])
         self.static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
@@ -1362,6 +1374,7 @@ class DashboardServer:
             "initial_roster_names": set(self.enterprise.get_roster().keys()),
             "auth_token": self.auth_token,
             "auth_principal": os.environ.get("MAS_DASHBOARD_PRINCIPAL", "dashboard_operator"),
+            "allow_admin_token_planning": self.allow_admin_token_planning,
             "allowed_origins": self.allowed_origins,
             "latest_artifacts": None,
             "cio_audit_report": None,

@@ -715,6 +715,7 @@ def live_server():
         host="127.0.0.1",
         port=port,
         auth_token="test-live-auth-token",
+        allow_admin_token_planning=True,
     )
     server.start_background()
     time.sleep(0.3)
@@ -1126,5 +1127,225 @@ def test_http_negative_planning_authorizations(live_server):
     resp = client_planner.publish_plan("PLIVE", sample_plan)
     assert resp.success is True
     assert resp.tasks_created == 1
+
+
+def test_reconciliation_proposal_superseded_rejection_and_audit(temp_db, sample_project):
+    """
+    SBA-03 Version-Bound Reconciliation Test:
+    Sequence: Proposal A is read, Proposal B replaces it, delayed approval for A arrives.
+    Must reject with 409 conflict WITHOUT applying Proposal B or Proposal A.
+    When Proposal B is approved with expected revision, it increments policy_version,
+    invalidates evidence, and records an immutable audit log.
+    """
+    service = PlanPublisherService(temp_db)
+
+    # 1. Create initial active task in IN_PROGRESS
+    req1 = PlanPublicationRequest(
+        plan_id="plan-versioning",
+        revision=1,
+        source_commit="commit-1",
+        scope_reference="REF-INIT",
+        tasks=[
+            PlanTaskDefinition(
+                task_id="uuid-task-active",
+                planning_reference="VB-01",
+                title="Active Task Initial",
+                description="Task description",
+                type=IssueType.TASK,
+                path_whitelist=["src/core/"],
+                acceptance_criteria=["Criterion 1"],
+                reviewer_requirement="lead-architect",
+            )
+        ],
+    )
+    service.publish_plan(sample_project.key, req1, actor="lead-architect", tenant_id="tenant-alpha")
+    m = temp_db.get_task_mapping(sample_project.id, "VB-01")
+    issue = temp_db.get_issue(m.local_issue_id)
+    assert issue.policy_version == 1
+
+    # Transition issue to IN_PROGRESS so that it becomes active
+    temp_db.update_issue_state(issue.id, "IN_PROGRESS", triggered_by="worker-1", reason="Started work")
+    issue = temp_db.get_issue(issue.id)
+    assert issue.current_state == IssueState.IN_PROGRESS
+
+    # Add evidence link to test invalidation on policy change
+    temp_db.attach_evidence(EvidenceLink(
+        id="ev-active-1",
+        issue_id=issue.id,
+        evidence_type=EvidenceType.TEST_RUN_LOG,
+        content_hash="h"*64,
+        uri="test://run/1",
+    ))
+
+    # 2. Proposal A (revision 2): modifies acceptance criteria and reviewer requirement
+    req_a = PlanPublicationRequest(
+        plan_id="plan-versioning",
+        revision=2,
+        expected_previous_revision=1,
+        source_commit="commit-2",
+        scope_reference="REF-PROPOSAL-A",
+        tasks=[
+            PlanTaskDefinition(
+                task_id="uuid-task-active",
+                planning_reference="VB-01",
+                title="Active Task Initial",
+                type=IssueType.TASK,
+                path_whitelist=["src/core/"],
+                acceptance_criteria=["Criterion 1", "Criterion 2 (Proposal A)"],
+                reviewer_requirement="security-auditor",
+            )
+        ],
+    )
+    status_a, resp_a = service.publish_plan(sample_project.key, req_a, actor="lead-architect", tenant_id="tenant-alpha")
+    assert status_a == 200
+    assert len(resp_a.changes_requiring_reconciliation) >= 1
+    proposal_a_item = resp_a.changes_requiring_reconciliation[0]
+    proposal_a_id = proposal_a_item.proposal_id
+    proposal_a_rev = proposal_a_item.proposal_rev
+    assert proposal_a_rev == 2
+    assert proposal_a_id is not None
+
+    issue_staged_a = temp_db.get_issue(issue.id)
+    assert issue_staged_a.has_pending_reconciliation is True
+    assert issue_staged_a.staged_proposal_id == proposal_a_id
+    assert issue_staged_a.staged_proposal_rev == 2
+
+    # 3. Proposal B (revision 3): supersedes Proposal A with different criteria
+    req_b = PlanPublicationRequest(
+        plan_id="plan-versioning",
+        revision=3,
+        expected_previous_revision=2,
+        source_commit="commit-3",
+        scope_reference="REF-PROPOSAL-B",
+        tasks=[
+            PlanTaskDefinition(
+                task_id="uuid-task-active",
+                planning_reference="VB-01",
+                title="Active Task Initial",
+                type=IssueType.TASK,
+                path_whitelist=["src/core/", "src/extra/"],
+                acceptance_criteria=["Criterion 1", "Criterion 3 (Proposal B)"],
+                reviewer_requirement="chief-architect",
+            )
+        ],
+    )
+    status_b, resp_b = service.publish_plan(sample_project.key, req_b, actor="lead-architect", tenant_id="tenant-alpha")
+    assert status_b == 200
+    proposal_b_item = resp_b.changes_requiring_reconciliation[0]
+    proposal_b_id = proposal_b_item.proposal_id
+    proposal_b_rev = proposal_b_item.proposal_rev
+    assert proposal_b_rev == 3
+
+    issue_staged_b = temp_db.get_issue(issue.id)
+    assert issue_staged_b.staged_proposal_id == proposal_b_id
+    assert issue_staged_b.staged_proposal_rev == 3
+
+    # 4. Delayed decision for Proposal A arrives: MUST REJECT WITH StaleProposalError (HTTP 409)
+    from mas.pm.plans import StaleProposalError
+    with pytest.raises(StaleProposalError) as exc_info:
+        service.reconcile_staged_changes(
+            project_id_or_key=sample_project.key,
+            issue_id_or_key=issue.key,
+            decision="apply",
+            actor="chief-architect",
+            tenant_id="tenant-alpha",
+            expected_proposal_id=proposal_a_id,
+            expected_proposal_rev=proposal_a_rev,
+            expected_base_policy_version=1,
+        )
+    assert "mismatch" in str(exc_info.value).lower()
+
+    # Confirm Proposal B was NOT accidentally applied by the stale decision!
+    issue_unchanged = temp_db.get_issue(issue.id)
+    assert issue_unchanged.policy_version == 1
+    assert issue_unchanged.has_pending_reconciliation is True
+    assert issue_unchanged.reviewer_requirement == "lead-architect"
+
+    # 5. Correct reconciliation for Proposal B: apply with matching proposal info
+    updated = service.reconcile_staged_changes(
+        project_id_or_key=sample_project.key,
+        issue_id_or_key=issue.key,
+        decision="apply",
+        actor="chief-architect",
+        tenant_id="tenant-alpha",
+        expected_proposal_id=proposal_b_id,
+        expected_proposal_rev=proposal_b_rev,
+        expected_base_policy_version=1,
+    )
+    assert updated.policy_version == 2
+    assert updated.has_pending_reconciliation is False
+    assert updated.reviewer_requirement == "chief-architect"
+    assert "Criterion 3 (Proposal B)" in updated.acceptance_criteria
+    assert "src/extra/" in updated.path_whitelist
+    # Evidence was invalidated: rework_cycle incremented
+    assert updated.rework_cycle == 1
+
+    # 6. Verify durable reconciliation audit record
+    audits = temp_db.list_reconciliation_audits(issue_id=issue.id)
+    assert len(audits) == 1
+    audit = audits[0]
+    assert audit.decision == "apply"
+    assert audit.actor == "chief-architect"
+    assert audit.proposal_id == proposal_b_id
+    assert audit.proposal_rev == 3
+    assert audit.base_policy_version == 1
+    assert audit.resulting_policy_version == 2
+    assert audit.evidence_invalidated_count == 1
+    assert audit.after_policy["reviewer_requirement"] == "chief-architect"
+
+
+def test_pm_publish_plan_unbound_mcp_fails_closed():
+    """
+    Verifies that calling pm_publish_plan without verified planning authority fails closed.
+    """
+    from mas.pm.tools import pm_publish_plan
+    from mas.security import ExecutionContext
+
+    # Unauthenticated / empty principal
+    with ExecutionContext.scope(""):
+        with pytest.raises(PermissionError) as exc_unauth:
+            pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+        assert "unauthenticated" in str(exc_unauth.value).lower()
+
+    # Caller with non-planning identity in unbound execution context
+    with ExecutionContext.scope("guest_contributor"):
+        with pytest.raises(PermissionError) as exc_nonplan:
+            pm_publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
+        assert "planning authority" in str(exc_nonplan.value).lower()
+
+
+def test_server_unconfigured_admin_token_rejects_planning():
+    """
+    Verifies that a DashboardServer running with default allow_admin_token_planning=False
+    rejects bearer token calls that lack explicit planning authority.
+    """
+    port = get_free_port()
+    enterprise = ConsultingEnterprise(name="Strict Server Enterprise")
+    server = DashboardServer(
+        enterprise=enterprise,
+        host="127.0.0.1",
+        port=port,
+        auth_token="static-unprivileged-token",
+        allow_admin_token_planning=False,  # Explicitly unconfigured / disabled
+    )
+    server.start_background()
+    time.sleep(0.3)
+
+    db = get_pm_db()
+    if not db.get_project_by_key("PSTRICT"):
+        db.create_project(Project(id=str(uuid.uuid4()), key="PSTRICT", name="Strict Project"))
+
+    try:
+        client = PlanPublisherClient(base_url=f"http://127.0.0.1:{port}", auth_token="static-unprivileged-token")
+        with pytest.raises(PermissionError) as exc_info:
+            client.publish_plan("PSTRICT", {
+                "plan_id": "p-strict",
+                "revision": 1,
+                "tasks": [{"task_id": "s1", "planning_reference": "ST-01", "title": "Strict Task"}]
+            })
+        assert "403" in str(exc_info.value)
+    finally:
+        server.stop()
+
 
 

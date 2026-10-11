@@ -68,9 +68,15 @@ class DependencyUnresolvedError(PMGuardError):
     pass
 
 
+class AssignmentAuthorizationError(PMGuardError):
+    """Raised when task assignment or reassignment violates coordinator authority."""
+    pass
+
+
 class PendingReconciliationError(PMGuardError):
     """Raised when an issue has pending unapproved scope/acceptance reconciliation."""
     pass
+
 
 
 def validate_pending_reconciliation(issue: Issue) -> None:

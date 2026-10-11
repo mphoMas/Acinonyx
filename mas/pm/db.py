@@ -29,6 +29,7 @@ from mas.pm.models import (
     SprintState,
     TaskMapping,
     PlanRecord,
+    ReconciliationAuditRecord,
 )
 
 DEFAULT_DB_PATH = Path(os.environ.get("MAS_PM_DB_PATH", "mas_pm.db"))
@@ -363,9 +364,45 @@ class PMDatabase:
                 except sqlite3.OperationalError:
                     pass
                 try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_proposal_id TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_proposal_rev INTEGER;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN has_pending_reconciliation INTEGER DEFAULT 0;")
                 except sqlite3.OperationalError:
                     pass
+
+                # SBA-03: Durable reconciliation audit trail
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_reconciliation_audits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    issue_id TEXT NOT NULL,
+                    issue_key TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    proposal_id TEXT,
+                    proposal_rev INTEGER,
+                    base_policy_version INTEGER NOT NULL,
+                    resulting_policy_version INTEGER NOT NULL,
+                    before_policy JSON NOT NULL,
+                    after_policy JSON NOT NULL,
+                    evidence_invalidated_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_recon_audits_issue ON pm_reconciliation_audits(issue_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_recon_audits_project ON pm_reconciliation_audits(project_id);")
                 try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN sprint_id TEXT;")
                 except sqlite3.OperationalError:
@@ -864,8 +901,9 @@ class PMDatabase:
                     tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
                     task_id, planning_reference, acceptance_criteria, proposed_delivery_owner, reviewer_requirement,
                     proposed_budget_tokens, staged_acceptance_criteria, staged_path_whitelist, staged_reviewer_requirement,
-                    staged_reviewer_action, has_pending_reconciliation, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    staged_reviewer_action, policy_version, staged_proposal_id, staged_proposal_rev,
+                    has_pending_reconciliation, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     issue.id,
@@ -897,6 +935,9 @@ class PMDatabase:
                     json.dumps(issue.staged_path_whitelist) if issue.staged_path_whitelist is not None else None,
                     issue.staged_reviewer_requirement,
                     issue.staged_reviewer_action,
+                    issue.policy_version or 1,
+                    issue.staged_proposal_id,
+                    issue.staged_proposal_rev,
                     1 if issue.has_pending_reconciliation else 0,
                     issue.created_at or now,
                     now,
@@ -948,6 +989,8 @@ class PMDatabase:
         staged_path_whitelist: Optional[List[str]] = None,
         staged_reviewer_requirement: Optional[str] = None,
         staged_reviewer_action: Optional[str] = None,
+        staged_proposal_id: Optional[str] = None,
+        staged_proposal_rev: Optional[int] = None,
         has_pending_reconciliation: bool = False,
         conn: Optional[sqlite3.Connection] = None,
     ) -> None:
@@ -962,6 +1005,7 @@ class PMDatabase:
                     reviewer_requirement = ?, proposed_budget_tokens = ?,
                     staged_acceptance_criteria = ?, staged_path_whitelist = ?,
                     staged_reviewer_requirement = ?, staged_reviewer_action = ?,
+                    staged_proposal_id = ?, staged_proposal_rev = ?,
                     has_pending_reconciliation = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -980,6 +1024,8 @@ class PMDatabase:
                     json.dumps(staged_path_whitelist) if staged_path_whitelist is not None else None,
                     staged_reviewer_requirement,
                     staged_reviewer_action,
+                    staged_proposal_id,
+                    staged_proposal_rev,
                     1 if has_pending_reconciliation else 0,
                     now,
                     issue_id,
@@ -1698,6 +1744,9 @@ class PMDatabase:
         )
         staged_reviewer_requirement = row["staged_reviewer_requirement"] if "staged_reviewer_requirement" in row.keys() else None
         staged_reviewer_action = row["staged_reviewer_action"] if "staged_reviewer_action" in row.keys() else None
+        policy_version = int(row["policy_version"]) if ("policy_version" in row.keys() and row["policy_version"] is not None) else 1
+        staged_proposal_id = row["staged_proposal_id"] if "staged_proposal_id" in row.keys() else None
+        staged_proposal_rev = int(row["staged_proposal_rev"]) if ("staged_proposal_rev" in row.keys() and row["staged_proposal_rev"] is not None) else None
         has_pending_reconciliation = bool(row["has_pending_reconciliation"]) if "has_pending_reconciliation" in row.keys() else False
 
         return Issue(
@@ -1730,7 +1779,98 @@ class PMDatabase:
             staged_path_whitelist=staged_path_whitelist,
             staged_reviewer_requirement=staged_reviewer_requirement,
             staged_reviewer_action=staged_reviewer_action,
+            policy_version=policy_version,
+            staged_proposal_id=staged_proposal_id,
+            staged_proposal_rev=staged_proposal_rev,
             has_pending_reconciliation=has_pending_reconciliation,
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )
+
+    def record_reconciliation_audit(
+        self,
+        audit: ReconciliationAuditRecord,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> ReconciliationAuditRecord:
+        """Records an immutable reconciliation audit log entry."""
+        def _execute(c: sqlite3.Connection) -> None:
+            now = datetime.now(timezone.utc).isoformat()
+            cur = c.execute(
+                """
+                INSERT INTO pm_reconciliation_audits (
+                    tenant_id, project_id, issue_id, issue_key, decision, actor,
+                    proposal_id, proposal_rev, base_policy_version, resulting_policy_version,
+                    before_policy, after_policy, evidence_invalidated_count, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    audit.tenant_id,
+                    audit.project_id,
+                    audit.issue_id,
+                    audit.issue_key,
+                    audit.decision,
+                    audit.actor,
+                    audit.proposal_id,
+                    audit.proposal_rev,
+                    audit.base_policy_version,
+                    audit.resulting_policy_version,
+                    json.dumps(audit.before_policy),
+                    json.dumps(audit.after_policy),
+                    audit.evidence_invalidated_count,
+                    audit.created_at or now,
+                ),
+            )
+            audit.id = cur.lastrowid
+            audit.created_at = audit.created_at or now
+
+        if conn is not None:
+            _execute(conn)
+        else:
+            with self.atomic_transaction() as c:
+                _execute(c)
+        return audit
+
+    def list_reconciliation_audits(
+        self,
+        issue_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> List[ReconciliationAuditRecord]:
+        """Lists reconciliation audit records for an issue or project."""
+        c = conn or self._get_connection()
+        try:
+            query = "SELECT * FROM pm_reconciliation_audits WHERE 1=1"
+            params: List[Any] = []
+            if issue_id:
+                query += " AND issue_id = ?"
+                params.append(issue_id)
+            if project_id:
+                query += " AND project_id = ?"
+                params.append(project_id)
+            query += " ORDER BY created_at ASC, id ASC"
+            cur = c.execute(query, params)
+            rows = cur.fetchall()
+            results: List[ReconciliationAuditRecord] = []
+            for r in rows:
+                results.append(ReconciliationAuditRecord(
+                    id=r["id"],
+                    tenant_id=r["tenant_id"],
+                    project_id=r["project_id"],
+                    issue_id=r["issue_id"],
+                    issue_key=r["issue_key"],
+                    decision=r["decision"],
+                    actor=r["actor"],
+                    proposal_id=r["proposal_id"],
+                    proposal_rev=r["proposal_rev"],
+                    base_policy_version=r["base_policy_version"],
+                    resulting_policy_version=r["resulting_policy_version"],
+                    before_policy=json.loads(r["before_policy"]),
+                    after_policy=json.loads(r["after_policy"]),
+                    evidence_invalidated_count=r["evidence_invalidated_count"],
+                    created_at=str(r["created_at"]),
+                ))
+            return results
+        finally:
+            if conn is None:
+                c.close()
+
