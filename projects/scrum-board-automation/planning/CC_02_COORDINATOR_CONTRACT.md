@@ -1,9 +1,9 @@
 # CC-02 Capable Coordinator Contract Specification
 
-**Document Version:** 1.0.0-draft  
+**Document Version:** 1.1.0-revised  
 **Delivery Owner:** Antigravity (Backend, Engine, Runtime Integration)  
 **Reviewer:** Codex (Frontend, UI/UX, Interface Requirements) / Independent Reviewer  
-**Status:** DRAFT (Submitted for independent review before downstream implementation)  
+**Status:** REVISED DRAFT (Governing Implementation Contract for CC-03 through CC-15)  
 **Workstream:** Capable Coordinator (Priority 1)  
 
 ---
@@ -14,33 +14,35 @@ The Capable Coordinator provides autonomous, resilient, and policy-governed disp
 - **Developer Runtime:** Google Antigravity CLI (`agy` headless process-group execution)
 - **Reviewer Runtime:** OpenAI Codex CLI (`codex exec` headless batch review)
 
-This specification defines the formal identity models, execution lifecycle, lease and outbox mechanisms, uncertain execution semantics, authority boundaries, candidate verification, and staged reconciliation protocols required to implement **CC-03** through **CC-15**.
+This specification defines the formal identity models, relational persistence schemas, monotonic fencing tokens, CAS dispatch claims, stale worker rejection, crash recovery boundaries, budget settlement, execution containment limits, signed evidence structures, and staged reconciliation protocols required to implement **CC-03** through **CC-15**.
 
 ---
 
-## 2. Core Identity Model
+## 2. Core Identity Model & Hierarchical Relationships
 
-The coordinator enforces strict separation between session continuity, intent, execution attempts, and candidate artifacts.
+The coordinator enforces strict separation between session continuity, intent, execution attempts, physical runs, and candidate artifacts.
 
 ```
-+-------------------------------------------------------------------------------+
-| Tenant (tenant_id)                                                            |
-|   +-------------------------------------------------------------------------+ |
-|   | Project (project_id, project_key)                                       | |
-|   |   +-------------------------------------------------------------------+ | |
-|   |   | Task (task_id [UUID], planning_reference [e.g. SBA-01])            | | |
-|   |   |   |                                                               | | |
-|   |   |   +---> Attempt (attempt_id [UUID], attempt_seq: 1, 2, ...)       | | |
-|   |   |           |                                                       | | |
-|   |   |           +---> Run (run_id, runtime_session_id)                  | | |
-|   |   |           |                                                       | | |
-|   |   |           +---> Candidate (candidate_id, commit_sha, tree_sha)    | | |
-|   |   |           |                                                       | | |
-|   |   |           +---> Evidence Link (evidence_id, content_hash, sig)     | | |
-|   |   |           |                                                       | | |
-|   |   |           +---> Review Verdict (verdict_id, reviewer_id, sig)     | | |
-|   +---+---+---------------------------------------------------------------+ | |
-+-------+-----------------------------------------------------------------------+
++---------------------------------------------------------------------------------------+
+| Tenant (tenant_id)                                                                    |
+|   +---------------------------------------------------------------------------------+ |
+|   | Project (project_id, project_key)                                               | |
+|   |   +---------------------------------------------------------------------------+ | |
+|   |   | Task (task_id [UUID], planning_reference [e.g. SBA-01])                   | | |
+|   |   |   |                                                                       | | |
+|   |   |   +---> Attempt (attempt_id [UUID], attempt_seq: 1, 2, ...)               | | |
+|   |   |           |                                                               | | |
+|   |   |           +---> Outbox Intent (intent_id, fencing_token, status)          | | |
+|   |   |           |                                                               | | |
+|   |   |           +---> Run (run_id, runtime_session_id, process_pid)             | | |
+|   |   |           |                                                               | | |
+|   |   |           +---> Candidate (candidate_id, commit_sha, tree_sha)            | | |
+|   |   |           |                                                               | | |
+|   |   |           +---> Signed Evidence (evidence_id, content_hash, signature)     | | |
+|   |   |           |                                                               | | |
+|   |   |           +---> Signed Verdict (verdict_id, reviewer_principal, signature)| | |
+|   |   +---+---+-------------------------------------------------------------------+ | |
++-------+-------------------------------------------------------------------------------+
 ```
 
 ### 2.1 Identity Definitions
@@ -59,186 +61,266 @@ The coordinator enforces strict separation between session continuity, intent, e
    - Sequence increments monotonically (`1`, `2`, `3`, ...).
    - Bounded by maximum reflexion / rework appetite (default: max 3 cycles).
 
-4. **Run Identity (`run_id` [UUID])**:
+4. **Outbox Intent Identity (`intent_id` [UUID], `fencing_token` [int])**:
+   - Durable dispatch intent in SQLite.
+   - Guarded by a strictly monotonic generation counter (`fencing_token`).
+
+5. **Run Identity (`run_id` [UUID])**:
    - A single physical OS process spawn or CLI dispatch execution.
    - Associated with a runtime-emitted identifier:
      - Antigravity: `conversation_id` (UUID).
      - Codex: `thread_id` (UUID).
-   - **Crucial Separation:** `runtime_session_id` identifies conversation history; `run_id` identifies a specific in-flight OS execution process.
+   - **Crucial Separation:** `runtime_session_id` identifies conversational context history; `run_id` identifies a specific in-flight OS execution process. Resuming a conversation starts turn 2 of a session, which is a new run attempt, NOT in-flight recovery of run 1.
 
-5. **Candidate Identity (`candidate_id` [UUID], `commit_sha` [hex-40/64])**:
+6. **Candidate Identity (`candidate_id` [UUID], `commit_sha` [hex-40/64])**:
    - Immutable pointer to a Git commit in the local object database.
    - Captures exact changes produced by an implementation attempt.
    - Must be committed and resolvable via `git rev-parse` before transition to verification.
 
-6. **Evidence Identity (`evidence_id` [UUID], `content_hash` [SHA-256])**:
+7. **Signed Evidence Identity (`evidence_id` [UUID], `content_hash` [SHA-256])**:
    - Cryptographically anchored record linking a Git commit SHA, test execution log, or benchmark receipt.
    - Signed with HMAC-SHA256 (`provenance_signature`) preventing client tampering.
 
 ---
 
-## 3. Runtime Adapter Operations & Capability Boundaries
+## 3. Relational Persistence Schemas & Uniqueness Constraints
 
-Based on empirical discovery from **CC-01** (`CC_01_CAPABILITY_MATRIX.md`), adapters must adhere to the following contracts:
+The coordinator persistence model expands `mas.pm.db` with durable outbox and dispatch tracking tables. All tables enforce foreign keys and transactional boundaries.
 
-### 3.1 Developer Adapter (Antigravity `agy`)
-- **Invocation Command:** `agy -p "<prompt>" --output-format stream-json --add-dir <workspace_dir>`
-- **Early Identification:** Adapter MUST parse the initial stream event (`{"event": "init", "conversation_id": "..."}`) and persist `conversation_id` before awaiting tool execution.
-- **Process Group Scoping:** MUST spawn with `preexec_fn=os.setsid` to guarantee process tree signaling.
-- **Capability Limits:**
-  - Standard conversation resumption (`--conversation <id>`) starts a subsequent prompt turn (`turn 2`).
-  - Does NOT provide in-flight resumption of broken tool chains.
-  - Exactly-once tool execution across process crash is **UNSUPPORTED**.
+```sql
+-- CC-02 / CC-03: Durable Coordinator Outbox Intents
+CREATE TABLE IF NOT EXISTS pm_coordinator_intents (
+    intent_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    adapter_type TEXT NOT NULL CHECK(adapter_type IN ('antigravity', 'codex', 'synthetic')),
+    status TEXT NOT NULL CHECK(status IN ('PENDING', 'CLAIMED', 'PROCESSING', 'COMPLETED', 'FAILED', 'UNKNOWN_EXECUTION', 'CANCELED')),
+    fencing_token INTEGER NOT NULL DEFAULT 1,
+    worker_id TEXT,
+    lease_expires_at REAL,
+    lease_heartbeat_at REAL,
+    payload JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(task_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+    CONSTRAINT uq_intent_attempt UNIQUE (task_id, attempt_id)
+);
+CREATE INDEX IF NOT EXISTS idx_coord_intents_status ON pm_coordinator_intents(status, lease_expires_at);
 
-### 3.2 Reviewer Adapter (Codex `codex`)
-- **Invocation Command:** `codex exec --skip-git-repo-check -m codex-auto-review --json "<instructions>"`
-- **Early Identification:** First stream event emitted within seconds: `{"type": "thread.started", "thread_id": "..."}`.
-- **Process Group Scoping:** MUST spawn with `preexec_fn=os.setsid`.
-- **Capability Limits:**
-  - Interactive Codex TUI/chat is NOT programmatic; headless batch `codex exec` is mandatory.
-  - Semantic review verdicts MUST be parsed from `item.completed` agent messages and validated for pass/reject criteria.
+-- CC-02 / CC-03: Execution Attempts Table
+CREATE TABLE IF NOT EXISTS pm_coordinator_attempts (
+    attempt_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    attempt_seq INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN_EXECUTION', 'CANCELED')),
+    fencing_token INTEGER NOT NULL DEFAULT 1,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP,
+    budget_tokens_allocated INTEGER NOT NULL DEFAULT 0,
+    budget_tokens_spent INTEGER NOT NULL DEFAULT 0,
+    candidate_commit_sha TEXT,
+    failure_reason TEXT,
+    FOREIGN KEY(task_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+    CONSTRAINT uq_task_attempt_seq UNIQUE (task_id, attempt_seq)
+);
+
+-- CC-02 / CC-03: Physical Process Runs Table
+CREATE TABLE IF NOT EXISTS pm_coordinator_runs (
+    run_id TEXT PRIMARY KEY,
+    attempt_id TEXT NOT NULL,
+    fencing_token INTEGER NOT NULL,
+    runtime_session_id TEXT, -- conversation_id or thread_id
+    process_pid INTEGER,
+    process_pgid INTEGER,
+    status TEXT NOT NULL CHECK(status IN ('SPAWNING', 'STREAMING', 'EXITED', 'INTERRUPTED', 'KILLED')),
+    exit_code INTEGER,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP,
+    FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_coord_runs_attempt ON pm_coordinator_runs(attempt_id);
+```
 
 ---
 
-## 4. Durable Dispatch, Leases, and Outbox State Machine
+## 4. Durable Dispatch, Leases, and Monotonic Fencing
 
 Network calls and process spawns MUST NOT occur within relational database transactions.
 
-### 4.1 Dispatch Outbox Architecture
+### 4.1 Compare-And-Swap (CAS) Claim Protocol
 
-```
-[PM State Engine]
-       |
-       v (Atomic Transaction)
-+------------------------------------+
-| 1. Create Attempt Record           |
-| 2. Enqueue Outbox Intent (PENDING) |
-| 3. Set Execution Lease (leased_at) |
-+------------------------------------+
-       |
-       v
-[Outbox Dispatch Worker]
-       |
-       +---> 1. Lock Intent (PROCESSING, worker_id, lease_timeout)
-       |
-       +---> 2. Spawn CLI Process (outside DB transaction)
-       |
-       +---> 3. Read early stream line -> Update Run ID in DB
-       |
-       +---> 4. Await process exit / Stream results
-       |
-       +---> 5. Record Result & Complete Outbox Record (COMPLETED)
+A worker claiming a `PENDING` outbox intent or reclaiming an expired lease executes an atomic CAS update:
+
+```sql
+UPDATE pm_coordinator_intents
+SET status = 'CLAIMED',
+    worker_id = :worker_id,
+    fencing_token = fencing_token + 1,
+    lease_expires_at = :now_epoch + :lease_timeout_s,
+    lease_heartbeat_at = :now_epoch,
+    updated_at = :now_iso
+WHERE intent_id = :intent_id
+  AND (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < :now_epoch))
+  AND fencing_token = :expected_fencing_token;
 ```
 
-### 4.2 Lease and Idempotency Protocol
+If zero rows are updated, the claim fails (lost race). The worker aborts dispatch without spawning any process.
 
-- **Lease Duration:** Default 1,800 seconds (governed by `issue.appetite_timeout_s`).
-- **Heartbeat:** Outbox worker updates `lease_heartbeat_at` every 30 seconds.
-- **Lease Expiration:** If a worker crashes, the lease expires after `lease_timeout_s`. Expired leases enter reconciliation before re-dispatch.
-- **Process Idempotency:** If an outbox intent is dispatched, the `idempotency_key` format is:
-  `coordinator:attempt:{tenant_id}:{task_id}:{attempt_seq}`
+### 4.2 Stale Worker & Late Result Rejection
+
+When a worker completes execution and attempts to write completion state, candidate commits, or spend tokens, it MUST present its assigned `fencing_token`:
+
+```sql
+UPDATE pm_coordinator_intents
+SET status = 'COMPLETED',
+    updated_at = :now_iso
+WHERE intent_id = :intent_id
+  AND worker_id = :worker_id
+  AND fencing_token = :assigned_fencing_token;
+```
+
+If the lease was stolen or incremented by a reconciliation reaper during a long network pause, the fencing generation has advanced. The database update fails with zero rows updated.
+**The coordinator strictly rejects the stale worker's output and drops late results.**
 
 ---
 
-## 5. Lifecycle States & Uncertain Execution Handling
+## 5. Lifecycle State Mapping & Crash Recovery Boundaries
 
-### 5.1 Formal Task Lifecycle
+### 5.1 FSM State Mapping Across SDLC
+
+The existing MAS-PM board FSM states (`BACKLOG`, `REFINED`, `STAGED`, `IN_PROGRESS`, `VERIFICATION`, `JUDICIAL_REVIEW`, `DONE`) govern board progression. Coordinator attempt and run states map cleanly into this FSM:
+
+| PM Board State | Coordinator Attempt State | Outbox Intent State | Description / Invariants |
+| :--- | :--- | :--- | :--- |
+| `BACKLOG` | (None) | (None) | Task unrefined; budget tokens = 0; no runtime execution. |
+| `REFINED` | (None) | (None) | Scope and acceptance criteria reviewed; financial budget proposed. |
+| `STAGED` | `PENDING` | `PENDING` | Execution appetite granted; intent enqueued; ready for worker poll. |
+| `IN_PROGRESS` | `RUNNING` | `CLAIMED` / `PROCESSING` | Worker spawned CLI process; run ID tracked; lease active. |
+| `VERIFICATION` | `SUCCEEDED` | `COMPLETED` | Process exited code 0; candidate commit created; automated test log attached. |
+| `JUDICIAL_REVIEW` | `SUCCEEDED` | `COMPLETED` | Independent reviewer evaluating signed evidence. Separation of builder and judge enforced. |
+| `DONE` | `SUCCEEDED` | `COMPLETED` | Approved with cryptographic reviewer signature; closed. |
+| `UNKNOWN_EXECUTION` | `UNKNOWN_EXECUTION` | `UNKNOWN_EXECUTION` | Process crashed or lease expired with untracked side effects. Automatic dispatch halted. |
+
+### 5.2 Crash Recovery Boundaries
 
 ```
-[BACKLOG] (tokens=0, unallocated)
-    |
-    v (Refinement & Appetite Allocation)
-[STAGED] (scope-jailed, whitelist verified)
-    |
-    v (Outbox Dispatch: Attempt Spawned)
-[IN_PROGRESS] (execution lease active)
-    |
-    +--------------------------------+
-    |                                |
-    v (Interrupted / Crash)          v (Normal Exit)
-[UNKNOWN_EXECUTION]          [VERIFICATION] (evidence validated)
-    |                                |
-    +---> (Manual / Recon)           v (Critic Verdict)
-                                 [JUDICIAL_REVIEW]
-                                     |
-                           +---------+---------+
-                           |                   |
-                           v (PASS)            v (REJECT)
-                        [DONE]            [REWORK / BACKLOG]
+[Crash Point A: Before Spawn]
+   --> Lease expired; process never launched.
+   --> SAFE_RETRY: Next worker claims with fencing_token + 1.
+
+[Crash Point B: After Spawn, Before Run ID / Fencing Persisted]
+   --> Process was spawned into OS; side effects may have started.
+   --> UNKNOWN_EXECUTION: Worker dies before storing early conversation_id/thread_id.
+   --> AUTOMATIC RETRY FORBIDDEN.
+
+[Crash Point C: Run ID Persisted, Mid-Execution Disconnection]
+   --> Run ID recorded, but connection lost or process SIGKILLed.
+   --> UNKNOWN_EXECUTION / INTERRUPTED:
+   --> Tool executions cannot be assumed idempotent.
 ```
 
-### 5.2 UNKNOWN_EXECUTION State Specification
-
-When a run is interrupted by process crash, network severance, SIGKILL, or ungraceful shutdown:
-1. **Automatic Retry Strictly Prohibited:** Because runtimes cannot guarantee exactly-once side effects, the coordinator MUST NOT automatically launch a retry attempt.
-2. **State Tagging:** The task and attempt transition to `UNKNOWN_EXECUTION`.
-3. **Reconciliation Procedure:**
-   - The coordinator inspects the workspace Git repository status.
-   - If clean commits exist matching the task scope, the coordinator checks test execution logs.
-   - If side effects are partial or unknown, human or coordinator reconciliation is required to either:
-     - `DISCARD_ATTEMPT`: Revert working tree to parent commit and reschedule.
-     - `ADMIT_CANDIDATE`: Advance to verification if empirical evidence exists.
+### 5.3 Recovery Safety & External Side Effect Realities
+- **Git Rollback Limitation:** `git checkout` or `git reset` rolls back working tree files on disk. **It cannot undo external side effects** (database migrations, API calls, external service writes, tokens billed).
+- **Settlement Protocol:** `DISCARD_ATTEMPT` requires:
+  1. Process group verification (`os.killpg`) ensuring zero surviving local descendants.
+  2. Bounded token settlement: spend is tallied up to the crash point.
+  3. Git working tree cleaned to base commit.
+  4. Manual or architect reconciliation approval before the task may re-enter `STAGED`.
 
 ---
 
-## 6. Authority & Trust Boundaries
+## 6. Signed Evidence & Provenance Schema
 
-The system enforces four distinct authority boundaries:
+To prevent client tampering or forgery of test execution results, evidence attached to an issue must adhere to a strict HMAC-SHA256 canonical structure.
+
+### 6.1 Canonical Evidence Payload
+
+```json
+{
+  "evidence_id": "ev-7a91c0b3",
+  "issue_id": "c5d9f5dc-d645-4a62-af11-dd9e064e9d55",
+  "tenant_id": "tenant-alpha",
+  "task_id": "uuid-task-active",
+  "attempt_id": "att-1",
+  "attempt_seq": 1,
+  "fencing_token": 3,
+  "candidate_commit_sha": "a971cf7b1091868613eaac6839001034d7dd5d2b",
+  "base_commit_sha": "09b9a4e6cbbe96926bdfa1c25607bee8aa98b1df",
+  "evidence_type": "TEST_RUN_LOG",
+  "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "test_suite": "tests/test_sba_03_plan_publication.py",
+  "exit_code": 0,
+  "policy_version": 2,
+  "runner_principal": "coordinator-worker-1",
+  "timestamp": "2026-10-11T12:00:00Z"
+}
+```
+
+### 6.2 Provenance Signing & Key Ownership
+- **Key Ownership:** Signing keys (`MAS_EVIDENCE_SECRET`, `MAS_VERDICT_SECRET`) are owned strictly by the trusted coordinator runtime environment (minimum 32 bytes). Worker agents do not possess signing keys.
+- **Canonical Payload Digest:** The payload fields are sorted canonically and hashed via HMAC-SHA256:
+  $$\text{signature} = \text{HMAC-SHA256}(K, \text{evidence\_id} \parallel \text{issue\_id} \parallel \text{candidate\_sha} \parallel \text{content\_hash} \parallel \text{policy\_version})$$
+- **Verification on Transition:** `mas/pm/guards.py` verifies both the cryptographic signature and that `content_hash` matches the raw log on disk before allowing transition into `JUDICIAL_REVIEW`.
+
+---
+
+## 7. Execution Containment Boundaries & Realistic Limits
+
+1. **Local Process Tree Containment:**
+   - Adapters spawn worker processes with `preexec_fn=os.setsid` into dedicated POSIX process groups.
+   - On cancellation or timeout, `os.killpg(pgid, signal.SIGTERM)` is issued, followed by deadline observation and `SIGKILL` if processes survive.
+2. **Boundary Realities (What Process Groups DO NOT Contain):**
+   - **Remote Microservices / Containers:** Out-of-process Docker containers or cloud tasks are unaffected by local OS `killpg`.
+   - **Network Operations in Flight:** Sockets opened to external LLM providers or remote APIs may complete or incur billing even after local process death.
+   - **Mitigation:** The coordinator relies on lease timeouts, token quota fencing, and out-of-band adapter timeouts rather than assuming OS signals provide total containment.
+
+---
+
+## 8. Authority & Trust Boundaries
+
+The system enforces five distinct authority boundaries:
 
 | Role / Authority | Boundary Enforcement | Permitted Operations |
 | :--- | :--- | :--- |
 | **Tenant Administrator** | HTTP / JWT Scope `admin:*` | Tenant lifecycle, session revocation, global quota management. |
-| **Planner / Architect** | Roles `architect`, `data_architect`, `chief_architect`<br>or Scope `pm:plan:publish` | Plan publication, DAG dependency authoring, staged reconciliation decision (`apply`/`reject`). |
-| **Coordinator (Engine)** | Service Token / Context `coordinator` | Outbox polling, process dispatch, attempt sequencing, lease renewals. |
+| **Planner / Architect** | Roles `architect`, `data_architect`, `chief_architect`<br>or Scope `pm:plan:publish` | Plan publication, DAG authoring, version-bound reconciliation decision (`apply`/`reject`). |
+| **Coordinator (Engine)** | Service Context `coordinator` | Outbox polling, CAS claim, process dispatch, attempt sequencing, lease renewals. |
 | **Developer Agent** | Task Assignee Principal | Implementation file writes within `path_whitelist`, Git commits. **DENIED:** State transitions to verification or completion. |
 | **Reviewer Agent** | Independent Reviewer Principal | Critic review evaluations, verdict signing. **DENIED:** Code modifications, plan publishing. |
 
-### 6.1 Separation of Builder and Judge
+### 8.1 Separation of Builder and Judge
 As formalized in `mas/pm/guards.py`:
 - `assert_separation_of_builder_and_judge(issue, caller_principal)`
 - The principal who generated the candidate commit or held developer assignment CANNOT evaluate, sign, or transition the issue through `JUDICIAL_REVIEW` or `DONE`.
 
 ---
 
-## 7. Candidate Verification & Adversarial Review Protocol
-
-1. **Commit changesets MUST be checked against path whitelist:**
-   - Git changeset is inspected using `git diff-tree -m --root --no-commit-id --name-only -r <commit_sha>`.
-   - Every touched file must fall within `issue.path_whitelist` and outside `issue.forbidden_paths`. Traversal patterns (`..`) fail closed.
-2. **Empirical Evidence Required:**
-   - Mandatory `GIT_COMMIT` pointing to immutable object in Git database.
-   - Mandatory `TEST_RUN_LOG` with zero exit code and matching SHA-256 hash.
-   - Provenance cryptographic signature verified via HMAC-SHA256.
-3. **Adversarial Review:**
-   - Reviewer runtime evaluates candidate commit.
-   - Genuine rejection triggers increment of `rework_cycle`.
-   - Rejection reasons recorded in `pm_critic_verdicts` with cryptographic signature.
-
----
-
-## 8. Staged Reconciliation & Stale Approval Invalidation
+## 9. Version-Bound Staged Reconciliation Specification
 
 When an active task (`IN_PROGRESS`, `VERIFICATION`, `JUDICIAL_REVIEW`) is modified in a revised plan:
 1. **Live Scope Preservation:**
    - Live `path_whitelist`, `acceptance_criteria`, and `reviewer_requirement` remain active and unchanged.
    - Proposed plan revisions are stored in `staged_*` fields.
-   - `staged_reviewer_action` explicitly records `REPLACE` vs `REMOVE`.
+   - `staged_proposal_id` (e.g. `prop_<proj>_<plan>_<rev>`) and `staged_proposal_rev` attach immutable version tags.
 2. **Advancement Gating:**
    - `has_pending_reconciliation` is set to `1`.
    - All FSM transitions to `VERIFICATION`, `JUDICIAL_REVIEW`, or `DONE` fail closed until authorized reconciliation.
-3. **Authorized Reconciliation:**
-   - Handled via `POST /api/pm/v1/projects/{key}/issues/{issue_key}/reconcile`.
-   - `apply`: Updates live policy to staged changes and clears staging fields.
-   - `reject`: Drops staged changes, keeping original live policy.
-   - If an approved candidate is modified after approval, prior approvals are invalidated.
+3. **Atomic Version-Bound Reconciliation:**
+   - Reconcile request must submit: `expected_proposal_id`, `expected_proposal_rev`, and `expected_base_policy_version`.
+   - If superseded or stale, the request is rejected with **HTTP 409 Conflict (`StaleProposalError`)**.
+   - On `apply`: increments `policy_version += 1`, invalidates prior approvals, increments `rework_cycle`, and commits an immutable record to `pm_reconciliation_audits`.
+   - On `reject`: discards staged fields, retaining current policy version.
 
 ---
 
-## 9. Next Steps & Downstream Implementations
+## 10. Downstream Implementation Dependencies (CC-03 through CC-15)
 
-This specification provides the governing contracts for:
-- **CC-03:** Building durable coordinator state and SQLite outbox.
-- **CC-04:** Outbox worker implementation and lease reaper.
-- **CC-05:** Antigravity developer adapter.
-- **CC-06:** Codex reviewer adapter.
-- **CC-07 / CC-08:** Candidate verification, rework loops, and automated dispatch.
+With this specification revised:
+- **CC-03 (Durable State & Outbox):** Build `pm_coordinator_intents`, `pm_coordinator_attempts`, `pm_coordinator_runs` and CAS claim engine.
+- **CC-04 (Outbox Worker & Lease Reaper):** Implement background polling, monotonic fencing verification, and expired lease reconciliation.
+- **CC-05 (Antigravity Developer Adapter):** Implement early `conversation_id` extraction and process group isolation.
+- **CC-06 (Codex Reviewer Adapter):** Implement early `thread_id` extraction and automated Git commit semantic reviews.
+- **CC-07 / CC-08 (Candidate Verification & FSM Dispatch):** Wire automated verification evidence, cryptographic provenance checks, and separation of duties.
+
