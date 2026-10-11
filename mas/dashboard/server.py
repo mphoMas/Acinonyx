@@ -993,9 +993,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             tenant_id = auth_tenant_id or getattr(self, "tenant_id", None) or "default"
 
             # Enforce authenticated planning/architect authority
-            # Planning publication requires architect / chief_architect / tenant_admin authority or pm:plan:publish / tools:* / admin:*
+            # Planning publication requires verified planning permission:
+            # - Roles: {"architect", "data_architect", "chief_architect", "tenant_admin"}
+            # - Scopes: {"pm:plan:publish", "admin:*"}
             PLANNING_ROLES = {"architect", "data_architect", "chief_architect", "tenant_admin"}
-            PLANNING_ACTIONS = {"pm:plan:publish", "tools:*", "admin:*", "storage:*"}
+            PLANNING_ACTIONS = {"pm:plan:publish", "admin:*"}
 
             user_roles = set()
             user_scopes = set()
@@ -1015,15 +1017,22 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         user_scopes = set(getattr(ctx, "scopes", set()))
                     except Exception:
                         pass
+            elif mode == "BEARER" and self.auth_token and not iam_inst:
+                # Standalone single-tenant dashboard running with static admin bearer token
+                # Authorize if actions include planning action or caller role is configured
+                srv_role = getattr(self, "auth_role", None) or getattr(srv, "auth_role", None)
+                if srv_role in PLANNING_ROLES:
+                    user_roles.add(srv_role)
+                # Allow configured admin/planner server bearer token by checking explicit permission
+                configured_scopes = getattr(self, "auth_scopes", None) or getattr(srv, "auth_scopes", None)
+                if configured_scopes:
+                    user_scopes.update(configured_scopes)
+                elif getattr(self, "allow_admin_token_planning", True):
+                    # Default administrative server token grants planning authority
+                    user_scopes.add("pm:plan:publish")
 
             has_role_authority = bool(user_roles & PLANNING_ROLES)
             has_action_authority = bool(set(actions or []) & PLANNING_ACTIONS) or bool(user_scopes & PLANNING_ACTIONS)
-
-            # In unconfigured / test mock token modes, allow dashboard_operator / architect / admin
-            if not iam_inst:
-                principal_clean = (actor or "").split(":")[-1]
-                if principal_clean in ("dashboard_operator", "architect", "chief_architect", "admin", "test-live-auth-token"):
-                    has_role_authority = True
 
             if not (has_role_authority or has_action_authority):
                 self._send_json({
@@ -1056,6 +1065,98 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": {"code": "unauthorized", "message": str(e), "retryable": False}}, status=403)
             except Exception as e:
                 self._send_json({"error": {"code": "internal_error", "message": str(e), "retryable": False}}, status=500)
+
+        elif path.startswith("/api/pm/v1/projects/") and "/issues/" in path and path.endswith("/reconcile"):
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
+            parts = [p for p in path.split("/") if p]
+            # /api/pm/v1/projects/{key}/issues/{issue_key}/reconcile -> 8 parts: ['api', 'pm', 'v1', 'projects', '{key}', 'issues', '{issue_key}', 'reconcile']
+            if len(parts) != 8 or parts[3] != "projects" or parts[5] != "issues" or parts[7] != "reconcile":
+                self._send_json({"error": {"code": "not_found", "message": "Invalid endpoint path"}}, status=404)
+                return
+            project_id_or_key = parts[4]
+            issue_key_or_id = parts[6]
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            try:
+                payload = json.loads(body.decode("utf-8")) if body else {}
+            except Exception as e:
+                self._send_json({"error": {"code": "malformed", "message": f"Malformed JSON: {e}"}}, status=400)
+                return
+
+            decision = payload.get("decision", "apply")
+            from mas.pm.plans import PlanPublisherService, ProjectNotFoundError
+            from mas.pm.tools import get_pm_db
+            db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+            publisher = PlanPublisherService(db)
+
+            # Check planning authority
+            PLANNING_ROLES = {"architect", "data_architect", "chief_architect", "tenant_admin"}
+            PLANNING_ACTIONS = {"pm:plan:publish", "admin:*"}
+            mode, principal, auth_tenant_id, actions, session_data = self._resolve_session_or_auth()
+            user_roles = set()
+            user_scopes = set()
+            srv = getattr(self, "server", None)
+            ds = getattr(srv, "dashboard_server", None)
+            iam_inst = getattr(self, "iam", None) or getattr(srv, "iam", None) or getattr(ds, "iam", None)
+            if session_data and session_data.get("tenant_context"):
+                ctx = session_data["tenant_context"]
+                user_roles = set(getattr(ctx, "roles", set()))
+                user_scopes = set(getattr(ctx, "scopes", set()))
+            elif mode == "BEARER" and iam_inst:
+                auth_hdr = self.headers.get("Authorization", "")
+                if auth_hdr.startswith("Bearer "):
+                    try:
+                        ctx = iam_inst.verify_token(auth_hdr[7:].strip())
+                        user_roles = set(getattr(ctx, "roles", set()))
+                        user_scopes = set(getattr(ctx, "scopes", set()))
+                    except Exception:
+                        pass
+            elif mode == "BEARER" and self.auth_token and not iam_inst:
+                srv_role = getattr(self, "auth_role", None) or getattr(srv, "auth_role", None)
+                if srv_role in PLANNING_ROLES:
+                    user_roles.add(srv_role)
+                configured_scopes = getattr(self, "auth_scopes", None) or getattr(srv, "auth_scopes", None)
+                if configured_scopes:
+                    user_scopes.update(configured_scopes)
+                elif getattr(self, "allow_admin_token_planning", True):
+                    user_scopes.add("pm:plan:publish")
+
+            has_role_authority = bool(user_roles & PLANNING_ROLES)
+            has_action_authority = bool(set(actions or []) & PLANNING_ACTIONS) or bool(user_scopes & PLANNING_ACTIONS)
+            if not (has_role_authority or has_action_authority):
+                self._send_json({"error": {"code": "forbidden", "message": "Planning authority required to reconcile staged changes"}}, status=403)
+                return
+
+            try:
+                updated_issue = publisher.reconcile_staged_changes(
+                    project_id_or_key=project_id_or_key,
+                    issue_id_or_key=issue_key_or_id,
+                    decision=decision,
+                    actor=actor,
+                    tenant_id=auth_tenant_id or getattr(self, "tenant_id", None) or "default",
+                )
+                self._send_json({
+                    "success": True,
+                    "issue": {
+                        "id": updated_issue.id,
+                        "key": updated_issue.key,
+                        "current_state": updated_issue.current_state.value,
+                        "path_whitelist": updated_issue.path_whitelist,
+                        "acceptance_criteria": updated_issue.acceptance_criteria,
+                        "reviewer_requirement": updated_issue.reviewer_requirement,
+                        "has_pending_reconciliation": updated_issue.has_pending_reconciliation,
+                    }
+                }, status=200)
+            except ProjectNotFoundError as e:
+                self._send_json({"error": {"code": "not_found", "message": str(e)}}, status=404)
+            except ValueError as e:
+                self._send_json({"error": {"code": "bad_request", "message": str(e)}}, status=400)
+            except Exception as e:
+                self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
 
         else:
             self._send_json({"error": {"code": "not_found", "message": f"Endpoint not found: {path}"}}, status=404)

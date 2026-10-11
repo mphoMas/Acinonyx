@@ -33,6 +33,7 @@ from mas.pm.models import (
     PlanRecord,
     PlanTaskDefinition,
     ReconciliationItem,
+    StagedReviewerAction,
     TaskMapping,
 )
 
@@ -516,6 +517,7 @@ class PlanPublisherService:
                     staged_crit = None
                     staged_paths = None
                     staged_rev = None
+                    staged_rev_action = StagedReviewerAction.NONE.value
                     has_pending_recon = False
 
                     if is_active:
@@ -553,14 +555,45 @@ class PlanPublisherService:
 
                         # 3. Did reviewer requirement change?
                         if issue.reviewer_requirement != task.reviewer_requirement:
-                            staged_rev = task.reviewer_requirement
                             has_pending_recon = True
+                            if task.reviewer_requirement is None:
+                                staged_rev = None
+                                staged_rev_action = StagedReviewerAction.REMOVE.value
+                                reconciliations.append(ReconciliationItem(
+                                    task_id=t_id,
+                                    planning_reference=p_ref,
+                                    issue_key=issue.key,
+                                    current_state=issue.current_state.value,
+                                    change_type="reviewer_requirement_removed",
+                                    description=(
+                                        f"Active issue {issue.key} in state {issue.current_state.value} proposes removing reviewer requirement "
+                                        f"('{issue.reviewer_requirement}' -> null); preserved live until authorized reconciliation."
+                                    ),
+                                ))
+                            else:
+                                staged_rev = task.reviewer_requirement
+                                staged_rev_action = StagedReviewerAction.REPLACE.value
+                                reconciliations.append(ReconciliationItem(
+                                    task_id=t_id,
+                                    planning_reference=p_ref,
+                                    issue_key=issue.key,
+                                    current_state=issue.current_state.value,
+                                    change_type="reviewer_requirement_modified",
+                                    description=(
+                                        f"Active issue {issue.key} in state {issue.current_state.value} proposes replacing reviewer requirement "
+                                        f"('{issue.reviewer_requirement}' -> '{task.reviewer_requirement}'); preserved live until authorized reconciliation."
+                                    ),
+                                ))
 
                     # Effective fields to apply to live issue
-                    # If active, preserve existing live scope and acceptance criteria!
+                    # If active, strictly preserve existing live scope, acceptance criteria, and reviewer requirement!
                     effective_paths = issue.path_whitelist if (is_active and staged_paths is not None) else task.path_whitelist
                     effective_crit = issue.acceptance_criteria if (is_active and staged_crit is not None) else task.acceptance_criteria
-                    effective_rev = issue.reviewer_requirement if (is_active and staged_rev is not None) else task.reviewer_requirement
+                    effective_rev = (
+                        issue.reviewer_requirement
+                        if (is_active and staged_rev_action != StagedReviewerAction.NONE.value)
+                        else task.reviewer_requirement
+                    )
 
                     self.db.update_issue_from_plan(
                         issue_id=issue.id,
@@ -577,6 +610,7 @@ class PlanPublisherService:
                         staged_acceptance_criteria=staged_crit,
                         staged_path_whitelist=staged_paths,
                         staged_reviewer_requirement=staged_rev,
+                        staged_reviewer_action=staged_rev_action if staged_rev_action != StagedReviewerAction.NONE.value else None,
                         has_pending_reconciliation=has_pending_recon,
                         conn=conn,
                     )
@@ -740,3 +774,93 @@ class PlanPublisherService:
                 raise RuntimeError("Injected failure before commit")
 
             return status_code, response_data
+
+    def reconcile_staged_changes(
+        self,
+        project_id_or_key: str,
+        issue_id_or_key: str,
+        decision: str,  # "apply" or "reject"
+        actor: str,
+        tenant_id: str = "default",
+    ) -> Issue:
+        """
+        Explicit reconciliation for active tasks with staged scope/acceptance/reviewer changes.
+        Requires planner/architect authority.
+        decision='apply': applies staged changes to live issue and clears staged fields.
+        decision='reject': discards staged changes, keeps current live issue fields, and clears staged fields.
+        In both cases, has_pending_reconciliation is cleared.
+        """
+        decision_clean = decision.lower().strip()
+        if decision_clean not in ("apply", "reject"):
+            raise ValueError(f"Invalid reconciliation decision '{decision}': must be 'apply' or 'reject'.")
+
+        with self.db.atomic_transaction() as conn:
+            project = self.db.get_project(project_id_or_key, conn=conn) or self.db.get_project_by_key(project_id_or_key, conn=conn)
+            if not project:
+                raise ProjectNotFoundError(f"Project '{project_id_or_key}' not found", details={"project_key": project_id_or_key})
+
+            issue = self.db.get_issue(issue_id_or_key, conn=conn)
+            if not issue or issue.project_id != project.id:
+                raise ValueError(f"Issue '{issue_id_or_key}' not found in project '{project.key}'.")
+
+            if not issue.has_pending_reconciliation:
+                return issue
+
+            now = datetime.now(timezone.utc).isoformat()
+            if decision_clean == "apply":
+                effective_crit = (
+                    issue.staged_acceptance_criteria
+                    if issue.staged_acceptance_criteria is not None
+                    else issue.acceptance_criteria
+                )
+                effective_paths = (
+                    issue.staged_path_whitelist
+                    if issue.staged_path_whitelist is not None
+                    else issue.path_whitelist
+                )
+                if issue.staged_reviewer_action == StagedReviewerAction.REMOVE.value:
+                    effective_rev = None
+                elif issue.staged_reviewer_action == StagedReviewerAction.REPLACE.value:
+                    effective_rev = issue.staged_reviewer_requirement
+                else:
+                    effective_rev = issue.reviewer_requirement
+
+                conn.execute(
+                    """
+                    UPDATE pm_issues
+                    SET acceptance_criteria = ?,
+                        path_whitelist = ?,
+                        reviewer_requirement = ?,
+                        staged_acceptance_criteria = NULL,
+                        staged_path_whitelist = NULL,
+                        staged_reviewer_requirement = NULL,
+                        staged_reviewer_action = NULL,
+                        has_pending_reconciliation = 0,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        json.dumps(effective_crit),
+                        json.dumps(effective_paths),
+                        effective_rev,
+                        now,
+                        issue.id,
+                    ),
+                )
+            else:  # reject
+                conn.execute(
+                    """
+                    UPDATE pm_issues
+                    SET staged_acceptance_criteria = NULL,
+                        staged_path_whitelist = NULL,
+                        staged_reviewer_requirement = NULL,
+                        staged_reviewer_action = NULL,
+                        has_pending_reconciliation = 0,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, issue.id),
+                )
+
+            return self.db.get_issue(issue.id, conn=conn)
+

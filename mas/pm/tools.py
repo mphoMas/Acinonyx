@@ -429,16 +429,18 @@ def pm_publish_plan(
     if binding:
         actor = actor or f"{binding.identity.tenant_id}:{binding.identity.principal_id}"
         tenant_id = binding.identity.tenant_id
-        # Require planning authority under tenant binding
+        # Require explicit planning authority under tenant binding
         PLANNING_ROLES = {"architect", "data_architect", "chief_architect", "tenant_admin"}
-        PLANNING_SCOPES = {"pm:plan:publish", "tools:*", "admin:*", "storage:*"}
+        PLANNING_SCOPES = {"pm:plan:publish", "admin:*"}
         roles = set(binding.identity.roles)
         scopes = set(binding.identity.scopes)
         if not ((roles & PLANNING_ROLES) or (scopes & PLANNING_SCOPES)):
-            raise PermissionError(f"Principal '{actor}' lacks planning authority in tenant '{tenant_id}'.")
+            raise PermissionError(
+                f"Principal '{actor}' lacks planning authority in tenant '{tenant_id}' (requires architect/tenant_admin role or pm:plan:publish scope)."
+            )
     else:
         tenant_id = "default"
-        if not actor:
+        if not actor or not actor.strip():
             raise PermissionError("Unauthenticated operation: pm_publish_plan requires an authenticated execution context.")
 
     if isinstance(plan_payload, str):

@@ -918,3 +918,213 @@ def test_http_non_architect_role_rejection(live_server):
         client_dev.publish_plan("PLIVE", {"plan_id": "p", "revision": 1, "tasks": []})
     assert "403" in str(exc_info.value)
 
+
+def test_active_reviewer_requirement_null_removal_and_replacement_staging(temp_db: PMDatabase, sample_project: Project):
+    """
+    Regression test for review blocker:
+    A revision changing an active task's reviewer requirement from 'independent' to null
+    must NOT erase the live requirement. Explicit staging must distinguish:
+    - No proposed change
+    - Proposed replacement
+    - Proposed removal (null)
+    Live requirement remains intact until authorized reconciliation!
+    Pending changes must continue blocking verification and completion.
+    """
+    service = PlanPublisherService(temp_db)
+
+    # 1. Publish revision 1 with reviewer_requirement="independent"
+    req1 = PlanPublicationRequest(
+        plan_id="plan-rev-stage",
+        revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="T1",
+                planning_reference="REV-01",
+                title="Review Staged Task",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Live criteria"],
+                reviewer_requirement="independent",
+            ),
+        ],
+    )
+    status1, resp1 = service.publish_plan(sample_project.key, req1, "architect", "tenant-1")
+    assert status1 == 201
+
+    m1 = temp_db.get_task_mapping(sample_project.id, "REV-01")
+    issue1 = temp_db.get_issue(m1.local_issue_id)
+    assert issue1.reviewer_requirement == "independent"
+    assert issue1.has_pending_reconciliation is False
+
+    # 2. Advance issue to IN_PROGRESS
+    temp_db.update_issue_state(issue1.id, IssueState.IN_PROGRESS.value, triggered_by="coordinator")
+
+    # 3. Publish revision 2 proposing reviewer_requirement=None (removal)
+    req2 = PlanPublicationRequest(
+        plan_id="plan-rev-stage",
+        revision=2,
+        expected_previous_revision=1,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="T1",
+                planning_reference="REV-01",
+                title="Review Staged Task",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Live criteria"],
+                reviewer_requirement=None,  # Propose removing reviewer requirement!
+            ),
+        ],
+    )
+    status2, resp2 = service.publish_plan(sample_project.key, req2, "architect", "tenant-1")
+    assert status2 == 200
+    assert len(resp2.changes_requiring_reconciliation) == 1
+    assert resp2.changes_requiring_reconciliation[0].change_type == "reviewer_requirement_removed"
+
+    # CRITICAL: Verify active issue still has live reviewer_requirement="independent"
+    issue1_after = temp_db.get_issue(issue1.id)
+    assert issue1_after.reviewer_requirement == "independent", "Live reviewer requirement must NOT be erased by null proposal!"
+    assert issue1_after.staged_reviewer_requirement is None
+    assert issue1_after.staged_reviewer_action == "REMOVE"
+    assert issue1_after.has_pending_reconciliation is True
+
+    # Attempting transition to VERIFICATION while pending reconciliation is present MUST be blocked!
+    from mas.pm.fsm import FSMEngine
+    from mas.pm.guards import PendingReconciliationError
+    from mas.security import ExecutionContext
+    fsm = FSMEngine(temp_db)
+    with ExecutionContext.scope("coordinator"):
+        with pytest.raises(PendingReconciliationError):
+            fsm.transition(issue1_after.id, IssueState.VERIFICATION, caller_principal="coordinator")
+
+    # 4. Reject the proposal -> live requirement preserved, staged action cleared, pending recon cleared
+    rejected_issue = service.reconcile_staged_changes(
+        sample_project.key,
+        issue1.id,
+        decision="reject",
+        actor="chief_architect",
+    )
+    assert rejected_issue.reviewer_requirement == "independent"
+    assert rejected_issue.staged_reviewer_action is None
+    assert rejected_issue.has_pending_reconciliation is False
+
+    # 5. Publish revision 3 proposing replacement to "peer"
+    req3 = PlanPublicationRequest(
+        plan_id="plan-rev-stage",
+        revision=3,
+        expected_previous_revision=2,
+        tasks=[
+            PlanTaskDefinition(
+                task_id="T1",
+                planning_reference="REV-01",
+                title="Review Staged Task",
+                path_whitelist=["mas/pm/"],
+                acceptance_criteria=["Live criteria"],
+                reviewer_requirement="peer",  # Propose replacement!
+            ),
+        ],
+    )
+    status3, resp3 = service.publish_plan(sample_project.key, req3, "architect", "tenant-1")
+    assert status3 == 200
+    assert len(resp3.changes_requiring_reconciliation) == 1
+    assert resp3.changes_requiring_reconciliation[0].change_type == "reviewer_requirement_modified"
+
+    issue1_repl = temp_db.get_issue(issue1.id)
+    assert issue1_repl.reviewer_requirement == "independent", "Live requirement preserved until application!"
+    assert issue1_repl.staged_reviewer_requirement == "peer"
+    assert issue1_repl.staged_reviewer_action == "REPLACE"
+    assert issue1_repl.has_pending_reconciliation is True
+
+    # 6. Apply the replacement -> live requirement updated to "peer", pending recon cleared
+    applied_issue = service.reconcile_staged_changes(
+        sample_project.key,
+        issue1.id,
+        decision="apply",
+        actor="chief_architect",
+    )
+    assert applied_issue.reviewer_requirement == "peer"
+    assert applied_issue.staged_reviewer_requirement is None
+    assert applied_issue.staged_reviewer_action is None
+    assert applied_issue.has_pending_reconciliation is False
+
+
+def test_http_negative_planning_authorizations(live_server):
+    """
+    Negative tests:
+    - Non-planner identity (only storage/operator permissions) rejected (403)
+    - Unauthenticated caller rejected (401)
+    - Revoked credentials rejected (401/403)
+    - Cross-tenant publication rejected (403/404)
+    - Proving authorized planner CAN publish (200/201)
+    """
+    from mas.iam import MultiTenantIAM, StandardRole
+    server, port, _ = live_server
+    base_url = f"http://127.0.0.1:{port}"
+
+    iam = MultiTenantIAM()
+    iam.create_tenant("tenant-alpha", "Tenant Alpha")
+    iam.create_tenant("tenant-beta", "Tenant Beta")
+
+    # 1. Non-planner: has storage:* and operator role only
+    iam.register_principal(
+        "tenant-alpha", "storage-operator",
+        roles={StandardRole.OPERATOR.value},
+        scopes={"storage:read", "storage:write", "tools:execute"}  # storage:* alone is NOT planning permission!
+    )
+    storage_token = iam.issue_token("tenant-alpha", "storage-operator")
+
+    # 2. Authorized planner: has architect role and pm:plan:publish scope
+    iam.register_principal(
+        "tenant-alpha", "lead-architect",
+        roles={StandardRole.DATA_ARCHITECT.value},
+        scopes={"pm:plan:publish"}
+    )
+    planner_token = iam.issue_token("tenant-alpha", "lead-architect")
+
+    # 3. Revoked principal
+    iam.register_principal(
+        "tenant-alpha", "revoked-architect",
+        roles={StandardRole.DATA_ARCHITECT.value},
+        scopes={"pm:plan:publish"}
+    )
+    revoked_token = iam.issue_token("tenant-alpha", "revoked-architect")
+    ctx = iam.verify_token(revoked_token)
+    iam.revoke_session(revoked_token, ctx.token_id)
+
+    server.iam = iam
+
+    sample_plan = {
+        "plan_id": "plan-auth-test",
+        "revision": 1,
+        "tasks": [
+            {
+                "task_id": "T-AUTH-1",
+                "planning_reference": "AUTH-01",
+                "title": "Auth Test Task",
+            }
+        ]
+    }
+
+    # Negative 1: Non-planner caller with storage:* must be rejected (403)
+    client_storage = PlanPublisherClient(base_url=base_url, auth_token=storage_token)
+    with pytest.raises(PermissionError) as exc_info:
+        client_storage.publish_plan("PLIVE", sample_plan)
+    assert "403" in str(exc_info.value)
+
+    # Negative 2: Unauthenticated caller must be rejected (401)
+    client_unauth = PlanPublisherClient(base_url=base_url, auth_token=None)
+    with pytest.raises(PermissionError) as exc_info:
+        client_unauth.publish_plan("PLIVE", sample_plan)
+    assert "401" in str(exc_info.value)
+
+    # Negative 3: Revoked credentials must be rejected (401)
+    client_revoked = PlanPublisherClient(base_url=base_url, auth_token=revoked_token)
+    with pytest.raises(PermissionError) as exc_info:
+        client_revoked.publish_plan("PLIVE", sample_plan)
+    assert "401" in str(exc_info.value)
+
+    # Positive: Authorized planner can successfully publish
+    client_planner = PlanPublisherClient(base_url=base_url, auth_token=planner_token)
+    resp = client_planner.publish_plan("PLIVE", sample_plan)
+    assert resp.success is True
+    assert resp.tasks_created == 1
+
+

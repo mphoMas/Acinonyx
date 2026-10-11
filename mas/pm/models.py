@@ -43,6 +43,12 @@ class SprintState(str, Enum):
     CLOSED = "CLOSED"
 
 
+class StagedReviewerAction(str, Enum):
+    NONE = "NONE"
+    REPLACE = "REPLACE"
+    REMOVE = "REMOVE"
+
+
 class CriticVerdictType(str, Enum):
     PASS = "PASS"
     REJECT_REWORK = "REJECT_REWORK"
@@ -125,6 +131,7 @@ class Issue(BaseModel):
     staged_acceptance_criteria: Optional[List[str]] = None
     staged_path_whitelist: Optional[List[str]] = None
     staged_reviewer_requirement: Optional[str] = None
+    staged_reviewer_action: Optional[str] = None  # None | "NONE" | "REPLACE" | "REMOVE"
     has_pending_reconciliation: bool = False
     created_at: str = ""
     updated_at: str = ""

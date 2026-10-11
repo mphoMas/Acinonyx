@@ -359,6 +359,10 @@ class PMDatabase:
                 except sqlite3.OperationalError:
                     pass
                 try:
+                    conn.execute("ALTER TABLE pm_issues ADD COLUMN staged_reviewer_action TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
                     conn.execute("ALTER TABLE pm_issues ADD COLUMN has_pending_reconciliation INTEGER DEFAULT 0;")
                 except sqlite3.OperationalError:
                     pass
@@ -860,8 +864,8 @@ class PMDatabase:
                     tokens_spent, reflexion_attempts, rework_cycle, blocker_reason, path_whitelist, forbidden_paths,
                     task_id, planning_reference, acceptance_criteria, proposed_delivery_owner, reviewer_requirement,
                     proposed_budget_tokens, staged_acceptance_criteria, staged_path_whitelist, staged_reviewer_requirement,
-                    has_pending_reconciliation, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    staged_reviewer_action, has_pending_reconciliation, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     issue.id,
@@ -892,6 +896,7 @@ class PMDatabase:
                     json.dumps(issue.staged_acceptance_criteria) if issue.staged_acceptance_criteria is not None else None,
                     json.dumps(issue.staged_path_whitelist) if issue.staged_path_whitelist is not None else None,
                     issue.staged_reviewer_requirement,
+                    issue.staged_reviewer_action,
                     1 if issue.has_pending_reconciliation else 0,
                     issue.created_at or now,
                     now,
@@ -942,6 +947,7 @@ class PMDatabase:
         staged_acceptance_criteria: Optional[List[str]] = None,
         staged_path_whitelist: Optional[List[str]] = None,
         staged_reviewer_requirement: Optional[str] = None,
+        staged_reviewer_action: Optional[str] = None,
         has_pending_reconciliation: bool = False,
         conn: Optional[sqlite3.Connection] = None,
     ) -> None:
@@ -955,7 +961,8 @@ class PMDatabase:
                     path_whitelist = ?, acceptance_criteria = ?, proposed_delivery_owner = ?,
                     reviewer_requirement = ?, proposed_budget_tokens = ?,
                     staged_acceptance_criteria = ?, staged_path_whitelist = ?,
-                    staged_reviewer_requirement = ?, has_pending_reconciliation = ?, updated_at = ?
+                    staged_reviewer_requirement = ?, staged_reviewer_action = ?,
+                    has_pending_reconciliation = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -972,6 +979,7 @@ class PMDatabase:
                     json.dumps(staged_acceptance_criteria) if staged_acceptance_criteria is not None else None,
                     json.dumps(staged_path_whitelist) if staged_path_whitelist is not None else None,
                     staged_reviewer_requirement,
+                    staged_reviewer_action,
                     1 if has_pending_reconciliation else 0,
                     now,
                     issue_id,
@@ -1689,6 +1697,7 @@ class PMDatabase:
             else None
         )
         staged_reviewer_requirement = row["staged_reviewer_requirement"] if "staged_reviewer_requirement" in row.keys() else None
+        staged_reviewer_action = row["staged_reviewer_action"] if "staged_reviewer_action" in row.keys() else None
         has_pending_reconciliation = bool(row["has_pending_reconciliation"]) if "has_pending_reconciliation" in row.keys() else False
 
         return Issue(
@@ -1720,6 +1729,7 @@ class PMDatabase:
             staged_acceptance_criteria=staged_acceptance_criteria,
             staged_path_whitelist=staged_path_whitelist,
             staged_reviewer_requirement=staged_reviewer_requirement,
+            staged_reviewer_action=staged_reviewer_action,
             has_pending_reconciliation=has_pending_reconciliation,
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
