@@ -33,3 +33,28 @@ At desktop and narrow viewport: project selection, keyboard navigation, drawer f
 The issue drawer now offers an explicit Load task activity action. It requires the task's persisted id and reads `/api/pm/v1/tasks/{id}/activity?limit=100`. Proposed response is `{events:[{kind,actor,summary,received_at,evidence?:{status,candidate_commit}}]}`. This shape must be agreed with Antigravity before live acceptance. Only claimed/validated/rejected evidence status is recognized; PASS alone is displayed as unverified. Strings are rendered with textContent, not HTML, and no artifact URL is opened. Missing task identity, missing/unsupported endpoint and empty activity are distinct visible states. Stale responses cannot replace a newly opened task's drawer.
 
 This is read-only preparation, not live polling or completed SBA-06. Comment submission, pagination, cursor recovery and real agent integration remain dependent on backend delivery. No generated activity is shown as real.
+
+## Attempt and review preparation (11 October 2026)
+
+Codex implemented read-only sections on the existing activity request. This is a **proposed frontend contract extension**, not an accepted backend contract or live runtime integration. The endpoint remains `/api/pm/v1/tasks/{id}/activity?limit=100`; events are required, while missing attempt/review arrays display interface-unavailable states rather than implying no runs.
+
+Proposed additional fields:
+
+```json
+{
+  "events": [],
+  "current_candidate_commit": "immutable candidate commit",
+  "attempts": [
+    {"attempt_id": "uuid", "run_id": "uuid", "state": "UNKNOWN_EXECUTION"}
+  ],
+  "reviews": [
+    {"review_id": "uuid", "candidate_commit": "immutable candidate commit", "reviewer_principal": "tenant:reviewer", "trust_status": "validated", "decision": "REJECTED"}
+  ]
+}
+```
+
+Attempt display states: QUEUED, RUNNING, SUCCEEDED, FAILED, UNKNOWN_EXECUTION, CANCEL_REQUESTED, CANCELLED. These are proposed presentation values; Antigravity must agree mappings from the actual attempt lifecycle before integration. Unknown values remain visible as unrecognized. SUCCEEDED means execution completed, with verification still required. CANCEL_REQUESTED explicitly does not confirm stopping.
+
+A review displays as validated only when the server marks trust validated, provides a reviewer, and binds it to the supplied current candidate. A different candidate is stale; missing binding or trust remains an unverified claim. This display does not independently verify signatures, attest tenant ownership or authorize release. Server admission must enforce those requirements.
+
+All fields use plain text; no artifact links, dispatch, approval, cancellation or reconciliation mutations are added. No polling, pagination or automatic task movement is claimed. The existing load button also serves retry. Opening another drawer invalidates old responses. Controlled browser tests cover empty/error/malformed data, uncertain attempts, stale/claimed/validated reviews, narrow screens, text injection and delayed drawer responses. Live integration and independent end-to-end acceptance remain pending backend delivery.

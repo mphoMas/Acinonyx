@@ -142,3 +142,94 @@ def test_login_structured_error_and_keyboard_feedback(board):
     assert page.locator('#errorAlert').evaluate('(e)=>e===document.activeElement')
     assert page.locator('#submitBtn').is_enabled()
     assert page.locator('#tokenInput').get_attribute('type') == 'password'
+
+
+def load_workflow_fixture(page, payload, status=200):
+    page.route('**/api/pm/v1/tasks/task-1/activity?limit=100',
+               lambda route: route.fulfill(status=status, json=payload))
+    page.locator('[data-ticket="SBA-5"]').click()
+    page.evaluate("()=>loadTaskActivity({id:'task-1'})")
+
+
+def test_empty_activity_attempts_and_reviews_are_explicit(board):
+    page, _ = board
+    load_workflow_fixture(page, {'events': [], 'attempts': [], 'reviews': []})
+    assert 'No recorded activity' in page.locator('#task-activity').inner_text()
+    assert 'No recorded attempts' in page.locator('#task-workflow').inner_text()
+    assert 'No recorded reviews' in page.locator('#task-workflow').inner_text()
+
+
+@pytest.mark.parametrize('status', [401, 403, 404, 503])
+def test_workflow_error_remains_visible_and_retry_available(board, status):
+    page, state = board
+    load_workflow_fixture(page, {'error': {'message': 'Feed unavailable'}}, status)
+    assert 'Activity unavailable' in page.locator('#task-activity').inner_text()
+    assert 'Attempts and reviews unavailable' in page.locator('#task-workflow').inner_text()
+    assert page.locator('#load-activity').is_enabled()
+    assert page.locator('#task-activity').get_attribute('aria-busy') == 'false'
+    assert state['posts'] == []
+
+
+def test_uncertain_execution_and_pending_cancellation_do_not_imply_success(board):
+    page, state = board
+    load_workflow_fixture(page, {'events': [], 'attempts': [
+        {'attempt_id': 'a1', 'state': 'UNKNOWN_EXECUTION'},
+        {'attempt_id': 'a2', 'state': 'CANCEL_REQUESTED'},
+        {'attempt_id': 'a3', 'state': 'SUCCEEDED'},
+        {'attempt_id': 'a4', 'state': 'invented'},
+    ]})
+    text = page.locator('#task-workflow').inner_text()
+    assert 'reconciliation required' in text
+    assert 'stopping is not confirmed' in text
+    assert 'verification still required' in text
+    assert 'Unrecognized attempt state: invented' in text
+    assert state['posts'] == []
+
+
+def test_review_requires_current_candidate_trust_and_reviewer(board):
+    page, _ = board
+    load_workflow_fixture(page, {'events': [], 'current_candidate_commit': 'new', 'reviews': [
+        {'review_id': 'old', 'decision': 'APPROVED', 'candidate_commit': 'old', 'trust_status': 'validated', 'reviewer_principal': 'critic'},
+        {'review_id': 'claim', 'decision': 'APPROVED', 'candidate_commit': 'new', 'trust_status': 'claimed', 'reviewer_principal': 'agent'},
+        {'review_id': 'reject', 'decision': 'REJECTED', 'candidate_commit': 'new', 'trust_status': 'validated', 'reviewer_principal': 'critic'},
+        {'review_id': 'approve', 'decision': 'APPROVED', 'candidate_commit': 'new', 'trust_status': 'validated', 'reviewer_principal': 'critic'},
+    ]})
+    text = page.locator('#task-workflow').inner_text()
+    assert 'Stale review' in text
+    assert 'Unverified review claim' in text
+    assert 'Validated rejection' in text
+    assert 'release authorization is separate' in text
+
+
+def test_workflow_fields_are_plain_text_on_narrow_viewport(board):
+    page, _ = board
+    page.set_viewport_size({'width': 390, 'height': 844})
+    load_workflow_fixture(page, {'events': [], 'attempts': [
+        {'attempt_id': '<img src=x onerror=alert(1)>', 'state': 'RUNNING'}], 'reviews': []})
+    assert '<img src=x' in page.locator('#task-workflow').inner_text()
+    assert page.locator('#task-workflow img').count() == 0
+    assert page.locator('#load-activity').is_visible()
+
+
+@pytest.mark.parametrize('payload', [{'events': [] , 'attempts': {}}, {'events': [None]}, {'events': [], 'reviews': [None]}])
+def test_malformed_workflow_is_error_not_empty_success(board, payload):
+    page, _ = board
+    load_workflow_fixture(page, payload)
+    assert 'unavailable or unsupported' in page.locator('#task-activity').inner_text()
+
+
+def test_delayed_activity_cannot_replace_new_drawer(board):
+    page, _ = board
+    pending = []
+    page.route('**/api/pm/v1/tasks/task-1/activity?limit=100', lambda route: pending.append(route))
+    page.locator('[data-ticket="SBA-5"]').click()
+    page.evaluate("()=>{void loadTaskActivity({id:'task-1'})}")
+    page.wait_for_function("document.querySelector('#task-activity').getAttribute('aria-busy')==='true'")
+    page.wait_for_timeout(100)
+    assert pending
+    page.locator('#close-drawer').click()
+    page.locator('[data-ticket="SBA-5"]').click()
+    pending[0].fulfill(json={'events': [{'summary': 'OLD RESPONSE'}], 'attempts': [], 'reviews': []})
+    page.wait_for_timeout(100)
+    assert page.locator('#task-activity').inner_text() == 'No activity requested.'
+    assert page.locator('#task-workflow').inner_text() == 'No attempt or review data requested.'
