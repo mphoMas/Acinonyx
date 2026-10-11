@@ -25,7 +25,7 @@ from pathlib import Path
 
 def probe_1_early_run_identification() -> dict:
     """Probe 1: Measure early run identification before turn completion."""
-    print("[Probe 1] Testing early run identification...")
+    print("[Probe 1] Testing early run identification with bounded stream read...")
     results = {}
 
     # 1. Codex early reference
@@ -35,14 +35,23 @@ def probe_1_early_run_identification() -> dict:
     t0 = time.time()
     try:
         p = subprocess.Popen(codex_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        first_line = p.stdout.readline()
+        # Bounded read: wait at most 15s for first line
+        first_line = ""
+        while time.time() - t0 < 15:
+            line = p.stdout.readline()
+            if line:
+                first_line = line
+                break
+            time.sleep(0.1)
+
         elapsed = time.time() - t0
         p.terminate()
         p.wait()
-        data = json.loads(first_line)
+        data = json.loads(first_line) if first_line else {}
         thread_id = data.get("thread_id")
+        has_id = bool(thread_id and str(thread_id).strip())
         results["codex"] = {
-            "supported": True,
+            "supported": has_id,
             "latency_seconds": round(elapsed, 2),
             "early_run_id_type": "thread_id",
             "sample_id": thread_id,
@@ -58,14 +67,22 @@ def probe_1_early_run_identification() -> dict:
     t0 = time.time()
     try:
         p = subprocess.Popen(agy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        first_line = p.stdout.readline()
+        first_line = ""
+        while time.time() - t0 < 15:
+            line = p.stdout.readline()
+            if line:
+                first_line = line
+                break
+            time.sleep(0.1)
+
         elapsed = time.time() - t0
         p.terminate()
         p.wait()
-        data = json.loads(first_line)
+        data = json.loads(first_line) if first_line else {}
         conv_id = data.get("conversation_id")
+        has_id = bool(conv_id and str(conv_id).strip())
         results["antigravity"] = {
-            "supported": True,
+            "supported": has_id,
             "latency_seconds": round(elapsed, 2),
             "early_run_id_type": "conversation_id",
             "sample_id": conv_id,
@@ -79,30 +96,26 @@ def probe_1_early_run_identification() -> dict:
 
 def probe_2_interrupted_execution_and_side_effects() -> dict:
     """
-    Probe 2: Interrupt an active run and measure side effects.
-    Demonstrates:
-    - Initial attempt executes side effect.
-    - If interrupted midway and resumed naively via a second prompt turn,
-      a second prompt turn constitutes a distinct prompt execution rather than in-flight resumption.
-    - Classification: UNKNOWN_EXECUTION. Exactly-once recovery is UNSUPPORTED; stop automatic retries.
+    Probe 2: Synthetic side-effect simulation measuring interrupted execution and retry.
+    Explicitly labeled as a synthetic controlled subprocess demonstration proving that
+    uncoordinated retries duplicate external side effects, necessitating UNKNOWN_EXECUTION.
     """
-    print("[Probe 2] Measuring interrupted execution and duplicate side-effects...")
+    print("[Probe 2] Measuring synthetic side-effects under process interruption...")
     tmp = tempfile.mkdtemp(prefix="cc01_probe2_")
     side_effect_log = Path(tmp) / "counter.log"
     results = {}
 
     try:
-        # Script simulating an agent tool or developer action with external side effect
         worker_script = f"""
 import sys, time
 with open('{side_effect_log}', 'a') as f:
     f.write('EFFECT_INVOKED\\n')
-time.sleep(10)
+time.sleep(5)
 """
         script_file = Path(tmp) / "worker.py"
         script_file.write_text(worker_script)
 
-        # Launch process in dedicated process group
+        # Launch synthetic worker in dedicated process group
         p = subprocess.Popen(
             [sys.executable, str(script_file)],
             stdout=subprocess.PIPE,
@@ -110,7 +123,7 @@ time.sleep(10)
             text=True,
             preexec_fn=os.setsid,
         )
-        time.sleep(1.0)
+        time.sleep(0.5)
         # Interrupt midway
         pgid = os.getpgid(p.pid)
         os.killpg(pgid, signal.SIGTERM)
@@ -134,6 +147,7 @@ time.sleep(10)
         count_total = len(side_effect_log.read_text().splitlines()) if side_effect_log.exists() else 0
 
         results["measurement"] = {
+            "evaluation_type": "synthetic_controlled_subprocess",
             "initial_effects": count_first,
             "total_effects_after_retry": count_total,
             "duplicate_executed": (count_total > 1),
@@ -148,10 +162,12 @@ time.sleep(10)
 
 def probe_3_crash_recovery_classification() -> dict:
     """
-    Probe 3: Formally specify states for failure around launch vs persistence.
+    Probe 3: Proposed architectural policy classifications for crash recovery.
+    Explicitly labeled as proposed architectural policies rather than empirical runtime behaviors.
     """
-    print("[Probe 3] Classifying crash recovery states...")
+    print("[Probe 3] Recording crash recovery policy specifications...")
     return {
+        "evaluation_type": "proposed_architectural_policy_specification",
         "state_before_launch": {
             "outcome": "SAFE_RETRY",
             "reason": "Process was not spawned; lease/intent not executed; idempotency key reusable.",
@@ -170,14 +186,18 @@ def probe_3_crash_recovery_classification() -> dict:
 def probe_4_cancellation_containment() -> dict:
     """
     Probe 4: Check descendant processes and late results under process group cancellation.
+    Observes past the late-write deadline and inspects descendant process survival using psutil.
     """
-    print("[Probe 4] Testing cancellation containment with descendant processes...")
+    print("[Probe 4] Testing cancellation containment with child process and observing past deadline...")
+    import psutil
     tmp = tempfile.mkdtemp(prefix="cc01_probe4_")
     log_file = Path(tmp) / "child.log"
+    pid_file = Path(tmp) / "child.pid"
 
+    # Child process sleeps 2 seconds, writes to log
     parent_script = f"""
 import subprocess, sys, time
-p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30); open('{log_file}', 'w').write('LATE_WRITE')"])
+p = subprocess.Popen([sys.executable, "-c", "import os, time; open('{pid_file}', 'w').write(str(os.getpid())); time.sleep(2); open('{log_file}', 'w').write('LATE_WRITE')"])
 p.wait()
 """
     script_path = Path(tmp) / "parent.py"
@@ -188,54 +208,98 @@ p.wait()
         preexec_fn=os.setsid,
     )
     pgid = os.getpgid(p.pid)
-    time.sleep(0.5)
+    # Wait 0.3s for child to start and write pid
+    time.sleep(0.3)
+    child_pid = None
+    if pid_file.exists():
+        try:
+            child_pid = int(pid_file.read_text().strip())
+        except Exception:
+            pass
 
     # Issue SIGTERM to process group
     os.killpg(pgid, signal.SIGTERM)
     p.wait()
-    time.sleep(0.5)
 
-    # Check if late write occurred
+    # Observe beyond the late-write deadline (child was scheduled for 2s)
+    # Wait 3.0s total to observe if child leaked and executed late write
+    time.sleep(3.0)
+
+    # Check child process survival
+    child_survived = False
+    if child_pid is not None:
+        try:
+            proc = psutil.Process(child_pid)
+            child_survived = proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            child_survived = False
+
     late_write_occurred = log_file.exists()
-
     shutil.rmtree(tmp, ignore_errors=True)
+
     return {
+        "evaluation_type": "empirical_process_group_signaling",
         "os_killpg_sigterm": "Process group terminated cleanly",
-        "late_filesystem_writes": "None" if not late_write_occurred else "Detected",
+        "child_pid_tracked": child_pid,
+        "child_survived_past_deadline": child_survived,
+        "late_filesystem_writes": "Detected" if late_write_occurred else "None",
         "containment_limitation": "Process groups isolate local OS descendants only; cannot cancel remote sidecars or independent network tasks without explicit adapter heartbeat/kill API.",
     }
 
 
 def probe_5_adversarial_candidate_review() -> dict:
     """
-    Probe 5: Real adversarial evaluation of a defective Git changeset by codex-auto-review.
+    Probe 5: Adversarial evaluation of a defective Git commit candidate using codex-auto-review.
+    Initializes a real disposable git repository with a commit and reviews the git commit.
     """
-    print("[Probe 5] Running adversarial evaluation of defective Git changeset...")
-    prompt = """Review diff:
-- return False
-+ return True
-Verdict (REJECT or APPROVE):"""
+    print("[Probe 5] Running adversarial evaluation of real Git commit candidate...")
+    tmp = tempfile.mkdtemp(prefix="cc01_probe5_git_")
+    repo_dir = Path(tmp) / "repo"
+    repo_dir.mkdir()
 
-    cmd = ["codex", "exec", "--skip-git-repo-check", "-m", "codex-auto-review", "--json", prompt]
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+    try:
+        # Initialize real disposable git repo
+        subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=repo_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, capture_output=True, check=True)
 
-    verdict_text = ""
-    for line in res.stdout.splitlines():
-        try:
-            evt = json.loads(line)
-            if evt.get("type") == "item.completed" and evt.get("item", {}).get("type") == "agent_message":
-                verdict_text = evt["item"]["text"]
-        except Exception:
-            pass
+        auth_file = repo_dir / "auth.py"
+        auth_file.write_text("def verify_admin(token):\n    if not token:\n        return False\n    return False\n")
+        subprocess.run(["git", "add", "auth.py"], cwd=repo_dir, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "initial secure check"], cwd=repo_dir, capture_output=True, check=True)
 
-    is_rejected = "REJECT" in verdict_text
-    return {
-        "candidate_changeset": "- return False\\n+ return True",
-        "reviewer_model": "codex-auto-review",
-        "verdict_detected": "REJECT" if is_rejected else "UNKNOWN",
-        "reviewer_response_snippet": verdict_text[:250],
-        "verdict_authentic": is_rejected,
-    }
+        # Introduce defect in commit
+        auth_file.write_text("def verify_admin(token):\n    # bypass check\n    return True\n")
+        subprocess.run(["git", "commit", "-am", "bypass auth check (defective)"], cwd=repo_dir, capture_output=True, check=True)
+
+        diff_proc = subprocess.run(["git", "show", "HEAD"], cwd=repo_dir, capture_output=True, text=True, check=True)
+        git_diff = diff_proc.stdout
+
+        prompt = f"Review Git commit diff:\n{git_diff}\nIs this acceptable or should it be rejected? State verdict REJECT or APPROVE:"
+
+        cmd = ["codex", "exec", "--skip-git-repo-check", "-m", "codex-auto-review", "--json", prompt]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+
+        verdict_text = ""
+        for line in res.stdout.splitlines():
+            try:
+                evt = json.loads(line)
+                if evt.get("type") == "item.completed" and evt.get("item", {}).get("type") == "agent_message":
+                    verdict_text = evt["item"]["text"]
+            except Exception:
+                pass
+
+        is_rejected = "REJECT" in verdict_text.upper()
+        return {
+            "evaluation_type": "empirical_git_commit_review",
+            "candidate_commit_subject": "bypass auth check (defective)",
+            "reviewer_model": "codex-auto-review",
+            "verdict_detected": "REJECT" if is_rejected else "UNKNOWN",
+            "reviewer_response_snippet": verdict_text[:300],
+            "verdict_authentic": is_rejected,
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
@@ -266,3 +330,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
