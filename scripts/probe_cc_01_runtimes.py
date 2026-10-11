@@ -23,39 +23,122 @@ import time
 from pathlib import Path
 
 
+def _bounded_cleanup_process(p: subprocess.Popen, timeout: float = 3.0) -> None:
+    """
+    Safely and boundedly clean up a subprocess and its process group.
+    Sends SIGTERM to process group, waits up to `timeout` seconds, then falls back to SIGKILL.
+    """
+    try:
+        pgid = os.getpgid(p.pid)
+    except (ProcessLookupError, OSError):
+        pgid = None
+
+    if p.poll() is None:
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+            except OSError:
+                pass
+        else:
+            try:
+                p.terminate()
+            except OSError:
+                pass
+
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if p.poll() is not None:
+                break
+            time.sleep(0.05)
+
+        if p.poll() is None:
+            if pgid is not None:
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except OSError:
+                    pass
+            else:
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+            try:
+                p.wait(timeout=1.0)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+
+
+def _read_first_line_bounded(cmd: list[str], deadline_seconds: float = 15.0) -> tuple[str, float, int]:
+    """
+    Executes cmd in a new process group, bounds stdout reading using selectors to deadline_seconds,
+    and performs bounded process cleanup.
+    Returns (first_line, read_latency_seconds, exit_code).
+    """
+    import selectors
+
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    sel = selectors.DefaultSelector()
+    sel.register(p.stdout, selectors.EVENT_READ)
+    t0 = time.time()
+    buf = b""
+    first_line = ""
+    read_latency = 0.0
+
+    while True:
+        remaining = deadline_seconds - (time.time() - t0)
+        if remaining <= 0:
+            break
+        events = sel.select(timeout=min(remaining, 0.1))
+        if events:
+            chunk = os.read(p.stdout.fileno(), 4096)
+            if not chunk:  # EOF
+                break
+            buf += chunk
+            if b"\n" in buf:
+                first_line = buf.splitlines()[0].decode("utf-8", errors="replace").strip()
+                read_latency = time.time() - t0
+                break
+
+    sel.unregister(p.stdout)
+    sel.close()
+
+    if not first_line:
+        read_latency = time.time() - t0
+
+    _bounded_cleanup_process(p, timeout=3.0)
+    exit_code = p.poll() if p.poll() is not None else -1
+
+    return first_line, round(read_latency, 2), exit_code
+
+
 def probe_1_early_run_identification() -> dict:
-    """Probe 1: Measure early run identification before turn completion."""
-    print("[Probe 1] Testing early run identification with bounded stream read...")
+    """Probe 1: Measure early run identification before turn completion with strict 15s deadline."""
+    print("[Probe 1] Testing early run identification with bounded stream read (15.0s deadline)...")
     results = {}
 
     # 1. Codex early reference
     codex_cmd = [
         "codex", "exec", "--skip-git-repo-check", "-m", "codex-auto-review", "--json", "echo probe1"
     ]
-    t0 = time.time()
     try:
-        p = subprocess.Popen(codex_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        # Bounded read: wait at most 15s for first line
-        first_line = ""
-        while time.time() - t0 < 15:
-            line = p.stdout.readline()
-            if line:
-                first_line = line
-                break
-            time.sleep(0.1)
-
-        elapsed = time.time() - t0
-        p.terminate()
-        p.wait()
+        first_line, latency, _ = _read_first_line_bounded(codex_cmd, deadline_seconds=15.0)
         data = json.loads(first_line) if first_line else {}
         thread_id = data.get("thread_id")
         has_id = bool(thread_id and str(thread_id).strip())
         results["codex"] = {
-            "supported": has_id,
-            "latency_seconds": round(elapsed, 2),
+            "supported": has_id and (latency <= 15.0),
+            "latency_seconds": latency,
+            "deadline_seconds": 15.0,
             "early_run_id_type": "thread_id",
             "sample_id": thread_id,
             "event_type": data.get("type"),
+            "command": " ".join(codex_cmd),
+            "bounded_cleanup": "SIGTERM to process group with 3s timeout and SIGKILL fallback",
         }
     except Exception as e:
         results["codex"] = {"supported": False, "error": str(e)}
@@ -64,29 +147,20 @@ def probe_1_early_run_identification() -> dict:
     agy_cmd = [
         "agy", "-p", "echo probe1", "--output-format", "stream-json"
     ]
-    t0 = time.time()
     try:
-        p = subprocess.Popen(agy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        first_line = ""
-        while time.time() - t0 < 15:
-            line = p.stdout.readline()
-            if line:
-                first_line = line
-                break
-            time.sleep(0.1)
-
-        elapsed = time.time() - t0
-        p.terminate()
-        p.wait()
+        first_line, latency, _ = _read_first_line_bounded(agy_cmd, deadline_seconds=15.0)
         data = json.loads(first_line) if first_line else {}
         conv_id = data.get("conversation_id")
         has_id = bool(conv_id and str(conv_id).strip())
         results["antigravity"] = {
-            "supported": has_id,
-            "latency_seconds": round(elapsed, 2),
+            "supported": has_id and (latency <= 15.0),
+            "latency_seconds": latency,
+            "deadline_seconds": 15.0,
             "early_run_id_type": "conversation_id",
             "sample_id": conv_id,
             "event_type": data.get("event"),
+            "command": " ".join(agy_cmd),
+            "bounded_cleanup": "SIGTERM to process group with 3s timeout and SIGKILL fallback",
         }
     except Exception as e:
         results["antigravity"] = {"supported": False, "error": str(e)}
@@ -235,15 +309,16 @@ p.wait()
             child_survived = False
 
     late_write_occurred = log_file.exists()
+    _bounded_cleanup_process(p, timeout=3.0)
     shutil.rmtree(tmp, ignore_errors=True)
 
     return {
-        "evaluation_type": "empirical_process_group_signaling",
-        "os_killpg_sigterm": "Process group terminated cleanly",
+        "evaluation_type": "synthetic_controlled_subprocess_process_group",
+        "os_killpg_sigterm": "Process group terminated cleanly via bounded cleanup",
         "child_pid_tracked": child_pid,
         "child_survived_past_deadline": child_survived,
         "late_filesystem_writes": "Detected" if late_write_occurred else "None",
-        "containment_limitation": "Process groups isolate local OS descendants only; cannot cancel remote sidecars or independent network tasks without explicit adapter heartbeat/kill API.",
+        "containment_limitation": "Process cleanup measurement is a controlled subprocess test; it does NOT qualify cancellation of live multi-process agents, remote containers, or independent network jobs. Without adapter-level heartbeat/cancellation APIs, in-flight remote operations remain UNKNOWN_EXECUTION.",
     }
 
 
@@ -327,7 +402,32 @@ def main():
     out_path.write_text(json.dumps(summary, indent=2))
     print("\nProbes complete! Receipts saved to:", out_path)
 
+    # Verification of required criteria
+    failed_criteria = []
+    if not p1.get("codex", {}).get("supported"):
+        failed_criteria.append("Codex early run ID not received within 15s deadline")
+    if not p1.get("antigravity", {}).get("supported"):
+        failed_criteria.append("Antigravity early run ID not received within 15s deadline")
+    if not p2.get("measurement", {}).get("duplicate_executed"):
+        failed_criteria.append("Probe 2 did not demonstrate side-effect duplication on uncoordinated retry")
+    if p4.get("child_survived_past_deadline"):
+        failed_criteria.append("Probe 4 child process leaked / survived past cancellation deadline")
+    if p4.get("late_filesystem_writes") != "None":
+        failed_criteria.append("Probe 4 late filesystem writes detected")
+    if not p5.get("verdict_authentic"):
+        failed_criteria.append("Probe 5 reviewer did not authentically reject defective candidate commit")
+
+    if failed_criteria:
+        print("\n[CRITERIA FAILURE] Unmet required probe criteria:")
+        for fc in failed_criteria:
+            print(f"  - {fc}")
+        sys.exit(1)
+    else:
+        print("\n[CRITERIA SUCCESS] All empirical and qualification criteria satisfied.")
+        sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
+
 
