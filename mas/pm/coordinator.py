@@ -1226,3 +1226,51 @@ class CoordinatorStore:
             ]
         finally:
             conn.close()
+
+    def list_pending_intents(
+        self,
+        tenant_id: Optional[str] = None,
+        adapter_type: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[CoordinatorIntent]:
+        """
+        Lists pending outbox intents ready for claiming.
+        Strictly filters on status = 'PENDING'.
+        """
+        self._validate_tenant_authority(tenant_id)
+        conn = self.db._get_connection()
+        try:
+            query = "SELECT * FROM pm_coordinator_intents WHERE status = 'PENDING'"
+            params: List[Any] = []
+            if tenant_id is not None:
+                query += " AND tenant_id = ?"
+                params.append(tenant_id)
+            if adapter_type is not None:
+                query += " AND adapter_type = ?"
+                params.append(adapter_type)
+            query += " ORDER BY created_at ASC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(query, tuple(params)).fetchall()
+            return [
+                CoordinatorIntent(
+                    intent_id=r["intent_id"],
+                    tenant_id=r["tenant_id"],
+                    project_id=r["project_id"],
+                    issue_id=r["issue_id"],
+                    task_id=r["task_id"],
+                    attempt_id=r["attempt_id"],
+                    adapter_type=r["adapter_type"],
+                    status=r["status"],
+                    fencing_token=r["fencing_token"],
+                    worker_id=r["worker_id"],
+                    lease_expires_at=r["lease_expires_at"],
+                    lease_heartbeat_at=r["lease_heartbeat_at"],
+                    payload=json.loads(r["payload"]) if r["payload"] else {},
+                    created_at=r["created_at"] or "",
+                    updated_at=r["updated_at"] or "",
+                )
+                for r in rows
+            ]
+        finally:
+            conn.close()
