@@ -40,3 +40,6 @@ build/
 
 # Vendored local binaries
 bin/
+
+# Private host-side container recovery state
+.mas-runtime/

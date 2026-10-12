@@ -133,7 +133,7 @@ def main(argv=None):
                 store.require_role(token, {"owner"})
                 if doc["state"] not in {"failed", "cancelled", "interrupted", "rejected"}:
                     raise SwarmError("Run is not terminal")
-                asyncio.run(worker.recover(args.run_id))
+                asyncio.run(worker.recover(args.run_id, tenant=doc["tenant"]))
                 store.record_cleanup(token, args.run_id)
                 print("Terminal worker state reconciled")
             elif args.command == "recover":
@@ -147,7 +147,7 @@ def main(argv=None):
                         raise SwarmError("Lease has not expired")
                     with store._tx() as db:
                         store._auth(db, token, {"owner"})
-                    await worker.recover(args.run_id)
+                    await worker.recover(args.run_id, tenant=doc["tenant"])
                     store.interrupt(token, args.run_id)
 
                 asyncio.run(recover())

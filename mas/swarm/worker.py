@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import uuid
+
+from mas.container_recovery import ContainerJournal, DurableContainerOperation, reconcile_pending
 
 from .contracts import CandidateError, Limits, OutputLimitError, SwarmError, canonical, strict_json, text
 from .process import run_process
@@ -28,9 +29,10 @@ class DockerWorker:
     isolation. The Docker socket belongs exclusively to the trusted coordinator.
     """
 
-    def __init__(self, image: str, limits: Limits):
+    def __init__(self, image: str, limits: Limits, *, journal=None):
         if not re.fullmatch(r"(?:[a-zA-Z0-9./:_-]+@)?sha256:[0-9a-f]{64}", image):
             raise SwarmError("Worker image must be pinned by SHA-256 digest or local image ID")
+        self._journal = journal
         self.image, self.limits = image, limits
         self._slots = asyncio.Semaphore(limits.parallel_cases)
         self._env = {
@@ -40,7 +42,7 @@ class DockerWorker:
         }
 
     async def _docker(self, *args: str, data: bytes = b"", timeout: float = 10):
-        return await run_process(DOCKER + list(args), data=data, timeout=timeout, output_limit=self.limits.output_bytes, env=self._env)
+        return await run_process(DOCKER + list(args), data=data, timeout=timeout, output_limit=self.limits.output_bytes if args and args[0] == "start" else 65536, env=self._env)
 
     async def check(self):
         rc, _, _ = await self._docker("image", "inspect", self.image)
@@ -63,14 +65,20 @@ class DockerWorker:
             await asyncio.sleep(0.05)
         raise SwarmError("Worker removal did not complete")
 
-    async def evaluate(self, source: str, value, run_id: str):
+    @property
+    def journal(self):
+        if self._journal is None:
+            self._journal = ContainerJournal()
+        return self._journal
+
+    async def evaluate(self, source: str, value, run_id: str, *, tenant="local", principal="local", generation=1, authority_check=None):
         text(source, "source", self.limits.source_bytes)
         async with self._slots:
-            name = "mas-swarm-" + uuid.uuid4().hex
-            created = False
+            record = self.journal.prepare('swarm', run_id, self.image, tenant=tenant, principal=principal, generation=generation)
+            operation = DurableContainerOperation(self.journal, self._docker, record)
+            name = operation.name
             try:
                 args = [
-                    "create",
                     "--name",
                     name,
                     "--label",
@@ -96,18 +104,8 @@ class DockerWorker:
                 for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"):
                     args += ["--env", key + "="]
                 args += [self.image, "python", "-I", "-B", "-c", BOOTSTRAP]
-                # Cancelling the Docker client cannot roll back a create already
-                # accepted by the daemon. Join creation before removing its name.
-                creation = asyncio.create_task(self._docker(*args))
-                try:
-                    rc, _, _ = await asyncio.shield(creation)
-                    created = rc == 0
-                except asyncio.CancelledError:
-                    rc, _, _ = await creation
-                    created = rc == 0
-                    raise
-                if rc:
-                    raise SwarmError("Container creation failed")
+                await operation.create(args, authority_check)
+                operation.allow_start(authority_check)
                 try:
                     rc, stdout, _ = await self._docker(
                         "start",
@@ -131,19 +129,35 @@ class DockerWorker:
                     raise CandidateError("Candidate did not return valid JSON") from exc
             finally:
                 # Shield cleanup from workflow cancellation and wait for completion.
-                cleanup = asyncio.create_task(self._remove(name, created))
+                cleanup = asyncio.create_task(operation.cleanup())
                 try:
                     await asyncio.shield(cleanup)
                 except asyncio.CancelledError:
                     await cleanup
                     raise
 
-    async def recover(self, run_id: str):
+    async def recover(self, run_id: str, *, tenant="local"):
         """Remove only containers owned by this interrupted run."""
+        self.journal.cancel_run('swarm', tenant, run_id)
+        await reconcile_pending(self.journal, self._docker, namespace='swarm', tenant=tenant, run_id=run_id)
+        if self.journal.records(namespace='swarm', tenant=tenant, run_id=run_id, pending_only=True, limit=1):
+            raise SwarmError('Unacknowledged container creation remains unresolved; retain funding')
+        # Compatibility for pre-journal containers. The caller must have already
+        # authorized this exact run through Store; never remove journal-owned rows
+        # belonging to another controller/tenant under legacy label matching.
         rc, out, _ = await self._docker("ps", "--all", "--quiet", "--filter", f"label=acinonyx.swarm.run={run_id}")
         if rc:
             raise SwarmError("Worker recovery unavailable")
         for container in out.decode().split():
             if not re.fullmatch(r"[0-9a-f]{12,64}", container):
                 raise SwarmError("Invalid recovery container ID")
+            status, raw, _ = await self._docker('inspect', container)
+            data = strict_json(raw) if not status else None
+            if not isinstance(data, list) or len(data) != 1:
+                raise SwarmError('Legacy recovery inspection unavailable')
+            labels = data[0].get('Config', {}).get('Labels') or {}
+            if labels.get('mas.runtime.controller'):
+                raise SwarmError('Foreign or unresolved journal-owned container; refusing legacy removal')
+            if labels.get('acinonyx.swarm.run') != run_id:
+                raise SwarmError('Legacy run ownership mismatch')
             await self._remove(container, True)

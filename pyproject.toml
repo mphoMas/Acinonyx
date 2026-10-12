@@ -23,6 +23,7 @@ browser = [
 ]
 
 [project.scripts]
+mas-container-recover = "mas.container_recovery_cli:main"
 mas = "mas.cli:main"
 mas-doctor = "mas.cli:main"
 mas-swarm = "mas.swarm.cli:main"

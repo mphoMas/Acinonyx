@@ -76,7 +76,7 @@ def test_natural_parent_exit_leaves_no_orphan_boundary(tmp_path, image):
     code, out, _ = boundary.run(['python', '-c',
         "import subprocess,sys; subprocess.Popen([sys.executable,'-c',\"import time; time.sleep(1); print('LATE_WRITE',flush=True)\"]); print('PARENT_DONE',flush=True)"])
     assert code == 0 and b'PARENT_DONE' in out and b'LATE_WRITE' not in out
-    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'name=mas-coordinator-'], capture_output=True, text=True, check=True)
+    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'label=mas.runtime.controller='+boundary.journal.controller], capture_output=True, text=True, check=True)
     assert containers.stdout.strip() == ''
 
 
@@ -92,13 +92,17 @@ def test_timeout_and_cancel_cleanup(image):
             boundary.run(['python', '-c', 'import time; time.sleep(20)'], stop=stop)
     finally:
         timer.join()
-    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'name=mas-coordinator-'], capture_output=True, text=True, check=True)
+    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'label=mas.runtime.controller='+boundary.journal.controller], capture_output=True, text=True, check=True)
     assert containers.stdout.strip() == ''
 
 
 def test_single_line_output_is_bounded(image):
+    boundary = ContainerBoundary(image, output_limit=4096)
     with pytest.raises(OutputLimitError):
-        ContainerBoundary(image, output_limit=4096).run(['python', '-c', "print('x'*100000)"])
+        boundary.run(['python', '-c', "print('x'*100000)"])
+    assert all(row['state'] == 'CLOSED' for row in boundary.journal.records())
+    remaining = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'label=mas.runtime.controller='+boundary.journal.controller], capture_output=True, text=True, check=True)
+    assert not remaining.stdout.strip()
 
 
 @pytest.mark.parametrize('value', [float('inf'), float('-inf'), float('nan'), True, 0, -1, '1'])

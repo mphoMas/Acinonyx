@@ -51,3 +51,8 @@ def coordinator_test_image():
     if configured and configured.startswith('sha256:') and image_id != configured:
         pytest.fail('Configured image identity mismatch', pytrace=False)
     return image_id
+
+
+@pytest.fixture(autouse=True)
+def isolated_container_journal(tmp_path, monkeypatch):
+    monkeypatch.setenv('MAS_CONTAINER_JOURNAL_PATH', str(tmp_path/'host-control'/'containers.sqlite'))

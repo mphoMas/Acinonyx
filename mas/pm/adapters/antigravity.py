@@ -87,7 +87,10 @@ class AntigravityExecutionAdapter(BaseExecutionAdapter):
             code, out, err = self.boundary.run(command, files=files,
                 environment={'AGY_HEADLESS': '1', 'AGY_RUN_ID': run_id,
                              'AGY_ATTEMPT_ID': request.attempt_id, 'AGY_TASK_ID': request.task_id},
-                timeout=request.timeout_seconds, stop=stop_event)
+                timeout=request.timeout_seconds, stop=stop_event,
+                identity={'run_id': run_id, 'tenant': request.tenant_id,
+                          'principal': getattr(request, 'executor_principal', request.task_id), 'generation': request.fencing_token},
+                authority_check=getattr(request, 'authorize_start', None))
         except (TimeoutError, InterruptedError, SwarmError) as exc:
             return result('UNKNOWN_EXECUTION', None, tokens_billed=None,
                 error_details={'error': sanitize_payload(str(exc)), 'settlement_allowed': False})

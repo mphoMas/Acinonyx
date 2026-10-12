@@ -623,6 +623,18 @@ class CoordinatorWorker:
             timeout_seconds=self.execution_timeout_s,
         )
 
+        def authorize_container_start():
+            self.store._validate_tenant_authority(updated_intent.tenant_id)
+            current = self.store.get_intent(intent.intent_id)
+            if (current is None or current.status != 'PROCESSING' or current.worker_id != self.worker_id
+                    or current.fencing_token != assigned_fencing or current.lease_expires_at <= time.time()):
+                raise PermissionError('Container start denied: stale generation, lease or assignment')
+
+        req.authorize_start = authorize_container_start
+        from mas.tenancy import current_binding
+        executor_binding = current_binding()
+        req.executor_principal = executor_binding.identity.principal_id if executor_binding else self.worker_id
+
         cursor_seq = 0
         cursor_lock = threading.Lock()
         execution_stop = threading.Event()

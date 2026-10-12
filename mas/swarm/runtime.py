@@ -56,7 +56,13 @@ class CodingSwarm:
 
         async def verify(case):
             try:
-                actual = await self.worker.evaluate(source, case["input"], doc["id"])
+                def authorize_start():
+                    self.store.require_role(token, {"owner", "requester"})
+                    current = self.store.get(token, doc["id"])
+                    if current["state"] not in ACTIVE or current["lease"] != doc["lease"] or current["lease_expires"] <= time.time():
+                        raise SwarmError("Container start authority revoked or expired")
+                actual = await self.worker.evaluate(source, case["input"], doc["id"],
+                    tenant=doc["tenant"], principal=doc["submitted_by"], authority_check=authorize_start)
                 passed = canonical(actual) == canonical(case["expected"])
                 status = "passed" if passed else "mismatch"
             except CandidateError:
@@ -142,5 +148,5 @@ class CodingSwarm:
         doc = self.store.get(owner_token, run_id)
         if doc["state"] not in ACTIVE or doc["lease_expires"] > time.time():
             raise SwarmError("Only expired active runs can be recovered")
-        await self.worker.recover(run_id)
+        await self.worker.recover(run_id, tenant=doc["tenant"])
         self.store.interrupt(owner_token, run_id)

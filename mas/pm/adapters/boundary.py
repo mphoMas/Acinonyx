@@ -14,6 +14,7 @@ import threading
 import uuid
 from pathlib import Path
 
+from mas.container_recovery import ContainerJournal, DurableContainerOperation, reconcile_pending
 from mas.swarm.contracts import OutputLimitError, SwarmError, canonical, strict_json
 from mas.swarm.process import run_process
 
@@ -47,7 +48,7 @@ def snapshot_workspace(root: Path, paths: list[str]) -> dict[str, str]:
         path = Path(name)
         if path.is_absolute() or '..' in path.parts or not path.parts:
             raise ValueError('Invalid workspace path')
-        if any(part in {'.git', '.ssh', '.aws', '.codex', '.env'} for part in path.parts):
+        if any(part in {'.git', '.ssh', '.aws', '.codex', '.env', '.mas-runtime'} for part in path.parts):
             raise ValueError('Credential/control files cannot enter execution boundary')
         current = root
         for part in path.parts:
@@ -65,11 +66,12 @@ def snapshot_workspace(root: Path, paths: list[str]) -> dict[str, str]:
 
 
 class ContainerBoundary:
-    def __init__(self, image: str, output_limit: int = 65536):
+    def __init__(self, image: str, output_limit: int = 65536, *, journal=None):
         if not isinstance(image, str) or not re.fullmatch(r'(?:[a-zA-Z0-9./:_-]+@)?sha256:[0-9a-f]{64}', image):
             raise ValueError('Execution image must be pinned by SHA-256')
         if type(output_limit) is not int or not 1024 <= output_limit <= 65536:
             raise ValueError('Invalid output limit')
+        self._journal = journal
         self.image = image
         self.output_limit = output_limit
         # Preserve session transport/CA configuration for Docker client, never pass it
@@ -80,22 +82,32 @@ class ContainerBoundary:
     async def _docker(self, *args, data=b'', timeout=10):
         try:
             return await run_process(DOCKER + list(args), data=data, timeout=timeout,
-                                     output_limit=self.output_limit, env=self.client_env)
+                                     output_limit=self.output_limit if args and args[0] == 'start' else 65536, env=self.client_env)
         except TimeoutError:
             raise
         except OSError as exc:
             raise SwarmError('Docker control unavailable; execution boundary not confirmed') from exc
 
-    async def _remove(self, name):
-        # Removal is required even if create failed: daemon may have accepted it.
-        await self._docker('rm', '--force', name)
-        code, out, _ = await self._docker('ps', '--all', '--quiet', '--filter', f'name=^/{name}$')
-        if code or out.strip():
-            raise SwarmError('Cannot confirm whole execution boundary removal')
+    @property
+    def journal(self):
+        if self._journal is None:
+            self._journal = ContainerJournal()
+        return self._journal
 
-    async def _execute(self, command, files, environment, timeout, stop):
-        name = 'mas-coordinator-' + uuid.uuid4().hex
-        args = ['create', '--name', name, '--pull=never', '--interactive', '--network=none',
+    async def recover(self, run_id, *, tenant='local'):
+        self.journal.cancel_run('coordinator', tenant, run_id)
+        result = await reconcile_pending(self.journal, self._docker, namespace='coordinator', tenant=tenant, run_id=run_id)
+        if self.journal.records(namespace='coordinator', tenant=tenant, run_id=run_id, pending_only=True, limit=1):
+            raise SwarmError('Container creation/cleanup unresolved; funding must remain held')
+        return result
+
+    async def _execute(self, command, files, environment, timeout, stop, identity, authority_check):
+        record = self.journal.prepare('coordinator', identity['run_id'], self.image,
+            tenant=identity.get('tenant', 'local'), principal=identity.get('principal', 'local'),
+            generation=identity.get('generation', 1))
+        operation = DurableContainerOperation(self.journal, self._docker, record)
+        name = operation.name
+        args = ['--name', name, '--pull=never', '--interactive', '--network=none',
                 '--read-only', '--user=65534:65534', '--cap-drop=ALL',
                 '--security-opt=no-new-privileges:true', '--memory=128m', '--memory-swap=128m',
                 '--cpus=0.5', '--pids-limit=32', '--ulimit=nofile=64:64', '--ulimit=core=0:0',
@@ -105,9 +117,11 @@ class ContainerBoundary:
             args += ['--env', key + '=']
         args += [self.image, 'python', '-I', '-B', '-c', BOOTSTRAP]
         try:
-            code, _, err = await self._docker(*args)
-            if code:
-                raise SwarmError('Container creation unavailable: ' + err.decode(errors='replace')[-200:])
+            await operation.create(args, authority_check)
+            if stop is not None and stop.is_set():
+                self.journal.retire(record['operation_id'], uncertain=True)
+                raise InterruptedError('Execution canceled before start')
+            operation.allow_start(authority_check)
             task = asyncio.create_task(self._docker('start', '--attach', '--interactive', name,
                 data=canonical({'command': command, 'files': files, 'environment': environment}).encode(), timeout=timeout))
             try:
@@ -130,10 +144,15 @@ class ContainerBoundary:
                 raise SwarmError('Execution exit status mismatch')
             return code, out, err
         finally:
-            await self._remove(name)
+            cleanup = asyncio.create_task(operation.cleanup())
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                await cleanup
+                raise
 
     def run(self, command: list[str], *, files=None, environment=None, timeout=30,
-            stop: threading.Event | None = None):
+            stop: threading.Event | None = None, identity=None, authority_check=None):
         finite_timeout(timeout)
         if not isinstance(command, list) or not command or len(command) > 64 or any(
                 not isinstance(v, str) or not v or len(v.encode()) > 32768 for v in command):
@@ -141,7 +160,8 @@ class ContainerBoundary:
         environment = environment or {}
         if set(environment) - {'AGY_HEADLESS', 'AGY_RUN_ID', 'AGY_ATTEMPT_ID', 'AGY_TASK_ID'}:
             raise ValueError('Only runtime markers may enter execution environment')
-        return asyncio.run(self._execute(command, files or {}, environment, timeout, stop))
+        identity = identity or {'run_id': 'probe-'+uuid.uuid4().hex}
+        return asyncio.run(self._execute(command, files or {}, environment, timeout, stop, identity, authority_check))
 
 
 __all__ = ['ContainerBoundary', 'OutputLimitError', 'snapshot_workspace', 'finite_timeout']
