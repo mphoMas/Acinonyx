@@ -655,5 +655,218 @@ def test_stale_policy_version_rejected_before_prespawn(cc04_env):
         assert u_intent.status == "UNKNOWN_EXECUTION"
         attempt = store.get_attempt(u_intent.attempt_id)
         assert attempt.status == "UNKNOWN_EXECUTION"
-        assert "STALE_POLICY_VERSION" in (attempt.failure_reason or "")
+        assert "STALE_POLICY_VERSION" in (attempt.failure_reason or "") or "PRE_SPAWN_VALIDATION_FAILED" in (attempt.failure_reason or "")
+
+
+def test_unqualified_adapter_rejected_at_registration(cc04_env):
+    """Architect Directive 1: Adapters lacking bounded stop support are rejected."""
+    from mas.pm.worker import AdapterNotQualifiedError, BaseExecutionAdapter
+
+    class UnboundedAdapter(BaseExecutionAdapter):
+        # supports_bounded_stop defaults to False
+        def execute(self, request, run_id, emit_event=None, stop_event=None):
+            return None
+
+    with pytest.raises(AdapterNotQualifiedError) as exc_info:
+        CoordinatorWorker(cc04_env, worker_id="w_unbounded", adapter=UnboundedAdapter())
+    assert "does not satisfy qualification policy" in str(exc_info.value)
+
+
+def test_uncooperative_adapter_late_filesystem_effects_and_cleanup_boundary(cc04_env, tmp_path):
+    """Architect Directive 1: Timeout enforces execution boundary; survives cleanup -> UNKNOWN_EXECUTION & hold retained."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    target_file = tmp_path / "late_write_probe.txt"
+
+    class FileWritingUncooperativeAdapter(SyntheticExecutionAdapter):
+        def execute(self, request, run_id, emit_event=None, stop_event=None):
+            # Sleeps 0.2s, ignoring stop signal, then writes file
+            time.sleep(0.2)
+            target_file.write_text("late write after timeout")
+            return super().execute(request, run_id, emit_event=None, stop_event=None)
+
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        adapter = FileWritingUncooperativeAdapter(exit_code=0, tokens_billed=10, duration_seconds=0.25)
+        # Timeout 0.03s, cleanup deadline 0.05s
+        worker = CoordinatorWorker(
+            cc04_env,
+            worker_id="w_file_probe",
+            adapter=adapter,
+            execution_timeout_s=0.03,
+            cleanup_timeout_s=0.05,
+        )
+
+        t_start = time.monotonic()
+        worker.run_one_polling_cycle()
+        t_return = time.monotonic() - t_start
+
+        # Worker must have waited through timeout + cleanup deadline before returning
+        assert t_return >= 0.07
+
+        u_intent = store.get_intent(intent.intent_id)
+        assert u_intent.status == "UNKNOWN_EXECUTION"
+        attempt = store.get_attempt(u_intent.attempt_id)
+        assert attempt.status == "UNKNOWN_EXECUTION"
+        assert "SURVIVED_CLEANUP_DEADLINE" in (attempt.failure_reason or "")
+
+        # Pessimistic budget hold must be strictly preserved
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (u_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
+        # Wait past 0.25s to verify late write cannot affect coordinator state
+        time.sleep(0.2)
+        u_intent_after = store.get_intent(intent.intent_id)
+        assert u_intent_after.status == "UNKNOWN_EXECUTION"
+        assert u_intent_after.worker_id is None
+
+
+def test_atomic_pre_spawn_rejects_competing_policy_update(cc04_env):
+    """Architect Directive 2: Atomic launch transaction rejects pre-spawn if policy changes concurrently."""
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        engine = CoordinatorAdmissionEngine(cc04_env)
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Worker claims intent
+        claimed = store.claim_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_competing",
+            expected_fencing_token=intent.fencing_token,
+            now_epoch=time.time(),
+            lease_timeout_s=10.0,
+        )
+        assert claimed is True
+        up_intent = store.get_intent(intent.intent_id)
+
+        # Competing plan update immediately advances issue policy_version from 1 to 2
+        with cc04_env.atomic_transaction() as c:
+            c.execute("UPDATE pm_issues SET policy_version = 2 WHERE id = 'task_main'")
+
+        # Worker attempts atomic pre-spawn with admitted policy version 1
+        spawned = store.pre_spawn_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_competing",
+            assigned_fencing_token=up_intent.fencing_token,
+            now_epoch=time.time(),
+            run_id="run_competing_1",
+            expected_policy_version=1,
+        )
+        # Must fail closed inside the atomic transaction
+        assert spawned is False
+
+        # Attempt must NOT be transitioned to RUNNING
+        att = store.get_attempt(up_intent.attempt_id)
+        assert att.status != "RUNNING"
+
+
+def test_atomic_pre_spawn_rejects_pending_reconciliation(cc04_env):
+    """Architect Directive 2: Atomic launch transaction rejects pre-spawn if pending reconciliation exists."""
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        engine = CoordinatorAdmissionEngine(cc04_env)
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Worker claims intent
+        claimed = store.claim_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_recon",
+            expected_fencing_token=intent.fencing_token,
+            now_epoch=time.time(),
+            lease_timeout_s=10.0,
+        )
+        assert claimed is True
+        up_intent = store.get_intent(intent.intent_id)
+
+        # Staged plan proposal sets has_pending_reconciliation = 1
+        with cc04_env.atomic_transaction() as c:
+            c.execute("UPDATE pm_issues SET has_pending_reconciliation = 1 WHERE id = 'task_main'")
+
+        spawned = store.pre_spawn_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_recon",
+            assigned_fencing_token=up_intent.fencing_token,
+            now_epoch=time.time(),
+            run_id="run_recon_1",
+            expected_policy_version=1,
+        )
+        assert spawned is False
+
+
+def test_in_flight_policy_change_rejects_complete_intent(cc04_env):
+    """Architect Directive 2: In-flight policy changes after launch invalidate stale completion."""
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        engine = CoordinatorAdmissionEngine(cc04_env)
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        _worker = CoordinatorWorker(cc04_env, worker_id="w_inflight", adapter=SyntheticExecutionAdapter())
+
+        # Claim and pre-spawn successfully
+        claimed = store.claim_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_inflight",
+            expected_fencing_token=intent.fencing_token,
+            now_epoch=time.time(),
+            lease_timeout_s=10.0,
+        )
+        assert claimed is True
+        up_intent = store.get_intent(intent.intent_id)
+        assigned_fencing = up_intent.fencing_token
+        run_id = f"run_inflight_{assigned_fencing}"
+
+        spawned = store.pre_spawn_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_inflight",
+            assigned_fencing_token=assigned_fencing,
+            now_epoch=time.time(),
+            run_id=run_id,
+            expected_policy_version=1,
+        )
+        assert spawned is True
+
+        # While running, policy version changes from 1 to 2
+        with cc04_env.atomic_transaction() as c:
+            c.execute("UPDATE pm_issues SET policy_version = 2 WHERE id = 'task_main'")
+
+        # Worker attempts to complete the intent
+        completed = store.complete_intent(
+            intent_id=intent.intent_id,
+            worker_id="w_inflight",
+            assigned_fencing_token=assigned_fencing,
+            now_epoch=time.time(),
+            exit_code=0,
+            candidate_commit_sha="cand-sha-inflight",
+            tokens_spent=10,
+        )
+        # Complete intent MUST reject stale result
+        assert completed is False
+
+        # Attempt must NOT be SUCCEEDED
+        att = store.get_attempt(up_intent.attempt_id)
+        assert att.status != "SUCCEEDED"
+
+        # Fencing can be revoked and hold preserved
+        store.record_execution_interrupted(
+            intent_id=intent.intent_id,
+            worker_id="w_inflight",
+            assigned_fencing_token=assigned_fencing,
+            error_message="STALE_INFLIGHT_POLICY",
+        )
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (up_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
 

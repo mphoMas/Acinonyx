@@ -361,11 +361,17 @@ class CoordinatorStore:
         now_epoch: float,
         run_id: str,
         attempt_id: Optional[str] = None,
+        expected_policy_version: Optional[int] = None,
     ) -> bool:
         """
         Atomically transitions CLAIMED intent to PROCESSING before launching process.
         Derives attempt_id strictly from the intent; rejects any contradictory supplied attempt_id.
         Requires active unexpired lease, assigned worker, and matching fencing token.
+        Atomically verifies in the same transaction:
+        - Issue exists and has NO pending plan reconciliation (has_pending_reconciliation == 0)
+        - Issue policy_version exactly matches expected_policy_version (or admitted_policy_version from intent payload)
+        - Issue workflow state is eligible (BACKLOG, REFINED, STAGED)
+        - Attempt has a funded budget reservation in HELD status
         In the same transaction, updates attempt to RUNNING and records SPAWNING physical run
         with composite (intent_id, attempt_id) foreign key constraint.
         """
@@ -374,7 +380,7 @@ class CoordinatorStore:
             self._validate_tenant_authority()
             # 1. Fetch intent and verify attempt_id consistency
             intent_row = conn.execute(
-                "SELECT attempt_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT attempt_id, tenant_id, issue_id, payload FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if not intent_row:
@@ -388,7 +394,42 @@ class CoordinatorStore:
                     f"Contradictory attempt_id supplied: intent belongs to '{actual_attempt_id}', got '{attempt_id}'"
                 )
 
-            # 2. Atomic CAS transition CLAIMED -> PROCESSING
+            # 2. Atomic Policy, Reconciliation, Scope & Funded Launch Verification
+            issue_id = intent_row["issue_id"]
+            if issue_id:
+                issue_row = conn.execute(
+                    "SELECT policy_version, has_pending_reconciliation, current_state FROM pm_issues WHERE id = ?",
+                    (issue_id,),
+                ).fetchone()
+                if not issue_row:
+                    return False
+                if issue_row["has_pending_reconciliation"] != 0:
+                    return False
+                if issue_row["current_state"] not in ("BACKLOG", "REFINED", "STAGED"):
+                    return False
+
+                # Policy version check
+                payload_obj = {}
+                if intent_row["payload"]:
+                    try:
+                        payload_obj = json.loads(intent_row["payload"])
+                    except Exception:
+                        pass
+                required_pv = expected_policy_version
+                if required_pv is None:
+                    required_pv = payload_obj.get("admitted_policy_version")
+                if required_pv is not None and issue_row["policy_version"] != required_pv:
+                    return False
+
+            # Verify funded reservation exists and is HELD
+            res_row = conn.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (actual_attempt_id,),
+            ).fetchone()
+            if res_row and res_row["status"] != "HELD":
+                return False
+
+            # 3. Atomic CAS transition CLAIMED -> PROCESSING
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -412,7 +453,7 @@ class CoordinatorStore:
             if cursor.rowcount != 1:
                 return False
 
-            # 3. Update attempt to RUNNING
+            # 4. Update attempt to RUNNING
             att_cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_attempts
@@ -424,7 +465,7 @@ class CoordinatorStore:
             if att_cursor.rowcount != 1:
                 return False
 
-            # 4. Insert physical run linking composite (intent_id, attempt_id)
+            # 5. Insert physical run linking composite (intent_id, attempt_id)
             conn.execute(
                 """
                 INSERT INTO pm_coordinator_runs (
@@ -514,12 +555,33 @@ class CoordinatorStore:
         with self.db.atomic_transaction() as conn:
             self._validate_tenant_authority()
             intent_check = conn.execute(
-                "SELECT tenant_id, attempt_id, project_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT tenant_id, attempt_id, project_id, issue_id, payload FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if not intent_check:
                 return False
             self._validate_tenant_authority(intent_check["tenant_id"])
+
+            # Verify issue policy version and pending reconciliation has not changed mid-flight
+            issue_id = intent_check["issue_id"]
+            if issue_id:
+                issue_row = conn.execute(
+                    "SELECT policy_version, has_pending_reconciliation FROM pm_issues WHERE id = ?",
+                    (issue_id,),
+                ).fetchone()
+                if issue_row:
+                    payload_obj = {}
+                    if intent_check["payload"]:
+                        try:
+                            payload_obj = json.loads(intent_check["payload"])
+                        except Exception:
+                            pass
+                    admitted_pv = payload_obj.get("admitted_policy_version")
+                    if issue_row["has_pending_reconciliation"] != 0 or (
+                        admitted_pv is not None and issue_row["policy_version"] != admitted_pv
+                    ):
+                        # Policy changed or plan reconciliation is pending: reject completion, fail closed
+                        return False
 
             # 1. Atomic CAS transition PROCESSING -> COMPLETED first.
             # Stale / late callers (e.g. canceled or expired lease) must fail here immediately

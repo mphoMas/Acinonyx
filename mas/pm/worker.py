@@ -98,8 +98,16 @@ class AdapterExecutionResult:
         self.error_details = error_details
 
 
+class AdapterNotQualifiedError(RuntimeError):
+    """Raised when an execution adapter does not satisfy the qualification policy."""
+    pass
+
+
 class BaseExecutionAdapter(ABC):
     """Abstract interface for execution runtime adapters."""
+
+    supports_bounded_stop: bool = False
+    cleanup_timeout_s: float = 0.5
 
     @abstractmethod
     def execute(
@@ -119,6 +127,9 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
     Does NOT invoke external CLI processes (agy or codex).
     Supports programmable exit codes, spend, latency, event streaming, and cancellation.
     """
+
+    supports_bounded_stop: bool = True
+    cleanup_timeout_s: float = 0.5
 
     def __init__(
         self,
@@ -420,15 +431,28 @@ class CoordinatorWorker:
         heartbeat_interval_s: float = 2.0,
         poll_interval_s: float = 0.5,
         execution_timeout_s: float = 30.0,
+        cleanup_timeout_s: Optional[float] = None,
     ) -> None:
         self.db = db
         self.store = db.coordinator
         self.worker_id = worker_id
-        self.adapter = adapter or SyntheticExecutionAdapter()
+        selected_adapter = adapter or SyntheticExecutionAdapter()
+        # Enforce qualified adapter policy: adapter must explicitly declare bounded stop support
+        if not getattr(selected_adapter, "supports_bounded_stop", False):
+            raise AdapterNotQualifiedError(
+                f"Adapter {type(selected_adapter).__name__} does not satisfy qualification policy: "
+                f"must declare supports_bounded_stop=True with terminable supervised execution boundary"
+            )
+        self.adapter = selected_adapter
         self.lease_timeout_s = max(lease_timeout_s, 2.0)
         self.heartbeat_interval_s = max(min(heartbeat_interval_s, self.lease_timeout_s / 2.0), 0.5)
         self.poll_interval_s = poll_interval_s
         self.execution_timeout_s = execution_timeout_s
+        self.cleanup_timeout_s = (
+            cleanup_timeout_s
+            if cleanup_timeout_s is not None
+            else getattr(self.adapter, "cleanup_timeout_s", 0.5)
+        )
         self._running = False
         self._stop_requested = threading.Event()
 
@@ -476,15 +500,23 @@ class CoordinatorWorker:
                 )
                 return False
 
-        # Step 3: Guarded pre-spawn persistence
+        # Step 3: Guarded pre-spawn persistence (atomic policy/reconciliation/scope/funding validation)
         pre_spawn_ok = self.store.pre_spawn_intent(
             intent_id=intent.intent_id,
             worker_id=self.worker_id,
             assigned_fencing_token=assigned_fencing,
             now_epoch=time.time(),
             run_id=run_id,
+            expected_policy_version=admitted_pv,
         )
         if not pre_spawn_ok:
+            logger.warning(f"Guarded pre-spawn CAS/validation failed for intent {intent.intent_id}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message="PRE_SPAWN_VALIDATION_FAILED",
+            )
             return False
 
         # Fetch persisted attempt to use genuine attempt_seq
@@ -617,17 +649,26 @@ class CoordinatorWorker:
         if timed_out:
             logger.error(f"Execution timed out on run {run_id} after {self.execution_timeout_s}s (deadline latched)")
             self._stop_requested.set()
+            # Enforce execution boundary termination: wait for adapter within cleanup deadline
+            exec_thread.join(timeout=self.cleanup_timeout_s)
+            terminated_within_boundary = not exec_thread.is_alive()
+            if not terminated_within_boundary:
+                logger.error(
+                    f"Adapter execution survived stop signal on run {run_id} beyond cleanup deadline {self.cleanup_timeout_s}s; "
+                    f"quarantining thread and preserving budget hold"
+                )
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
                 assigned_fencing_token=assigned_fencing,
-                error_message=f"EXECUTION_TIMEOUT_{self.execution_timeout_s}S",
+                error_message=f"EXECUTION_TIMEOUT_{self.execution_timeout_s}S" + ("" if terminated_within_boundary else "_SURVIVED_CLEANUP_DEADLINE"),
             )
             return True
 
         # Case B: In-flight worker stop requested
         if self._stop_requested.is_set():
             logger.warning(f"Execution interrupted by worker stop request on run {run_id}")
+            exec_thread.join(timeout=self.cleanup_timeout_s)
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
@@ -639,6 +680,8 @@ class CoordinatorWorker:
         # Case C: Heartbeat authority lost mid-flight
         if heartbeat_failed.is_set():
             logger.error(f"Heartbeat authority lost during execution of run {run_id}")
+            self._stop_requested.set()
+            exec_thread.join(timeout=self.cleanup_timeout_s)
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
@@ -747,7 +790,7 @@ class CoordinatorWorker:
                 )
                 return True
 
-        # 5. Complete intent (SUCCEEDED or FAILED) guarded by fencing generation and active lease
+        # 5. Complete intent (SUCCEEDED or FAILED) guarded by fencing generation, active lease, and policy version
         completed = self.store.complete_intent(
             intent_id=intent.intent_id,
             worker_id=self.worker_id,
@@ -757,6 +800,18 @@ class CoordinatorWorker:
             candidate_commit_sha=result.candidate_commit_sha,
             tokens_spent=result.tokens_billed,
         )
+        if not completed:
+            logger.error(
+                f"Complete intent rejected for {intent.intent_id} (stale policy version, expired lease, or changed fencing); "
+                f"advancing fencing and preserving hold"
+            )
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message="COMPLETION_REJECTED_STALE_POLICY_OR_LEASE",
+            )
+            return False
         return completed
 
     def run_one_polling_cycle(self) -> int:

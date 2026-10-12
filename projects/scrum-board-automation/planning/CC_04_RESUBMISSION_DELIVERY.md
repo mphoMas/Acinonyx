@@ -1,50 +1,47 @@
-# CC-04 Rework Delivery & Verification Report
+# CC-04 Final Rework Delivery & Verification Report
 
 Date: 12 October 2026
 Branch: `feat/scrum-board-automation`
-Baseline Commit: `94a20ff7`
+Baseline Commit: `bb5ad300` (Review 3)
 Author: Antigravity Development Team
 
 ---
 
 ## 1. Executive Summary & Review Finding Closure
 
-In response to the independent architecture review findings in `projects/scrum-board-automation/planning/CC_04_REWORK_REVIEW.md` (commit `94a20ff7`), the following critical architectural remedies have been implemented, tested, and verified against the comprehensive 5-gate quality pipeline:
+In response to the independent architecture review findings in `projects/scrum-board-automation/planning/CC_04_REVIEW_3.md` (commit `bb5ad300`), the following two critical architectural remedies have been implemented, tested, and verified against the comprehensive 5-gate quality pipeline:
 
-### Finding 1: Strict Result Schema & Outcome Consistency
-- **Defect:** Contradictory result combinations (e.g. `status="FAILED"` with `exit_code=0`, or `status="SUCCEEDED"` with non-zero exit code or missing candidate commit SHA) or arbitrary unknown status strings were previously accepted as normal completions.
+### Finding 1: Enforced Adapter Execution Boundary & Termination
+- **Defect:** Uncooperative adapters that ignored the cooperative stop signal survived past deadlines on daemon threads without bounding or terminating execution, allowing post-return side-effects (e.g. late filesystem writes) to leak.
 - **Remedy:**
-  - In `mas.pm.worker.CoordinatorWorker.process_one_intent`, allowed conclusive completion statuses are strictly constrained to `{"SUCCEEDED", "FAILED"}`.
-  - If `status == "SUCCEEDED"`: strictly requires `exit_code == 0` AND a non-empty `candidate_commit_sha`.
-  - If `status == "FAILED"`: strictly requires `exit_code != 0`.
-  - Any contradictory combination or non-conclusive/unknown status transitions to `UNKNOWN_EXECUTION` via `store.record_execution_interrupted()`, safely preserving pessimistic budget reservation holds in `HELD` status.
-  - Negative test coverage added in `test_contradictory_result_status_rejected_to_unknown_execution`.
+  - In `mas.pm.worker`:
+    - Defined `AdapterNotQualifiedError` and introduced `supports_bounded_stop: bool` and `cleanup_timeout_s: float` on `BaseExecutionAdapter`.
+    - Enforced adapter qualification policy in `CoordinatorWorker.__init__`: any adapter lacking `supports_bounded_stop=True` is immediately rejected at registration/initialization with `AdapterNotQualifiedError`.
+    - `SyntheticExecutionAdapter` explicitly implements `supports_bounded_stop = True` and `cleanup_timeout_s = 0.5`.
+    - In `CoordinatorWorker.process_one_intent`: upon monotonic deadline expiration, stop signal, or heartbeat loss, the worker signals the stop event and joins the execution thread within `cleanup_timeout_s`.
+    - If the execution thread survives the cleanup deadline, it is quarantined, transition to `UNKNOWN_EXECUTION` is recorded with `_SURVIVED_CLEANUP_DEADLINE`, late run events are quarantined, and pessimistic budget reservation holds in `HELD` status are strictly preserved.
+  - Regression test coverage added in `test_unqualified_adapter_rejected_at_registration` and `test_uncooperative_adapter_late_filesystem_effects_and_cleanup_boundary`.
 
-### Finding 2: Monotonic Deadline Latching Before Cleanup
-- **Defect:** Race condition where execution thread join was followed by heartbeat thread join, allowing an overrunning execution to complete during cleanup and be recorded as on-time.
+### Finding 2: Atomic Launch Authorization & In-Flight Policy Invalidation
+- **Defect:** Pre-spawn updates previously did not revalidate live issue policy version, pending reconciliation, workflow state, and funding inside the atomic transaction, allowing concurrent updates between check and pre-spawn to launch outdated work. Furthermore, policy updates during in-flight execution did not invalidate stale completion.
 - **Remedy:**
-  - Latch monotonic deadline epoch: `deadline_epoch = time.monotonic() + self.execution_timeout_s`.
-  - Supervise execution loop with bounded polling steps (`min(0.05, max(0.001, deadline_epoch - now_mono))`).
-  - Detect `timed_out` at the monotonic deadline *before* cleanup.
-  - Heartbeat sleep replaced with interruptible `execution_stop.wait(timeout=self.heartbeat_interval_s)`.
-  - Overrunning tasks are permanently latched as expired and quarantined to `UNKNOWN_EXECUTION` with retained holds regardless of post-deadline completion.
-  - Negative test probe added in `test_monotonic_deadline_latching_prevents_cleanup_race`.
-
-### Finding 3: Confirmed Bounded Termination & Authority-Loss Supervision
-- **Defect:** Timeout or stop signals previously left uncooperative daemon threads running without event suppression; authority loss during execution was checked only after the full timeout elapsed.
-- **Remedy:**
-  - Immediate poll supervision breaks out upon `self._stop_requested.is_set()` or `heartbeat_failed.is_set()` without waiting for full execution timeout.
-  - Event streamer `emit_event` checks `if execution_stop.is_set() or self._stop_requested.is_set(): return`, quarantining late events and preventing rogue side-effects from surviving threads.
-  - Negative test probe added in `test_uncooperative_adapter_late_events_quarantined`.
-
-### Finding 4: FSM Governance & Policy-Version Launch Binding
-- **Defect:** Coordinator admission previously used raw state transitions without evaluating FSM guards, and did not bind policy versions to launch authorization.
-- **Remedy:**
-  - `CoordinatorAdmissionEngine.admit_task` evaluates `validate_appetite(issue)`, `validate_scope_jail(issue)`, and `validate_wip_limit(self.db, issue.project_id, IssueState.STAGED.value, conn=conn)` under lock.
-  - Task state restricted: only `BACKLOG`, `REFINED` (or `STAGED` with settled previous attempts) may be admitted.
-  - `admitted_policy_version` is immutably bound into `intent.payload`.
-  - Prior to pre-spawn in `process_one_intent`, the live issue policy version is compared against `admitted_policy_version`. Any discrepancy aborts execution into `UNKNOWN_EXECUTION` with `"STALE_POLICY_VERSION"`.
-  - Negative tests added in `test_admission_enforces_wip_limits_and_scope` and `test_stale_policy_version_rejected_before_prespawn`.
+  - In `mas.pm.coordinator.CoordinatorStore.pre_spawn_intent`:
+    - Added `expected_policy_version` parameter (defaulting to `admitted_policy_version` from intent payload).
+    - Under `with self.db.atomic_transaction() as conn:`, atomically re-reads `pm_issues` for `issue_id`:
+      - Verifies `has_pending_reconciliation == 0` (fails closed if reconciliation is pending).
+      - Verifies `current_state IN ('BACKLOG', 'REFINED', 'STAGED')`.
+      - Verifies `issue.policy_version == expected_policy_version`.
+      - Verifies that a funded budget reservation exists and is `HELD`.
+      - Updates `pm_coordinator_intents` to `PROCESSING`, `pm_coordinator_attempts` to `RUNNING`, and inserts the physical run linking `(intent_id, attempt_id)` only after all guards succeed in the same transaction.
+  - In `mas.pm.coordinator.CoordinatorStore.complete_intent`:
+    - Under the atomic transaction, re-reads `pm_issues` for `issue_id` and verifies that live `policy_version == admitted_policy_version` and `has_pending_reconciliation == 0`.
+    - If live policy advanced or plan reconciliation is pending during in-flight execution, `complete_intent` fails closed (returns `False`), rejecting the stale result and preventing mutation of attempts or billing.
+  - In `CoordinatorWorker.process_one_intent`:
+    - If `complete_intent` fails closed, the worker revokes authority via `record_execution_interrupted`, advances fencing, marks `UNKNOWN_EXECUTION`, and retains budget holds.
+  - Regression test coverage added in:
+    - `test_atomic_pre_spawn_rejects_competing_policy_update`
+    - `test_atomic_pre_spawn_rejects_pending_reconciliation`
+    - `test_in_flight_policy_change_rejects_complete_intent`
 
 ---
 
@@ -61,23 +58,23 @@ python3 -m pytest \
   tests/test_sba_03_plan_publication.py \
   tests/test_scrum_board_actions.py -q
 ```
-**Outcome:** **134 passed in 36.06s** (0 failed, 0 skipped).
+**Outcome:** **139 passed in 36.49s** (0 failed, 0 skipped).
 
 ### Full Enterprise Quality Gate
 ```bash
 bash scripts/run_quality_gate.sh
 ```
-**Outcome:**
-- `[GATE 1/5]: Code Style & Lints (ruff)`: PASSED.
-- `[GATE 2/5]: Type Safety (mypy)`: PASSED.
-- `[GATE 3/5]: Security Audits (bandit)`: PASSED.
-- `[GATE 4/5]: Full Regression Suite (pytest)`: **674 passed, 20 skipped in 158.55s**.
-- `[GATE 5/5]: Production Build Validation`: PASSED.
+**Receipt & Output:**
+- `[GATE 1/5]: Code Style & Lints (ruff)`: PASSED (`ruff check mas tests`).
+- `[GATE 2/5]: Runtime Health & Capabilities Matrix`: PASSED (`python3 -m mas.cli doctor`, `capabilities`).
+- `[GATE 3/5]: Local Research Assets and Links`: PASSED (`python3 scripts/verify_research_swarm.py`).
+- `[GATE 4/5]: Python Source Compilation`: PASSED (`python3 -m compileall -q mas scripts`).
+- `[GATE 5/5]: Full Unit & Integration Test Suite`: **679 passed, 20 skipped in 151.31s** (`python3 -m pytest tests/ -v`).
 - **Result:** `✅ ALL QUALITY GATES PASSED (5/5)`.
 
 ---
 
 ## 3. Preservation of Invariants & Scope Boundaries
-- Live CLI runtimes (`agy`, `codex exec`) remain strictly gated behind synthetic qualification.
-- Commit history preserved: frontend commit `77ba7083`, Codex fix `03da60da`, recovery commit `d36a85fe`, review commits `a0c0aa51`, `0457e767`, `490e2ce0`, and review commit `94a20ff7`.
-- Budget holds remain strictly pessimistic across crashes, interruptions, and contradictory results.
+- **Synthetic Qualification Only:** Live CLI agent dispatch (`agy`, `codex exec`) remains strictly gated behind synthetic adapters; no live external subagent invocations were performed.
+- **Commit Lineage Preserved:** Retained frontend commit `77ba7083`, Codex fix `03da60da`, recovery commit `d36a85fe`, review commits `a0c0aa51`, `0457e767`, `490e2ce0`, `94a20ff7`, `f6d2f34a`, and review commit `bb5ad300`.
+- **Budget Holds Invariant:** Budget reservations remain strictly pessimistic (`HELD`) across crashes, timeouts, boundary overruns, and competing policy revisions.
