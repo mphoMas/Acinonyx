@@ -13,14 +13,8 @@ from mas.swarm.contracts import OutputLimitError, SwarmError
 
 
 @pytest.fixture(scope='module')
-def image():
-    try:
-        probe = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'image', 'inspect', 'python:3.12-slim', '--format', '{{.Id}}'], capture_output=True, text=True)
-    except FileNotFoundError:
-        pytest.fail('Required container infrastructure missing: Docker client is not installed', pytrace=False)
-    if probe.returncode:
-        pytest.skip('Pinned local Python execution image/Docker unavailable')
-    return probe.stdout.strip()
+def image(coordinator_test_image):
+    return coordinator_test_image
 
 
 def request(tmp_path, **changes):

@@ -15,7 +15,8 @@ from mas.pm.coordinator import CoordinatorStore, trusted_coordinator_admin_scope
 from mas.pm.db import PMDatabase
 from mas.pm.models import Issue, Project
 
-IMAGE = 'sha256:df18428df8a0f9189c84e7424d214b4c50092af1f9dca5842a00c41c39bda316'
+# Offline provenance fixtures need a syntactically pinned identity, not a real image.
+IMAGE = 'sha256:' + 'a' * 64
 
 
 @pytest.fixture
@@ -36,6 +37,11 @@ def repo(tmp_path):
 @pytest.fixture
 def contract():
     return VerificationContract('candidate.py', json.dumps([{'id':'one', 'input':1, 'expected':2}]), IMAGE)
+
+
+@pytest.fixture
+def runtime_contract(coordinator_test_image):
+    return VerificationContract('candidate.py', json.dumps([{'id':'one', 'input':1, 'expected':2}]), coordinator_test_image)
 
 
 @pytest.fixture
@@ -201,8 +207,8 @@ def verify(repo, contract, **changes):
     return VerifierAdapter('verifier','verify-key',secrets.token_bytes(32),path,contract=contract).verify_candidate(**args)
 
 
-def test_real_candidate_measured_outside_container(repo, contract):
-    evidence = verify(repo, contract)
+def test_real_candidate_measured_outside_container(repo, runtime_contract):
+    evidence = verify(repo, runtime_contract)
     assert evidence['canonical_payload']['result'] == {'passed':True,'test_count':1,'outcomes':[{'id':'one','passed':True}]}
 
 
@@ -211,12 +217,12 @@ def test_real_candidate_measured_outside_container(repo, contract):
     "import os\ndef solve(payload):\n return os.environ.get('MAS_EVIDENCE_SECRET')\n",
     "def solve(payload):\n return 999\n",
 ])
-def test_faked_stdout_bad_output_and_secret_reads_do_not_pass(repo, contract, source):
+def test_faked_stdout_bad_output_and_secret_reads_do_not_pass(repo, runtime_contract, source):
     path, git = repo
     (path/'candidate.py').write_text(source)
     git('add','.')
     git('commit','-m','adversarial candidate')
-    assert verify(repo, contract)['canonical_payload']['result']['passed'] is False
+    assert verify(repo, runtime_contract)['canonical_payload']['result']['passed'] is False
 
 
 def test_arbitrary_test_command_and_builder_self_verification_forbidden(repo, contract):
