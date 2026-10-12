@@ -1276,6 +1276,15 @@ class CoordinatorStore:
             if not verify_signature(payload, row["signature"], secret_bytes):
                 raise PermissionError("Evidence admission rejected: invalid or forged cryptographic signature")
 
+            # Disallow test-domain simulated evidence from production admission
+            if payload.get("is_test_domain", False) is True:
+                raise PermissionError("Evidence admission rejected: test-domain simulated evidence cannot be promoted to ADMITTED in production")
+
+            # Must have actually passed verification
+            if payload.get("type") == "VERIFICATION_EVIDENCE":
+                if not payload.get("passed", False) or payload.get("exit_code", 1) != 0 or payload.get("test_count", 0) <= 0:
+                    raise ValueError("Evidence admission rejected: verification failed or zero tests executed")
+
             # Verify envelope binding consistency
             if (
                 payload.get("task_id") != row["task_id"]
