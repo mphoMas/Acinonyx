@@ -1,232 +1,139 @@
-import os
-import sys
+"""Adversarial checks for the actual no-mount execution boundary."""
+import json
+import subprocess
 import threading
+import time
 
 import pytest
 
-from mas.pm.adapters.antigravity import (
-    AntigravityExecutionAdapter,
-    sanitize_environment,
-)
+from mas.pm.adapters.antigravity import AntigravityExecutionAdapter, sanitize_environment, sanitize_payload
+from mas.pm.adapters.boundary import ContainerBoundary, snapshot_workspace
 from mas.pm.worker import AdapterExecutionRequest
+from mas.swarm.contracts import OutputLimitError, SwarmError
 
 
-def test_antigravity_adapter_model_validation():
-    adapter = AntigravityExecutionAdapter(model="gemini-3.8-flash-high", dynamic_model_check=False)
-    assert adapter.model == "gemini-3.8-flash-high"
-    assert adapter.supports_bounded_stop is True
-
-    with pytest.raises(ValueError, match="not in allowed/available models"):
-        AntigravityExecutionAdapter(
-            model="nonexistent-model-xyz",
-            allowed_models={"gemini-3.8-flash-high"},
-            dynamic_model_check=False,
-        )
+@pytest.fixture(scope='module')
+def image():
+    probe = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'image', 'inspect', 'python:3.12-slim', '--format', '{{.Id}}'], capture_output=True, text=True)
+    if probe.returncode:
+        pytest.skip('Pinned local Python execution image/Docker unavailable')
+    return probe.stdout.strip()
 
 
-def test_antigravity_adapter_workspace_validation(tmp_path):
-    adapter = AntigravityExecutionAdapter(dynamic_model_check=False)
-    req = AdapterExecutionRequest(
-        tenant_id="tenant-1",
-        project_id="proj-1",
-        issue_id="issue-1",
-        task_id="task-1",
-        attempt_id="att-1",
-        attempt_seq=1,
-        fencing_token=1,
-        runtime_type="antigravity",
-        prompt="build something",
-        workspace_path=str(tmp_path / "nonexistent_dir"),
-    )
-    res = adapter.execute(req, run_id="run-1")
-    assert res.status == "FAILED"
-    assert res.exit_code == 1
-    assert "Invalid workspace directory" in res.error_details["error"]
+def request(tmp_path, **changes):
+    values = dict(tenant_id='tenant', project_id='project', issue_id='issue', task_id='task',
+                  attempt_id='attempt', attempt_seq=1, fencing_token=1, runtime_type='antigravity',
+                  prompt='fixture', workspace_path=str(tmp_path), path_whitelist=['source.py'], timeout_seconds=10)
+    values.update(changes)
+    return AdapterExecutionRequest(**values)
 
 
-def test_antigravity_adapter_sanitizes_environment():
-    # Verify that verifier/reviewer secrets are strictly stripped from child process environment
-    dirty_env = {
-        "PATH": "/usr/bin:/bin",
-        "MAS_EVIDENCE_SECRET": "top-secret-signing-key",
-        "GITHUB_TOKEN": "ghp_secrettoken123",
-        "HTTP_PROXY": "http://127.0.0.1:8080",
-        "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
-        "CUSTOM_SECRET": "should-be-removed",
-    }
-    clean = sanitize_environment(dirty_env, extra_vars={"AGY_HEADLESS": "1"})
-
-    assert "MAS_EVIDENCE_SECRET" not in clean
-    assert "GITHUB_TOKEN" not in clean
-    assert "CUSTOM_SECRET" not in clean
-    assert clean["PATH"] == "/usr/bin:/bin"
-    assert clean["HTTP_PROXY"] == "http://127.0.0.1:8080"
-    assert clean["SSL_CERT_FILE"] == "/etc/ssl/certs/ca-certificates.crt"
-    assert clean["AGY_HEADLESS"] == "1"
+def adapter(image, command):
+    return AntigravityExecutionAdapter(image=image, simulate_command=['python', '-c', command])
 
 
-def test_antigravity_adapter_strips_secret_from_child_process(tmp_path):
-    # Test script that checks if MAS_EVIDENCE_SECRET leaked into child
-    script_path = tmp_path / "check_leak.py"
-    output_file = tmp_path / "env_check.txt"
-    script_path.write_text(
-        "import os\n"
-        "secret = os.environ.get('MAS_EVIDENCE_SECRET', 'NOT_PRESENT')\n"
-        "with open('" + str(output_file) + "', 'w') as f:\n"
-        "    f.write(secret)\n"
-    )
+def test_environment_and_redaction():
+    env = sanitize_environment({'HOME': '/secret/home', 'MAS_EVIDENCE_SECRET': 'secret', 'HTTPS_PROXY': 'https://proxy', 'SSL_CERT_FILE': '/ca'}, {'AGY_HEADLESS': '1'})
+    assert 'HOME' not in env and 'MAS_EVIDENCE_SECRET' not in env
+    assert env['HTTPS_PROXY'] == 'https://proxy' and env['SSL_CERT_FILE'] == '/ca'
+    with pytest.raises(ValueError):
+        sanitize_environment({}, {'MAS_EVIDENCE_SECRET': 'injected'})
+    assert 'abc123' not in sanitize_payload('token=abc123')
 
-    old_secret = os.environ.get("MAS_EVIDENCE_SECRET")
-    os.environ["MAS_EVIDENCE_SECRET"] = "do-not-leak-this-secret"
+
+def test_model_discovery_cannot_be_disabled(image):
+    with pytest.raises(PermissionError, match='cannot be disabled'):
+        AntigravityExecutionAdapter(image=image, dynamic_model_check=False)
+
+
+def test_missing_cli_never_fabricates_model(image):
+    with pytest.raises(SwarmError):
+        AntigravityExecutionAdapter(image=image, binary_path='/missing/agy', allowed_models={'gemini-3.8-flash-high'})
+
+
+@pytest.mark.parametrize('paths', [[], ['../outside'], ['/etc/passwd'], ['.git/config'], ['directory']])
+def test_snapshot_rejects_unsafe_scope(tmp_path, paths):
+    (tmp_path / 'directory').mkdir()
+    with pytest.raises(ValueError):
+        snapshot_workspace(tmp_path, paths)
+
+
+def test_snapshot_rejects_symlinks(tmp_path):
+    (tmp_path / 'source.py').symlink_to('/etc/passwd')
+    with pytest.raises(ValueError, match='symlinks'):
+        snapshot_workspace(tmp_path, ['source.py'])
+
+
+def test_real_container_has_no_host_credentials_or_mounts(tmp_path, image, monkeypatch):
+    marker = tmp_path / 'host-secret'
+    marker.write_text('private fixture')
+    monkeypatch.setenv('MAS_EVIDENCE_SECRET', 'private-test-key')
+    code, out, _ = ContainerBoundary(image).run(['python', '-c',
+        "import os,json; print(json.dumps({'secret':os.getenv('MAS_EVIDENCE_SECRET'),'home':os.getenv('HOME'),'host':os.path.exists("+repr(str(marker))+"),'socket':os.path.exists('/var/run/docker.sock')}))"])
+    assert code == 0
+    assert json.loads(out) == {'secret': None, 'home': '/tmp/home', 'host': False, 'socket': False}
+
+
+def test_natural_parent_exit_leaves_no_orphan_boundary(tmp_path, image):
+    boundary = ContainerBoundary(image)
+    code, out, _ = boundary.run(['python', '-c',
+        "import subprocess,sys; subprocess.Popen([sys.executable,'-c',\"import time; time.sleep(1); print('LATE_WRITE',flush=True)\"]); print('PARENT_DONE',flush=True)"])
+    assert code == 0 and b'PARENT_DONE' in out and b'LATE_WRITE' not in out
+    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'name=mas-coordinator-'], capture_output=True, text=True, check=True)
+    assert containers.stdout.strip() == ''
+
+
+def test_timeout_and_cancel_cleanup(image):
+    boundary = ContainerBoundary(image)
+    with pytest.raises(TimeoutError):
+        boundary.run(['python', '-c', 'import time; time.sleep(20)'], timeout=.2)
+    stop = threading.Event()
+    timer = threading.Timer(.2, stop.set)
+    timer.start()
     try:
-        adapter = AntigravityExecutionAdapter(
-            simulate_command=[sys.executable, str(script_path)],
-            dynamic_model_check=False,
-        )
-        req = AdapterExecutionRequest(
-            tenant_id="tenant-1",
-            project_id="proj-1",
-            issue_id="issue-1",
-            task_id="task-1",
-            attempt_id="att-1",
-            attempt_seq=1,
-            fencing_token=1,
-            runtime_type="antigravity",
-            prompt="check leak",
-            workspace_path=str(tmp_path),
-        )
-        res = adapter.execute(req, run_id="run-1")
-        assert res.exit_code == 0
-        assert output_file.read_text().strip() == "NOT_PRESENT"
+        with pytest.raises(InterruptedError):
+            boundary.run(['python', '-c', 'import time; time.sleep(20)'], stop=stop)
     finally:
-        if old_secret is not None:
-            os.environ["MAS_EVIDENCE_SECRET"] = old_secret
-        else:
-            os.environ.pop("MAS_EVIDENCE_SECRET", None)
+        timer.join()
+    containers = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'ps', '--all', '--quiet', '--filter', 'name=mas-coordinator-'], capture_output=True, text=True, check=True)
+    assert containers.stdout.strip() == ''
 
 
-def test_antigravity_adapter_simulated_success(tmp_path):
-    script_path = tmp_path / "fake_agy_success.py"
-    script_path.write_text(
-        "import json, sys\n"
-        "print(json.dumps({'type': 'INIT', 'session_id': 'sess-12345'}), flush=True)\n"
-        "print(json.dumps({'type': 'PROGRESS', 'message': 'working'}), flush=True)\n"
-        "print(json.dumps({'type': 'RESULT', 'candidate_commit_sha': 'c0ffee1234567890abcdef1234567890abcdef12', 'tokens_billed': 150}), flush=True)\n"
-        "sys.exit(0)\n"
-    )
-
-    adapter = AntigravityExecutionAdapter(
-        simulate_command=[sys.executable, str(script_path)],
-        dynamic_model_check=False,
-    )
-
-    req = AdapterExecutionRequest(
-        tenant_id="tenant-1",
-        project_id="proj-1",
-        issue_id="issue-1",
-        task_id="task-1",
-        attempt_id="att-1",
-        attempt_seq=1,
-        fencing_token=1,
-        runtime_type="antigravity",
-        prompt="do task",
-        workspace_path=str(tmp_path),
-    )
-
-    emitted_events = []
-    def on_event(ev_type, ev_data):
-        emitted_events.append((ev_type, ev_data))
-
-    res = adapter.execute(req, run_id="run-1", emit_event=on_event)
-
-    assert res.status == "SUCCEEDED"
-    assert res.exit_code == 0
-    assert res.runtime_session_id == "sess-12345"
-    assert res.candidate_commit_sha == "c0ffee1234567890abcdef1234567890abcdef12"
-    assert res.tokens_billed == 150
-    assert len(emitted_events) == 3
+def test_single_line_output_is_bounded(image):
+    with pytest.raises(OutputLimitError):
+        ContainerBoundary(image, output_limit=4096).run(['python', '-c', "print('x'*100000)"])
 
 
-def test_antigravity_adapter_simulated_failure(tmp_path):
-    script_path = tmp_path / "fake_agy_fail.py"
-    script_path.write_text(
-        "import json, sys\n"
-        "print(json.dumps({'type': 'INIT', 'session_id': 'sess-fail'}), flush=True)\n"
-        "sys.stderr.write('fatal runtime error\\n')\n"
-        "sys.exit(2)\n"
-    )
-
-    adapter = AntigravityExecutionAdapter(
-        simulate_command=[sys.executable, str(script_path)],
-        dynamic_model_check=False,
-    )
-
-    req = AdapterExecutionRequest(
-        tenant_id="tenant-1",
-        project_id="proj-1",
-        issue_id="issue-1",
-        task_id="task-1",
-        attempt_id="att-1",
-        attempt_seq=1,
-        fencing_token=1,
-        runtime_type="antigravity",
-        prompt="do task",
-        workspace_path=str(tmp_path),
-    )
-
-    res = adapter.execute(req, run_id="run-1")
-    assert res.status == "FAILED"
-    assert res.exit_code == 2
-    assert res.runtime_session_id == "sess-fail"
-    assert res.candidate_commit_sha is None
-    assert "fatal runtime error" in res.error_details["stderr"]
+@pytest.mark.parametrize('value', [float('inf'), float('-inf'), float('nan'), True, 0, -1, '1'])
+def test_deadlines_reject_invalid_values(image, value):
+    with pytest.raises(ValueError):
+        ContainerBoundary(image).run(['python', '-c', 'pass'], timeout=value)
 
 
-def test_antigravity_adapter_descendant_termination_on_cancellation(tmp_path):
-    # Script spawns an uncooperative background child process that ignores SIGTERM
-    marker_file = tmp_path / "late_write.txt"
-    script_path = tmp_path / "spawn_uncooperative_child.py"
-    script_path.write_text(
-        "import subprocess, sys, time, signal\n"
-        "child_code = '''\n"
-        "import time, signal\n"
-        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-        "time.sleep(2)\n"
-        "with open('" + str(marker_file) + "', 'w') as f:\n"
-        "    f.write('late write')\n"
-        "'''\n"
-        "proc = subprocess.Popen([sys.executable, '-c', child_code])\n"
-        "time.sleep(10)\n"
-    )
+def test_runtime_result_is_measured_untrusted_observation(tmp_path, image):
+    (tmp_path / 'source.py').write_text('pass')
+    command = "import json; print(json.dumps({'session_id':'s'})); print(json.dumps({'type':'RESULT','tokens_billed':2,'candidate_commit_sha':'a'*40}))"
+    events = []
+    res = adapter(image, command).execute(request(tmp_path), 'run', lambda kind, value: events.append(value))
+    assert res.status == 'SUCCEEDED' and res.tokens_billed == 2
+    assert events[0]['domain'] == 'TEST'
 
-    adapter = AntigravityExecutionAdapter(
-        simulate_command=[sys.executable, str(script_path)],
-        dynamic_model_check=False,
-    )
 
-    req = AdapterExecutionRequest(
-        tenant_id="tenant-1",
-        project_id="proj-1",
-        issue_id="issue-1",
-        task_id="task-1",
-        attempt_id="att-1",
-        attempt_seq=1,
-        fencing_token=1,
-        runtime_type="antigravity",
-        prompt="spawn descendant",
-        workspace_path=str(tmp_path),
-        timeout_seconds=5.0,
-    )
+@pytest.mark.parametrize('result', [
+    {}, {'tokens_billed': True, 'candidate_commit_sha': 'a'*40},
+    {'tokens_billed': -1, 'candidate_commit_sha': 'a'*40},
+    {'tokens_billed': 10001, 'candidate_commit_sha': 'a'*40},
+    {'tokens_billed': 1, 'candidate_commit_sha': 'HEAD'},
+])
+def test_unmeasured_or_invalid_runtime_never_settles(tmp_path, image, result):
+    (tmp_path / 'source.py').write_text('pass')
+    command = 'import json; print(json.dumps({"session_id":"s"})); print('+repr(json.dumps({'type':'RESULT', **result}))+')'
+    res = adapter(image, command).execute(request(tmp_path), 'run')
+    assert res.status == 'UNKNOWN_EXECUTION' and res.tokens_billed is None
 
-    stop_evt = threading.Event()
-    # Trigger stop signal after 0.2s
-    threading.Timer(0.2, stop_evt.set).start()
 
-    res = adapter.execute(req, run_id="run-1", stop_event=stop_evt)
-    assert res.status == "CANCELED"
-    assert res.exit_code == 130
-
-    # Wait to ensure child was truly killed by SIGKILL escalation and could not write file
-    import time
-    time.sleep(2.5)
-    assert not marker_file.exists(), "Descendant process survived and performed late file write!"
+def test_missing_image_has_no_host_execution_fallback(tmp_path):
+    before = time.monotonic()
+    with pytest.raises(SwarmError):
+        ContainerBoundary('sha256:'+'0'*64).run(['python', '-c', "raise RuntimeError('must not run on host')"])
+    assert time.monotonic() - before < 30
