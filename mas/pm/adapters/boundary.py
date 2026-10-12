@@ -78,8 +78,13 @@ class ContainerBoundary:
             'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'}}
 
     async def _docker(self, *args, data=b'', timeout=10):
-        return await run_process(DOCKER + list(args), data=data, timeout=timeout,
-                                 output_limit=self.output_limit, env=self.client_env)
+        try:
+            return await run_process(DOCKER + list(args), data=data, timeout=timeout,
+                                     output_limit=self.output_limit, env=self.client_env)
+        except TimeoutError:
+            raise
+        except OSError as exc:
+            raise SwarmError('Docker control unavailable; execution boundary not confirmed') from exc
 
     async def _remove(self, name):
         # Removal is required even if create failed: daemon may have accepted it.

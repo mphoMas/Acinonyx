@@ -14,7 +14,10 @@ from mas.swarm.contracts import OutputLimitError, SwarmError
 
 @pytest.fixture(scope='module')
 def image():
-    probe = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'image', 'inspect', 'python:3.12-slim', '--format', '{{.Id}}'], capture_output=True, text=True)
+    try:
+        probe = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', 'image', 'inspect', 'python:3.12-slim', '--format', '{{.Id}}'], capture_output=True, text=True)
+    except FileNotFoundError:
+        pytest.fail('Required container infrastructure missing: Docker client is not installed', pytrace=False)
     if probe.returncode:
         pytest.skip('Pinned local Python execution image/Docker unavailable')
     return probe.stdout.strip()
@@ -137,3 +140,26 @@ def test_missing_image_has_no_host_execution_fallback(tmp_path):
     with pytest.raises(SwarmError):
         ContainerBoundary('sha256:'+'0'*64).run(['python', '-c', "raise RuntimeError('must not run on host')"])
     assert time.monotonic() - before < 30
+
+
+
+def test_missing_docker_client_returns_typed_uncertainty_without_host_execution(tmp_path, monkeypatch):
+    import mas.pm.adapters.boundary as boundary
+    monkeypatch.setattr(boundary, 'DOCKER', [str(tmp_path/'missing-docker')])
+    marker = tmp_path/'HOST_RAN'
+    (tmp_path/'source.py').write_text('pass')
+    runtime = adapter('sha256:'+'0'*64,
+                      'from pathlib import Path; Path('+repr(str(marker))+').touch()')
+    result = runtime.execute(request(tmp_path), 'run')
+    assert result.status == 'UNKNOWN_EXECUTION'
+    assert result.tokens_billed is None
+    assert result.error_details['settlement_allowed'] is False
+    assert 'Docker control unavailable' in result.error_details['error']
+    assert not marker.exists()
+
+
+def test_missing_docker_client_raises_domain_error(monkeypatch, tmp_path):
+    import mas.pm.adapters.boundary as boundary
+    monkeypatch.setattr(boundary, 'DOCKER', [str(tmp_path/'missing-docker')])
+    with pytest.raises(SwarmError, match='Docker control unavailable'):
+        ContainerBoundary('sha256:'+'0'*64).run(['python','-c','pass'])
