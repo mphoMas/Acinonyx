@@ -49,23 +49,26 @@ class CoordinatorStore:
     def _now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _validate_tenant_authority(self, tenant_id: str) -> None:
+    def _validate_tenant_authority(self, tenant_id: Optional[str] = None) -> None:
         """
-        Validates that the current tenant context matches tenant_id and has write authority.
-        Passes if inside trusted_coordinator_admin_scope or if tenant binding is verified.
+        Validates that the current caller possesses trusted coordinator admin authority or
+        an active tenant binding with storage:write capability for the requested tenant.
+        Fails closed with PermissionError if neither is present.
         """
         if is_trusted_coord_admin():
             return
 
         from mas.tenancy import current_binding
         binding = current_binding()
-        if binding is not None:
-            if binding.identity.tenant_id != tenant_id:
-                raise PermissionError(
-                    f"Tenant authority mismatch: binding has '{binding.identity.tenant_id}', requested '{tenant_id}'"
-                )
-            # Require write authority
-            binding.require("storage:write")
+        if binding is None:
+            raise PermissionError("Unbound coordinator access denied: missing tenant binding or trusted admin authority")
+
+        if tenant_id is not None and binding.identity.tenant_id != tenant_id:
+            raise PermissionError(
+                f"Tenant authority mismatch: binding has '{binding.identity.tenant_id}', requested '{tenant_id}'"
+            )
+        # Require write authority
+        binding.require("storage:write")
 
     def create_attempt(
         self,
@@ -315,8 +318,16 @@ class CoordinatorStore:
         Returns True if claimed, False on race loss or state change.
         """
         now_iso = self._now_iso()
-        conn = self.db._get_connection()
-        try:
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            intent_row = conn.execute(
+                "SELECT tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_row:
+                return False
+            self._validate_tenant_authority(intent_row["tenant_id"])
+
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -340,8 +351,6 @@ class CoordinatorStore:
                 },
             )
             return cursor.rowcount == 1
-        finally:
-            conn.close()
 
     def pre_spawn_intent(
         self,
@@ -361,6 +370,7 @@ class CoordinatorStore:
         """
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
             # 1. Fetch intent and verify attempt_id consistency
             intent_row = conn.execute(
                 "SELECT attempt_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
@@ -368,6 +378,8 @@ class CoordinatorStore:
             ).fetchone()
             if not intent_row:
                 return False
+
+            self._validate_tenant_authority(intent_row["tenant_id"])
 
             actual_attempt_id = intent_row["attempt_id"]
             if attempt_id is not None and attempt_id != actual_attempt_id:
@@ -436,8 +448,16 @@ class CoordinatorStore:
         matching fencing generation, and that the lease has not already expired.
         """
         now_iso = self._now_iso()
-        conn = self.db._get_connection()
-        try:
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            intent_row = conn.execute(
+                "SELECT tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_row:
+                return False
+            self._validate_tenant_authority(intent_row["tenant_id"])
+
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -460,8 +480,6 @@ class CoordinatorStore:
                 },
             )
             return cursor.rowcount == 1
-        finally:
-            conn.close()
 
     def complete_intent(
         self,
@@ -477,12 +495,32 @@ class CoordinatorStore:
         Atomically records task completion, settles token spend and reservation ledger.
         Requires matching PROCESSING state, assigned worker, generation, and active lease.
         Requires non-null candidate_commit_sha and authoritative exit_code.
+        Enforces truthful outcomes: exit_code != 0 marks attempt as FAILED, never SUCCEEDED.
+        Strictly enforces funded budget limit: tokens_spent cannot exceed funded reservation.
         """
         if not candidate_commit_sha:
             raise ValueError("Authoritative candidate_commit_sha required to complete intent")
+        if not isinstance(tokens_spent, int) or isinstance(tokens_spent, bool):
+            raise ValueError(f"tokens_spent must be an integer, got {type(tokens_spent).__name__}")
+        if tokens_spent < 0:
+            raise ValueError(f"tokens_spent must be non-negative, got {tokens_spent}")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            raise ValueError(f"exit_code must be an integer, got {type(exit_code).__name__}")
 
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            intent_check = conn.execute(
+                "SELECT tenant_id, attempt_id, project_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_check:
+                return False
+            self._validate_tenant_authority(intent_check["tenant_id"])
+
+            # 1. Atomic CAS transition PROCESSING -> COMPLETED first.
+            # Stale / late callers (e.g. canceled or expired lease) must fail here immediately
+            # without mutating any records or evaluating budget reservation.
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -505,47 +543,57 @@ class CoordinatorStore:
             if cursor.rowcount != 1:
                 return False
 
-            row = conn.execute(
-                "SELECT attempt_id, project_id FROM pm_coordinator_intents WHERE intent_id = ?",
-                (intent_id,),
+            att_id = intent_check["attempt_id"]
+            proj_id = intent_check["project_id"]
+
+            # Validate against funded reservation before settling attempt
+            res_row = conn.execute(
+                "SELECT amount FROM pm_coordinator_reservations WHERE attempt_id = ? AND status = 'HELD'",
+                (att_id,),
             ).fetchone()
-            if row:
-                att_id = row["attempt_id"]
-                proj_id = row["project_id"]
-
-                conn.execute(
-                    """
-                    UPDATE pm_coordinator_attempts
-                    SET status = 'SUCCEEDED',
-                        candidate_commit_sha = ?,
-                        budget_tokens_spent = ?,
-                        finished_at = ?
-                    WHERE attempt_id = ?
-                    """,
-                    (candidate_commit_sha, tokens_spent, now_iso, att_id),
+            res_amount = res_row["amount"] if res_row else 0
+            if tokens_spent > res_amount:
+                raise ValueError(
+                    f"tokens_spent {tokens_spent} exceeds funded reservation {res_amount} for attempt {att_id}"
                 )
 
-                # Settle reservation in ledger
-                conn.execute(
-                    """
-                    UPDATE pm_coordinator_reservations
-                    SET status = 'SETTLED',
-                        settled_amount = ?,
-                        settled_at = ?
-                    WHERE attempt_id = ? AND status = 'HELD'
-                    """,
-                    (tokens_spent, now_iso, att_id),
-                )
+            attempt_status = "SUCCEEDED" if exit_code == 0 else "FAILED"
+            failure_reason = None if exit_code == 0 else f"PROCESS_EXITED_WITH_CODE_{exit_code}"
 
-                # Deduct spent tokens from project consumed pool
-                conn.execute(
-                    """
-                    UPDATE pm_projects
-                    SET tokens_consumed = tokens_consumed + ?
-                    WHERE id = ?
-                    """,
-                    (tokens_spent, proj_id),
-                )
+            conn.execute(
+                """
+                UPDATE pm_coordinator_attempts
+                SET status = ?,
+                    candidate_commit_sha = ?,
+                    budget_tokens_spent = ?,
+                    failure_reason = ?,
+                    finished_at = ?
+                WHERE attempt_id = ?
+                """,
+                (attempt_status, candidate_commit_sha, tokens_spent, failure_reason, now_iso, att_id),
+            )
+
+            # Settle reservation in ledger
+            conn.execute(
+                """
+                UPDATE pm_coordinator_reservations
+                SET status = 'SETTLED',
+                    settled_amount = ?,
+                    settled_at = ?
+                WHERE attempt_id = ? AND status = 'HELD'
+                """,
+                (tokens_spent, now_iso, att_id),
+            )
+
+            # Deduct spent tokens from project consumed pool exactly once
+            conn.execute(
+                """
+                UPDATE pm_projects
+                SET tokens_consumed = tokens_consumed + ?
+                WHERE id = ?
+                """,
+                (tokens_spent, proj_id),
+            )
 
             conn.execute(
                 """
@@ -567,11 +615,12 @@ class CoordinatorStore:
           Pessimistically retains full token budget reservation.
         Returns list of reaped intent IDs.
         """
+        self._validate_tenant_authority()
         conn = self.db._get_connection()
         try:
             candidates = conn.execute(
                 """
-                SELECT intent_id, status, fencing_token, attempt_id
+                SELECT intent_id, status, fencing_token, attempt_id, tenant_id
                 FROM pm_coordinator_intents
                 WHERE status IN ('CLAIMED', 'PROCESSING')
                   AND lease_expires_at <= ?
@@ -589,6 +638,9 @@ class CoordinatorStore:
             expected_fencing_token = cand["fencing_token"]
             old_status = cand["status"]
             attempt_id = cand["attempt_id"]
+            tenant_id = cand["tenant_id"]
+
+            self._validate_tenant_authority(tenant_id)
 
             with self.db.atomic_transaction() as t_conn:
                 cursor = t_conn.execute(
@@ -662,12 +714,15 @@ class CoordinatorStore:
         """
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
             intent_row = conn.execute(
-                "SELECT status, attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT status, attempt_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if not intent_row:
                 return False
+
+            self._validate_tenant_authority(intent_row["tenant_id"])
 
             curr_status = intent_row["status"]
             att_id = intent_row["attempt_id"]
@@ -743,55 +798,139 @@ class CoordinatorStore:
         exit_code: int,
         observed_status: str = "KILLED",
         tokens_spent: int = 0,
+        receipt_id: Optional[str] = None,
     ) -> bool:
         """
         Records authoritative termination receipt from adapter/process observer.
-        Concludes CANCEL_REQUESTED intent to CANCELED/FAILED and run to KILLED/EXITED.
-        Settles or releases budget holds.
+        Concludes CANCEL_REQUESTED or UNKNOWN_EXECUTION intent to CANCELED/FAILED and run to KILLED/EXITED.
+        Settles budget holds and charges termination tokens_spent to project consumed pool.
+        Enforces state guards: COMPLETED intents cannot be rewritten to CANCELED.
+        Enforces run matching: missing or foreign run ID fails with zero mutations.
+        Enforces idempotent receipt replay: exact replay returns True; conflicting replay raises error.
         """
+        if not isinstance(tokens_spent, int) or isinstance(tokens_spent, bool):
+            raise ValueError(f"tokens_spent must be an integer, got {type(tokens_spent).__name__}")
+        if tokens_spent < 0:
+            raise ValueError(f"tokens_spent must be non-negative, got {tokens_spent}")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            raise ValueError(f"exit_code must be an integer, got {type(exit_code).__name__}")
+
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
             intent_row = conn.execute(
-                "SELECT status, attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT status, attempt_id, project_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if not intent_row:
                 return False
 
-            att_id = intent_row["attempt_id"]
+            self._validate_tenant_authority(intent_row["tenant_id"])
 
-            conn.execute(
+            curr_intent_status = intent_row["status"]
+            att_id = intent_row["attempt_id"]
+            proj_id = intent_row["project_id"]
+
+            # Idempotent receipt replay check if receipt_id is provided
+            if receipt_id:
+                existing_rcpt = conn.execute(
+                    "SELECT * FROM pm_coordinator_evidence_receipts WHERE evidence_id = ?",
+                    (receipt_id,),
+                ).fetchone()
+                if existing_rcpt:
+                    # Check for conflict
+                    if (
+                        existing_rcpt["run_id"] != run_id
+                        or existing_rcpt["attempt_id"] != att_id
+                    ):
+                        raise sqlite3.IntegrityError(f"Conflicting receipt {receipt_id} already exists")
+                    return True  # Idempotent replay
+
+            # Eligible states: CANCEL_REQUESTED or UNKNOWN_EXECUTION
+            if curr_intent_status in ("COMPLETED", "SUCCEEDED"):
+                raise ValueError(
+                    f"Cannot terminate already {curr_intent_status} intent {intent_id}"
+                )
+
+            # Check if already terminated
+            if curr_intent_status in ("CANCELED", "FAILED"):
+                # If run is also already terminated with matching run_id, treat as idempotent replay
+                run_check = conn.execute(
+                    "SELECT status, exit_code FROM pm_coordinator_runs WHERE run_id = ? AND intent_id = ?",
+                    (run_id, intent_id),
+                ).fetchone()
+                if run_check and run_check["status"] in ("KILLED", "EXITED"):
+                    return True
+                return False
+
+            if curr_intent_status not in ("CANCEL_REQUESTED", "UNKNOWN_EXECUTION"):
+                return False
+
+            # Require that run_id exists, matches intent_id, and is in an in-flight status
+            run_row = conn.execute(
+                "SELECT status, attempt_id FROM pm_coordinator_runs WHERE run_id = ? AND intent_id = ?",
+                (run_id, intent_id),
+            ).fetchone()
+            if not run_row:
+                return False
+
+            # Check reservation bounds
+            res_row = conn.execute(
+                "SELECT amount FROM pm_coordinator_reservations WHERE attempt_id = ? AND status = 'HELD'",
+                (att_id,),
+            ).fetchone()
+            res_amount = res_row["amount"] if res_row else 0
+            if tokens_spent > res_amount:
+                raise ValueError(
+                    f"Termination tokens_spent {tokens_spent} exceeds funded reservation {res_amount}"
+                )
+
+            # Update run
+            run_cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_runs
                 SET status = ?,
                     exit_code = ?,
                     ended_at = ?
-                WHERE run_id = ?
+                WHERE run_id = ? AND intent_id = ?
                 """,
-                (observed_status, exit_code, now_iso, run_id),
+                (observed_status, exit_code, now_iso, run_id, intent_id),
             )
+            if run_cursor.rowcount != 1:
+                return False
 
+            # Update intent
+            final_intent_status = "CANCELED" if exit_code in (0, 137, 143) else "FAILED"
             conn.execute(
                 """
                 UPDATE pm_coordinator_intents
-                SET status = 'CANCELED',
+                SET status = ?,
                     updated_at = ?
                 WHERE intent_id = ?
                 """,
-                (now_iso, intent_id),
+                (final_intent_status, now_iso, intent_id),
             )
 
+            # Update attempt
             conn.execute(
                 """
                 UPDATE pm_coordinator_attempts
-                SET status = 'CANCELED',
+                SET status = ?,
                     budget_tokens_spent = ?,
+                    failure_reason = ?,
                     finished_at = ?
                 WHERE attempt_id = ?
                 """,
-                (tokens_spent, now_iso, att_id),
+                (
+                    final_intent_status,
+                    tokens_spent,
+                    f"TERMINATION_{observed_status}_EXIT_{exit_code}",
+                    now_iso,
+                    att_id,
+                ),
             )
 
+            # Settle reservation in ledger
             conn.execute(
                 """
                 UPDATE pm_coordinator_reservations
@@ -802,6 +941,47 @@ class CoordinatorStore:
                 """,
                 (tokens_spent, now_iso, att_id),
             )
+
+            # Charge termination spend to project tokens_consumed exactly once
+            if tokens_spent > 0:
+                conn.execute(
+                    """
+                    UPDATE pm_projects
+                    SET tokens_consumed = tokens_consumed + ?
+                    WHERE id = ?
+                    """,
+                    (tokens_spent, proj_id),
+                )
+
+            # Record receipt if receipt_id was provided
+            if receipt_id:
+                issue_id = conn.execute(
+                    "SELECT issue_id FROM pm_coordinator_attempts WHERE attempt_id = ?",
+                    (att_id,),
+                ).fetchone()["issue_id"]
+                conn.execute(
+                    """
+                    INSERT INTO pm_coordinator_evidence_receipts (
+                        evidence_id, issue_id, task_id, attempt_id, run_id,
+                        candidate_commit_sha, nonce, key_id, signature,
+                        canonical_payload, admission_status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ADMITTED', ?)
+                    """,
+                    (
+                        receipt_id,
+                        issue_id,
+                        intent_row["attempt_id"],
+                        att_id,
+                        run_id,
+                        f"term_exit_{exit_code}",
+                        f"nonce_{receipt_id}",
+                        "system:observer",
+                        "sig:system:observer",
+                        json.dumps({"exit_code": exit_code, "status": observed_status}),
+                        now_iso,
+                    ),
+                )
+
             return True
 
     def record_run_event(
@@ -813,8 +993,21 @@ class CoordinatorStore:
     ) -> CoordinatorEvent:
         """Records a streaming run event. Enforces unique (run_id, cursor_seq)."""
         now = self._now_iso()
-        conn = self.db._get_connection()
-        try:
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            run_row = conn.execute(
+                """
+                SELECT i.tenant_id
+                FROM pm_coordinator_runs r
+                JOIN pm_coordinator_intents i ON r.intent_id = i.intent_id
+                WHERE r.run_id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            if not run_row:
+                raise ValueError(f"Run {run_id} not found")
+            self._validate_tenant_authority(run_row["tenant_id"])
+
             cursor = conn.execute(
                 """
                 INSERT INTO pm_coordinator_events (
@@ -832,8 +1025,6 @@ class CoordinatorStore:
                 event_payload=event_payload,
                 emitted_at=now,
             )
-        finally:
-            conn.close()
 
     def record_evidence_receipt(
         self,
@@ -850,14 +1041,25 @@ class CoordinatorStore:
         admission_status: str = "SUBMITTED",
     ) -> CoordinatorEvidenceReceipt:
         """
-        Records a raw or admitted evidence receipt.
+        Records a raw evidence receipt.
         Enforces nonce uniqueness for replay prevention.
-        Explicitly tracks admission_status ('SUBMITTED', 'ADMITTED', 'REJECTED')
-        to clearly distinguish untrusted raw submissions from verified admissions.
+        Always stores caller submissions as 'SUBMITTED' regardless of supplied parameter;
+        admission requires explicit verified promotion via admit_evidence_receipt.
         """
         now = self._now_iso()
-        conn = self.db._get_connection()
-        try:
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            att_row = conn.execute(
+                "SELECT tenant_id FROM pm_coordinator_attempts WHERE attempt_id = ?",
+                (attempt_id,),
+            ).fetchone()
+            if not att_row:
+                raise ValueError(f"Attempt {attempt_id} not found")
+            self._validate_tenant_authority(att_row["tenant_id"])
+
+            # Caller cannot self-promote to ADMITTED; raw submissions always enter SUBMITTED
+            forced_status = "SUBMITTED"
+
             conn.execute(
                 """
                 INSERT INTO pm_coordinator_evidence_receipts (
@@ -877,7 +1079,7 @@ class CoordinatorStore:
                     key_id,
                     signature,
                     json.dumps(canonical_payload),
-                    admission_status,
+                    forced_status,
                     now,
                 ),
             )
@@ -892,11 +1094,41 @@ class CoordinatorStore:
                 key_id=key_id,
                 signature=signature,
                 canonical_payload=canonical_payload,
-                admission_status=admission_status,
+                admission_status=forced_status,
                 created_at=now,
             )
-        finally:
-            conn.close()
+
+    def admit_evidence_receipt(self, evidence_id: str) -> bool:
+        """
+        Promotes a verified evidence receipt from SUBMITTED to ADMITTED.
+        Requires trusted admin or verified tenant write authority.
+        """
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            row = conn.execute(
+                """
+                SELECT r.admission_status, a.tenant_id
+                FROM pm_coordinator_evidence_receipts r
+                JOIN pm_coordinator_attempts a ON r.attempt_id = a.attempt_id
+                WHERE r.evidence_id = ?
+                """,
+                (evidence_id,),
+            ).fetchone()
+            if not row:
+                return False
+            self._validate_tenant_authority(row["tenant_id"])
+            if row["admission_status"] != "SUBMITTED":
+                return False
+
+            cursor = conn.execute(
+                """
+                UPDATE pm_coordinator_evidence_receipts
+                SET admission_status = 'ADMITTED'
+                WHERE evidence_id = ? AND admission_status = 'SUBMITTED'
+                """,
+                (evidence_id,),
+            )
+            return cursor.rowcount == 1
 
     def get_attempt(self, attempt_id: str) -> Optional[CoordinatorAttempt]:
         """Retrieves attempt record by ID."""

@@ -18,13 +18,20 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 import pytest
-
+from mas.pm.coordinator import trusted_coordinator_admin_scope
 from mas.pm.db import PMDatabase
 from mas.pm.models import (
     Issue,
     IssueState,
     Project,
 )
+
+
+@pytest.fixture(autouse=True)
+def enable_trusted_coordinator_admin():
+    """Default fixture to grant trusted coordinator admin scope to coordinator unit tests."""
+    with trusted_coordinator_admin_scope(True):
+        yield
 
 
 def _populate_legacy_database(db_path):
@@ -263,14 +270,15 @@ def test_concurrent_claims_single_winner(tmp_path):
 
     barrier = Barrier(2)
     def worker_claim(worker_name):
-        barrier.wait(timeout=3)
-        return db.coordinator.claim_intent(
-            intent_id="intent-c1",
-            worker_id=worker_name,
-            expected_fencing_token=1,
-            now_epoch=100.0,
-            lease_timeout_s=15.0,
-        )
+        with trusted_coordinator_admin_scope():
+            barrier.wait(timeout=3)
+            return db.coordinator.claim_intent(
+                intent_id="intent-c1",
+                worker_id=worker_name,
+                expected_fencing_token=1,
+                now_epoch=100.0,
+                lease_timeout_s=15.0,
+            )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(worker_claim, ["worker-A", "worker-B"]))
@@ -361,6 +369,7 @@ def test_cancellation_versus_late_results(tmp_path):
         attempt_seq=1,
         adapter_type="codex",
         payload={},
+        budget_reservation=1000,
     )
 
     db.coordinator.claim_intent("intent-c", "worker-1", 1, 100.0, 30.0)
@@ -920,45 +929,46 @@ def test_tenant_authority_validation(tmp_path):
 
     root = tmp_path / "tenants"
 
-    # 1. Under tenant-alpha scope, writing with tenant_id='tenant-beta' must be rejected
-    with tenant_scope(iam, token_alpha, "tenant-alpha", root):
-        db_alpha = PMDatabase()
-        db_alpha.create_project(Project(id="p-a", key="ALF", name="Alpha Proj"))
-        db_alpha.create_issue(Issue(id="i-a", project_id="p-a", key="ALF-1", title="Task A"))
-        with db_alpha.atomic_transaction() as conn:
-            conn.execute("""
-            INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
-            VALUES ('p-a', 'REF-A', 'task-a', 'i-a', 'ALF-1')
-            """)
+    # 1. Under tenant-alpha scope without admin scope, writing with tenant_id='tenant-beta' must be rejected
+    with trusted_coordinator_admin_scope(False):
+        with tenant_scope(iam, token_alpha, "tenant-alpha", root):
+            db_alpha = PMDatabase()
+            db_alpha.create_project(Project(id="p-a", key="ALF", name="Alpha Proj"))
+            db_alpha.create_issue(Issue(id="i-a", project_id="p-a", key="ALF-1", title="Task A"))
+            with db_alpha.atomic_transaction() as conn:
+                conn.execute("""
+                INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+                VALUES ('p-a', 'REF-A', 'task-a', 'i-a', 'ALF-1')
+                """)
 
-        with pytest.raises(PermissionError, match="Tenant authority mismatch"):
-            db_alpha.coordinator.create_attempt_with_intent(
-                attempt_id="att-x",
-                intent_id="intent-x",
-                tenant_id="tenant-beta",  # Mismatch!
-                project_id="p-a",
-                issue_id="i-a",
-                task_id="task-a",
-                attempt_seq=1,
-                adapter_type="antigravity",
-                payload={},
-            )
+            with pytest.raises(PermissionError, match="Tenant authority mismatch"):
+                db_alpha.coordinator.create_attempt_with_intent(
+                    attempt_id="att-x",
+                    intent_id="intent-x",
+                    tenant_id="tenant-beta",  # Mismatch!
+                    project_id="p-a",
+                    issue_id="i-a",
+                    task_id="task-a",
+                    attempt_seq=1,
+                    adapter_type="antigravity",
+                    payload={},
+                )
 
-    # 2. Under tenant-alpha read-only scope, mutation must fail storage:write check
-    with tenant_scope(iam, token_alpha_ro, "tenant-alpha", root):
-        db_alpha_ro = PMDatabase()
-        with pytest.raises(PermissionError, match="Tenant authority unavailable or action denied"):
-            db_alpha_ro.coordinator.create_attempt_with_intent(
-                attempt_id="att-ro",
-                intent_id="intent-ro",
-                tenant_id="tenant-alpha",
-                project_id="p-a",
-                issue_id="i-a",
-                task_id="task-a",
-                attempt_seq=1,
-                adapter_type="antigravity",
-                payload={},
-            )
+        # 2. Under tenant-alpha read-only scope, mutation must fail storage:write check
+        with tenant_scope(iam, token_alpha_ro, "tenant-alpha", root):
+            db_alpha_ro = PMDatabase()
+            with pytest.raises(PermissionError, match="Tenant authority unavailable or action denied"):
+                db_alpha_ro.coordinator.create_attempt_with_intent(
+                    attempt_id="att-ro",
+                    intent_id="intent-ro",
+                    tenant_id="tenant-alpha",
+                    project_id="p-a",
+                    issue_id="i-a",
+                    task_id="task-a",
+                    attempt_seq=1,
+                    adapter_type="antigravity",
+                    payload={},
+                )
 
     # 3. Inside trusted_coordinator_admin_scope, administrative access succeeds
     with trusted_coordinator_admin_scope():
@@ -1035,3 +1045,595 @@ def test_schema_migration_atomic_rollback_on_injected_failure(tmp_path):
     tables = [r[0] for r in verify_conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
     verify_conn.close()
     assert "pm_mig_step1" not in tables, "Table created before failure must be completely rolled back"
+
+
+# ==============================================================================
+# Required Negative Acceptance Cases from ANTIGRAVITY_CC03_RECOVERY_INSTRUCTIONS
+# ==============================================================================
+
+def test_negative_case_1_unbound_caller_every_mutation_denied(tmp_path):
+    """
+    Negative Case 1: Unbound caller (no tenant binding, no admin scope) -> every mutation denied.
+    """
+    db = PMDatabase(tmp_path / "unbound.db")
+    db.create_project(Project(id="p-unbound", key="UNB", name="Unbound Proj"))
+    db.create_issue(Issue(id="i-unbound", project_id="p-unbound", key="UNB-1", title="Unbound Task"))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-unbound', 'REF-UNB', 'task-unb', 'i-unbound', 'UNB-1')
+        """)
+
+    with trusted_coordinator_admin_scope(False):
+        # 1. create_attempt_with_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.create_attempt_with_intent(
+                attempt_id="att-unb",
+                intent_id="intent-unb",
+                tenant_id="tenant-1",
+                project_id="p-unbound",
+                issue_id="i-unbound",
+                task_id="task-unb",
+                attempt_seq=1,
+                adapter_type="antigravity",
+                payload={},
+            )
+
+        # 2. claim_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.claim_intent("intent-dummy", "worker-1", 1, 100.0)
+
+        # 3. pre_spawn_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.pre_spawn_intent("intent-dummy", "worker-1", 2, 101.0, "run-dummy")
+
+        # 4. heartbeat_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.heartbeat_intent("intent-dummy", "worker-1", 2, 102.0)
+
+        # 5. complete_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.complete_intent("intent-dummy", "worker-1", 2, 103.0, "sha-1")
+
+        # 6. cancel_intent
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.cancel_intent("intent-dummy", "abort")
+
+        # 7. reap_expired_leases
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.reap_expired_leases(104.0)
+
+        # 8. record_authoritative_termination
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.record_authoritative_termination("intent-dummy", "run-dummy", 137)
+
+        # 9. record_run_event
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.record_run_event("run-dummy", 0, "event", {})
+
+        # 10. record_evidence_receipt
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.record_evidence_receipt(
+                evidence_id="rcpt-dummy",
+                issue_id="i-unb",
+                task_id="task-unb",
+                attempt_id="att-dummy",
+                run_id="run-dummy",
+                candidate_commit_sha="sha-dummy",
+                nonce="nonce-dummy",
+                key_id="key-dummy",
+                signature="sig-1",
+                canonical_payload={},
+            )
+
+        # 11. admit_evidence_receipt
+        with pytest.raises(PermissionError, match="Unbound coordinator access denied"):
+            db.coordinator.admit_evidence_receipt("rcpt-dummy")
+
+
+def test_negative_case_2_exit_42_records_failed_not_succeeded(tmp_path):
+    """
+    Negative Case 2: Exit 42 -> attempt recorded as FAILED, never SUCCEEDED.
+    """
+    db = PMDatabase(tmp_path / "exit42.db")
+    db.create_project(Project(id="p-42", key="E42", name="Exit 42 Proj"))
+    db.create_issue(Issue(id="i-42", project_id="p-42", key="E42-1", title="Task 42"))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-42', 'REF-42', 'task-42', 'i-42', 'E42-1')
+        """)
+
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-42",
+        intent_id="intent-42",
+        tenant_id="tenant-1",
+        project_id="p-42",
+        issue_id="i-42",
+        task_id="task-42",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=5000,
+    )
+    db.coordinator.claim_intent("intent-42", "worker-42", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-42", "worker-42", 2, 101.0, "run-42", "att-42")
+
+    # Complete with exit_code=42 and a valid candidate commit sha
+    res = db.coordinator.complete_intent(
+        intent_id="intent-42",
+        worker_id="worker-42",
+        assigned_fencing_token=2,
+        now_epoch=102.0,
+        candidate_commit_sha="commit-failed-42",
+        tokens_spent=300,
+        exit_code=42,
+    )
+    assert res is True
+
+    att = db.coordinator.get_attempt("att-42")
+    assert att.status == "FAILED", "Attempt must be FAILED on exit code 42"
+    assert att.failure_reason == "PROCESS_EXITED_WITH_CODE_42"
+    assert att.budget_tokens_spent == 300
+
+
+def test_negative_case_3_reserve_10_spend_20_rejects_overdraft(tmp_path):
+    """
+    Negative Case 3: Reserve 10, complete with 20 -> fails / rejects overdraft without silent settlement.
+    """
+    db = PMDatabase(tmp_path / "overdraft.db")
+    db.create_project(Project(id="p-od", key="OD", name="Overdraft Proj", token_budget=10000))
+    db.create_issue(Issue(id="i-od", project_id="p-od", key="OD-1", title="Overdraft Task", appetite_tokens=100))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-od', 'REF-OD', 'task-od', 'i-od', 'OD-1')
+        """)
+
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-od",
+        intent_id="intent-od",
+        tenant_id="tenant-1",
+        project_id="p-od",
+        issue_id="i-od",
+        task_id="task-od",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=10,
+    )
+    db.coordinator.claim_intent("intent-od", "worker-od", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-od", "worker-od", 2, 101.0, "run-od", "att-od")
+
+    # Trying to settle 20 when reservation is 10 must raise ValueError and roll back
+    with pytest.raises(ValueError, match="exceeds funded reservation"):
+        db.coordinator.complete_intent(
+            intent_id="intent-od",
+            worker_id="worker-od",
+            assigned_fencing_token=2,
+            now_epoch=102.0,
+            candidate_commit_sha="commit-od",
+            tokens_spent=20,
+            exit_code=0,
+        )
+
+    # State must be unchanged (atomic rollback)
+    intent = db.coordinator.get_intent("intent-od")
+    assert intent.status == "PROCESSING"
+    att = db.coordinator.get_attempt("att-od")
+    assert att.status == "RUNNING"
+    proj = db.get_project("p-od")
+    assert proj.tokens_consumed == 0
+
+
+def test_negative_case_4_termination_with_missing_or_foreign_run_zero_mutations(tmp_path):
+    """
+    Negative Case 4: Termination with missing or foreign run -> fails with zero mutations.
+    """
+    db = PMDatabase(tmp_path / "foreign_run.db")
+    db.create_project(Project(id="p-fr", key="FR", name="Foreign Run Proj"))
+    db.create_issue(Issue(id="i-fr", project_id="p-fr", key="FR-1", title="Task FR"))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-fr', 'REF-FR', 'task-fr', 'i-fr', 'FR-1')
+        """)
+
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-fr",
+        intent_id="intent-fr",
+        tenant_id="tenant-1",
+        project_id="p-fr",
+        issue_id="i-fr",
+        task_id="task-fr",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=500,
+    )
+    db.coordinator.claim_intent("intent-fr", "worker-fr", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-fr", "worker-fr", 2, 101.0, "run-fr", "att-fr")
+    db.coordinator.cancel_intent("intent-fr", "User abort")
+
+    # 1. Termination with non-existent run_id -> returns False, zero mutations
+    res = db.coordinator.record_authoritative_termination(
+        intent_id="intent-fr",
+        run_id="run-nonexistent",
+        exit_code=137,
+        tokens_spent=50,
+    )
+    assert res is False
+    intent = db.coordinator.get_intent("intent-fr")
+    assert intent.status == "CANCEL_REQUESTED"
+
+    # 2. Termination with foreign run_id belonging to a different intent
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-other",
+        intent_id="intent-other",
+        tenant_id="tenant-1",
+        project_id="p-fr",
+        issue_id="i-fr",
+        task_id="task-fr",
+        attempt_seq=2,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=500,
+    )
+    db.coordinator.claim_intent("intent-other", "worker-2", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-other", "worker-2", 2, 101.0, "run-other", "att-other")
+
+    res_foreign = db.coordinator.record_authoritative_termination(
+        intent_id="intent-fr",
+        run_id="run-other",  # Foreign run!
+        exit_code=137,
+        tokens_spent=50,
+    )
+    assert res_foreign is False
+    assert db.coordinator.get_intent("intent-fr").status == "CANCEL_REQUESTED"
+    assert db.coordinator.get_run("run-other").status == "SPAWNING"
+
+
+def test_negative_case_5_termination_of_completed_rejected_and_receipt_replay_idempotent(tmp_path):
+    """
+    Negative Case 5: Termination of COMPLETED intent rejected; exact receipt replay idempotent.
+    """
+    db = PMDatabase(tmp_path / "term_completed.db")
+    db.create_project(Project(id="p-tc", key="TC", name="Term Completed Proj"))
+    db.create_issue(Issue(id="i-tc", project_id="p-tc", key="TC-1", title="Task TC"))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-tc', 'REF-TC', 'task-tc', 'i-tc', 'TC-1')
+        """)
+
+    # Attempt 1: successfully completed
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-done",
+        intent_id="intent-done",
+        tenant_id="tenant-1",
+        project_id="p-tc",
+        issue_id="i-tc",
+        task_id="task-tc",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=1000,
+    )
+    db.coordinator.claim_intent("intent-done", "worker-1", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-done", "worker-1", 2, 101.0, "run-done", "att-done")
+    db.coordinator.complete_intent("intent-done", "worker-1", 2, 102.0, "sha-valid", 400, 0)
+
+    # Attempting to record termination on a completed intent must raise ValueError
+    with pytest.raises(ValueError, match="Cannot terminate already COMPLETED intent"):
+        db.coordinator.record_authoritative_termination(
+            intent_id="intent-done",
+            run_id="run-done",
+            exit_code=137,
+            tokens_spent=50,
+        )
+
+    # Attempt 2: canceled and terminated with receipt_id
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-replay",
+        intent_id="intent-replay",
+        tenant_id="tenant-1",
+        project_id="p-tc",
+        issue_id="i-tc",
+        task_id="task-tc",
+        attempt_seq=2,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=1000,
+    )
+    db.coordinator.claim_intent("intent-replay", "worker-2", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-replay", "worker-2", 2, 101.0, "run-replay", "att-replay")
+    db.coordinator.cancel_intent("intent-replay", "User cancel")
+
+    first_res = db.coordinator.record_authoritative_termination(
+        intent_id="intent-replay",
+        run_id="run-replay",
+        exit_code=137,
+        tokens_spent=250,
+        receipt_id="rcpt-term-1",
+    )
+    assert first_res is True
+
+    # Exact replay of same receipt_id must be idempotent and return True
+    replay_res = db.coordinator.record_authoritative_termination(
+        intent_id="intent-replay",
+        run_id="run-replay",
+        exit_code=137,
+        tokens_spent=250,
+        receipt_id="rcpt-term-1",
+    )
+    assert replay_res is True
+
+
+def test_negative_case_6_cancellation_spend_and_unknown_spend_retention(tmp_path):
+    """
+    Negative Case 6: Cancellation spend -> project accounting updated once; unknown spend -> hold retained.
+    """
+    db = PMDatabase(tmp_path / "cancel_spend.db")
+    db.create_project(Project(id="p-cs", key="CS", name="Cancel Spend Proj", token_budget=50000, tokens_consumed=0))
+    db.create_issue(Issue(id="i-cs", project_id="p-cs", key="CS-1", title="Task CS", appetite_tokens=10000))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-cs', 'REF-CS', 'task-cs', 'i-cs', 'CS-1')
+        """)
+
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-cs",
+        intent_id="intent-cs",
+        tenant_id="tenant-1",
+        project_id="p-cs",
+        issue_id="i-cs",
+        task_id="task-cs",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=5000,
+    )
+    db.coordinator.claim_intent("intent-cs", "worker-cs", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-cs", "worker-cs", 2, 101.0, "run-cs", "att-cs")
+    db.coordinator.cancel_intent("intent-cs", "abort")
+
+    # Authoritative termination charges 300 tokens to project
+    db.coordinator.record_authoritative_termination(
+        intent_id="intent-cs",
+        run_id="run-cs",
+        exit_code=137,
+        tokens_spent=300,
+    )
+    proj = db.get_project("p-cs")
+    assert proj.tokens_consumed == 300, "Project tokens_consumed must reflect measured cancellation spend"
+
+    # In crash scenario without authoritative termination (reaper), UNKNOWN_EXECUTION retains full hold
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-crash",
+        intent_id="intent-crash",
+        tenant_id="tenant-1",
+        project_id="p-cs",
+        issue_id="i-cs",
+        task_id="task-cs",
+        attempt_seq=2,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=4000,
+    )
+    db.coordinator.claim_intent("intent-crash", "worker-crash", 1, 100.0, 10.0)
+    db.coordinator.pre_spawn_intent("intent-crash", "worker-crash", 2, 101.0, "run-crash", "att-crash")
+
+    # Reaper runs after lease expiration
+    db.coordinator.reap_expired_leases(now_epoch=120.0)
+    att_crash = db.coordinator.get_attempt("att-crash")
+    assert att_crash.status == "UNKNOWN_EXECUTION"
+    # Hold is retained in reservation table
+    conn = db._get_connection()
+    res_crash = conn.execute(
+        "SELECT status, amount FROM pm_coordinator_reservations WHERE attempt_id = 'att-crash'"
+    ).fetchone()
+    conn.close()
+    assert res_crash["status"] == "HELD"
+    assert res_crash["amount"] == 4000
+
+
+def test_negative_case_7_upgrade_from_actual_284cb877_schema(tmp_path):
+    """
+    Negative Case 7: Actual old CC-03 DB upgrade -> new column and composite constraint present;
+    all historical rows preserved, PRAGMA foreign_key_check and integrity_check pass.
+    """
+    db_file = tmp_path / "actual_284cb877.db"
+    conn = sqlite3.connect(str(db_file))
+    with conn:
+        conn.execute("""
+        CREATE TABLE pm_projects (
+            id TEXT PRIMARY KEY, key TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+            description TEXT, token_budget INTEGER NOT NULL DEFAULT 5000000,
+            tokens_consumed INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_issues (
+            id TEXT PRIMARY KEY, project_id TEXT NOT NULL, key TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL, description TEXT, issue_type TEXT NOT NULL,
+            current_state TEXT NOT NULL DEFAULT 'BACKLOG', status TEXT NOT NULL DEFAULT 'BACKLOG',
+            appetite_tokens INTEGER NOT NULL DEFAULT 500000,
+            assignee TEXT, assignee_principal TEXT, sprint_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_task_mappings (
+            project_id TEXT NOT NULL, planning_reference TEXT NOT NULL,
+            task_id TEXT NOT NULL, local_issue_id TEXT NOT NULL,
+            local_issue_key TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (project_id, planning_reference), UNIQUE (project_id, task_id)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_coordinator_attempts (
+            attempt_id TEXT PRIMARY KEY, intent_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, issue_id TEXT NOT NULL,
+            task_id TEXT NOT NULL, attempt_seq INTEGER NOT NULL, adapter_type TEXT NOT NULL,
+            status TEXT NOT NULL, budget_tokens_allocated INTEGER NOT NULL DEFAULT 0,
+            budget_tokens_spent INTEGER NOT NULL DEFAULT 0, candidate_commit_sha TEXT,
+            failure_reason TEXT, payload_json TEXT NOT NULL, started_at TIMESTAMP,
+            finished_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(intent_id, attempt_seq)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_coordinator_intents (
+            intent_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, issue_id TEXT NOT NULL,
+            task_id TEXT NOT NULL, adapter_type TEXT NOT NULL, status TEXT NOT NULL,
+            fencing_token INTEGER NOT NULL DEFAULT 1, worker_id TEXT, lease_expires_at REAL,
+            lease_heartbeat_at REAL, payload_json TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE (intent_id, attempt_id)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_coordinator_runs (
+            run_id TEXT PRIMARY KEY,
+            intent_id TEXT NOT NULL REFERENCES pm_coordinator_intents(intent_id),
+            attempt_id TEXT NOT NULL,
+            fencing_token INTEGER NOT NULL,
+            runtime_session_id TEXT,
+            process_pid INTEGER,
+            process_pgid INTEGER,
+            status TEXT NOT NULL CHECK(status IN ('SPAWNING', 'STREAMING', 'EXITED', 'INTERRUPTED', 'KILLED')),
+            exit_code INTEGER,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ended_at TIMESTAMP,
+            FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
+            CONSTRAINT uq_physical_dispatch UNIQUE (intent_id, fencing_token)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_coordinator_evidence_receipts (
+            evidence_id TEXT PRIMARY KEY,
+            issue_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            attempt_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            candidate_commit_sha TEXT NOT NULL,
+            nonce TEXT NOT NULL UNIQUE,
+            key_id TEXT NOT NULL,
+            signature TEXT NOT NULL,
+            canonical_payload JSON NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+            FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
+            FOREIGN KEY(run_id) REFERENCES pm_coordinator_runs(run_id) ON DELETE CASCADE
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_coordinator_reservations (
+            reservation_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, project_id TEXT NOT NULL,
+            issue_id TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL,
+            settled_amount INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            settled_at TIMESTAMP
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_schema_migrations (
+            version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        # Populate history
+        conn.execute("INSERT INTO pm_projects(id, key, name) VALUES ('p-hist', 'HIST', 'Historical');")
+        conn.execute("INSERT INTO pm_issues(id, project_id, key, title, issue_type) VALUES ('i-hist', 'p-hist', 'HIST-1', 'Task Hist', 'TASK');")
+        conn.execute("INSERT INTO pm_task_mappings VALUES ('p-hist', 'REF-H', 'task-h', 'i-hist', 'HIST-1', '2026-10-12');")
+        conn.execute("INSERT INTO pm_coordinator_intents VALUES ('intent-h', 'att-h', 'tenant-1', 'p-hist', 'i-hist', 'task-h', 'antigravity', 'PROCESSING', 2, 'worker-h', 200.0, 190.0, '{}', '2026-10-12', '2026-10-12');")
+        conn.execute("INSERT INTO pm_coordinator_attempts VALUES ('att-h', 'intent-h', 'tenant-1', 'p-hist', 'i-hist', 'task-h', 1, 'antigravity', 'RUNNING', 5000, 0, NULL, NULL, '{}', '2026-10-12', NULL, '2026-10-12');")
+        conn.execute("INSERT INTO pm_coordinator_runs VALUES ('run-h', 'intent-h', 'att-h', 2, 'session-1', NULL, NULL, 'SPAWNING', NULL, '2026-10-12', NULL);")
+        conn.execute("INSERT INTO pm_coordinator_evidence_receipts VALUES ('rcpt-h', 'i-hist', 'task-h', 'att-h', 'run-h', 'sha-h', 'nonce-h', 'key-h', 'sig-h', '{}', '2026-10-12');")
+    conn.close()
+
+    # Instantiate PMDatabase - triggers migrate_coordinator_schema
+    db = PMDatabase(db_file)
+
+    # Verify migration applied
+    check_conn = db._get_connection()
+    fk_check = check_conn.execute("PRAGMA foreign_key_check;").fetchall()
+    assert len(fk_check) == 0, f"Foreign key check failed: {fk_check}"
+    integrity = check_conn.execute("PRAGMA integrity_check;").fetchone()
+    assert integrity[0] == "ok"
+
+    # Verify column admission_status added to pm_coordinator_evidence_receipts
+    cols = [r[1] for r in check_conn.execute("PRAGMA table_info(pm_coordinator_evidence_receipts);").fetchall()]
+    assert "admission_status" in cols
+
+    rcpt = check_conn.execute("SELECT admission_status FROM pm_coordinator_evidence_receipts WHERE evidence_id = 'rcpt-h'").fetchone()
+    assert rcpt["admission_status"] == "SUBMITTED"
+
+    # Verify composite foreign key on pm_coordinator_runs
+    fk_list = check_conn.execute("PRAGMA foreign_key_list(pm_coordinator_runs);").fetchall()
+    check_conn.close()
+    fks_by_id = {}
+    for row in fk_list:
+        fks_by_id.setdefault(row[0], []).append((row[3], row[4]))
+    has_composite = any(set(cols) == {("intent_id", "intent_id"), ("attempt_id", "attempt_id")} for cols in fks_by_id.values())
+    assert has_composite, f"Expected composite foreign key (intent_id, attempt_id), got {fks_by_id}"
+
+
+def test_negative_case_8_caller_admitted_status_or_fake_receipt_cannot_obtain_trusted_admission(tmp_path):
+    """
+    Negative Case 8: Caller specifying ADMITTED in record_evidence_receipt is stored as SUBMITTED;
+    cannot obtain trusted admission without explicit admit_evidence_receipt.
+    """
+    db = PMDatabase(tmp_path / "admission.db")
+    db.create_project(Project(id="p-adm8", key="AD8", name="Admission Proj"))
+    db.create_issue(Issue(id="i-adm8", project_id="p-adm8", key="AD8-1", title="Task AD8"))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-adm8', 'REF-8', 'task-8', 'i-adm8', 'AD8-1')
+        """)
+
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-adm8",
+        intent_id="intent-adm8",
+        tenant_id="tenant-1",
+        project_id="p-adm8",
+        issue_id="i-adm8",
+        task_id="task-8",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=500,
+    )
+    db.coordinator.claim_intent("intent-adm8", "worker-8", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-adm8", "worker-8", 2, 101.0, "run-adm8", "att-adm8")
+
+    # Record receipt with caller attempting admission_status='ADMITTED'
+    db.coordinator.record_evidence_receipt(
+        evidence_id="ev-untrusted",
+        issue_id="i-adm8",
+        task_id="task-8",
+        attempt_id="att-adm8",
+        run_id="run-adm8",
+        candidate_commit_sha="sha-untrusted",
+        nonce="nonce-untrusted",
+        key_id="key-untrusted",
+        signature="forge-attempt",
+        canonical_payload={"metrics": "fake"},
+        admission_status="ADMITTED",
+    )
+
+    # Must be forced to SUBMITTED
+    conn = db._get_connection()
+    row = conn.execute("SELECT admission_status FROM pm_coordinator_evidence_receipts WHERE evidence_id = 'ev-untrusted'").fetchone()
+    conn.close()
+    assert row["admission_status"] == "SUBMITTED"
+
+    # Only explicit trusted admission promotes it to ADMITTED
+    db.coordinator.admit_evidence_receipt("ev-untrusted")
+    conn2 = db._get_connection()
+    row2 = conn2.execute("SELECT admission_status FROM pm_coordinator_evidence_receipts WHERE evidence_id = 'ev-untrusted'").fetchone()
+    conn2.close()
+    assert row2["admission_status"] == "ADMITTED"
+

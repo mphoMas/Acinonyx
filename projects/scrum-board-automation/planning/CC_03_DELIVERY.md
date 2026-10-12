@@ -96,18 +96,18 @@ python3 -m pytest \
   tests/test_sba_03_plan_publication.py \
   tests/test_scrum_board_actions.py -q
 ```
-**Outcome:** `95 passed in 33.98s` (0 skips, 0 failures).
+**Outcome:** `103 passed in 33.68s` (0 skips, 0 failures).
 
 ### 3.2 Full Repository Quality Gate Execution
 ```bash
 bash scripts/run_quality_gate.sh
 ```
-**Outcome:** `634 passed, 20 skipped in 155.55s (0:02:35)`.  
+**Outcome:** `643 passed, 20 skipped in 149.49s (0:02:29)`.  
 **Verdict:** `✅ ALL QUALITY GATES PASSED (5/5)`.
 
-### 3.3 Verification Matrix of Required Scenarios
+### 3.3 Verification Matrix of Scenarios (Including 8 Negative Acceptance Cases)
 
-| Test Case | Method in `test_cc_03_coordinator_state.py` | Result |
+| Scenario / Negative Case | Method in `test_cc_03_coordinator_state.py` | Verdict |
 | :--- | :--- | :--- |
 | **Populated Legacy DB Migration & Reopen** | `test_populated_legacy_database_migration_and_reopen` | **PASSED** |
 | **Identity, State, Assignment Preservation** | `test_identity_state_assignment_evidence_preservation` | **PASSED** |
@@ -125,11 +125,19 @@ bash scripts/run_quality_gate.sh
 | **Funded Reservation Ledger & Capacity Bounds** | `test_funded_reservation_ledger_and_capacity_bounds` | **PASSED** |
 | **Tenant Authority & Scoped Access** | `test_tenant_authority_validation` | **PASSED** |
 | **Schema Migration Atomic Rollback on Injected Failure** | `test_schema_migration_atomic_rollback_on_injected_failure` | **PASSED** |
+| **Negative Case 1: Unbound caller denied on all mutations** | `test_negative_case_1_unbound_caller_every_mutation_denied` | **PASSED** |
+| **Negative Case 2: Exit 42 records FAILED, never SUCCEEDED** | `test_negative_case_2_exit_42_records_failed_not_succeeded` | **PASSED** |
+| **Negative Case 3: Reserve 10, spend 20 rejects overdraft** | `test_negative_case_3_reserve_10_spend_20_rejects_overdraft` | **PASSED** |
+| **Negative Case 4: Termination with missing/foreign run** | `test_negative_case_4_termination_with_missing_or_foreign_run_zero_mutations` | **PASSED** |
+| **Negative Case 5: Termination of COMPLETED rejected; exact replay idempotent** | `test_negative_case_5_termination_of_completed_rejected_and_receipt_replay_idempotent` | **PASSED** |
+| **Negative Case 6: Cancellation spend charged once; unknown retains hold** | `test_negative_case_6_cancellation_spend_and_unknown_spend_retention` | **PASSED** |
+| **Negative Case 7: Actual 284cb877 DB upgraded, constraints verified** | `test_negative_case_7_upgrade_from_actual_284cb877_schema` | **PASSED** |
+| **Negative Case 8: Untrusted ADMITTED status forced to SUBMITTED** | `test_negative_case_8_caller_admitted_status_or_fake_receipt_cannot_obtain_trusted_admission` | **PASSED** |
 
 ---
 
 ## 4. Operational Boundaries
 
 1. **Storage-Only Milestone:** CC-03 establishes relational persistence, outbox invariants, funded reservations, and truthful lifecycle state. No live agent daemon process is run in this milestone; storage records do not manufacture measured completion.
-2. **Frontend & Codex Commits Preserved:** Commits `77ba7083` (frontend milestone) and `03da60da` (Codex evidence binding/reconciliation fixes) remain intact; all 23 browser action tests in `tests/test_scrum_board_actions.py` pass without regression.
-3. **No Premature Dispatch (CC-04):** CC-04 daemon dispatch will not begin until CC-03 review acceptance.
+2. **Frontend & Codex Commits Preserved:** Commits `77ba7083` (frontend milestone), `03da60da` (Codex evidence binding fixes), and `d36a85fe` (fixture cleanup) remain intact; all browser and action tests pass without regression.
+3. **No Premature Dispatch (CC-04):** CC-04 daemon dispatch remains strictly gated and will not begin until independent review approval.
