@@ -6,6 +6,9 @@ import json
 import socket
 import time
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 import urllib.request
 from mas.dashboard.server import DashboardServer
 from mas.organization.company import ConsultingEnterprise
@@ -23,6 +26,13 @@ class TestDashboardServer(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from mas.pm.db import PMDatabase
+        directory = tempfile.TemporaryDirectory(prefix="mas-dashboard-test-")
+        cls.addClassCleanup(directory.cleanup)
+        database = PMDatabase(Path(directory.name) / "pm.db")
+        isolated = patch("mas.pm.tools.get_pm_db", return_value=database)
+        isolated.start()
+        cls.addClassCleanup(isolated.stop)
         cls.port = get_free_port()
         cls.enterprise = ConsultingEnterprise(name="Test Dashboard Enterprise")
         cls.server = DashboardServer(cls.enterprise, host="127.0.0.1", port=cls.port, auth_token="test-dashboard-private-token")

@@ -766,11 +766,15 @@ class PMDatabase:
             if manage_conn:
                 c.close()
 
-    def list_projects(self, conn: Optional[sqlite3.Connection] = None) -> List[Project]:
+    def list_projects(self, conn: Optional[sqlite3.Connection] = None, *, include_archived: bool = False) -> List[Project]:
         manage_conn = conn is None
         c = self._get_connection() if manage_conn else conn
         try:
-            cur = c.execute("SELECT * FROM pm_projects ORDER BY created_at ASC")
+            archived = c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pm_project_archives'").fetchone()
+            query = "SELECT * FROM pm_projects"
+            if archived and not include_archived:
+                query += " WHERE NOT EXISTS (SELECT 1 FROM pm_project_archives a WHERE a.project_id=pm_projects.id)"
+            cur = c.execute(query + " ORDER BY created_at ASC")
             rows = cur.fetchall()
             return [
                 Project(
