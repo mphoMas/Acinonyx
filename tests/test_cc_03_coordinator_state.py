@@ -366,7 +366,7 @@ def test_cancellation_versus_late_results(tmp_path):
     db.coordinator.claim_intent("intent-c", "worker-1", 1, 100.0, 30.0)
     db.coordinator.pre_spawn_intent("intent-c", "worker-1", 2, 101.0, "run-c", "att-c")
 
-    # Operator cancels the intent
+    # Operator requests cancellation of the intent
     assert db.coordinator.cancel_intent("intent-c", "User requested cancel") is True
 
     canceled_intent = db.coordinator.get_intent("intent-c")
@@ -384,9 +384,26 @@ def test_cancellation_versus_late_results(tmp_path):
     )
     assert res is False, "Late completion on canceled intent must be strictly rejected"
 
-    # Attempt remains CANCELED
+    # Truthful cancellation: run remains SPAWNING, attempt remains RUNNING until authoritative receipt
+    run = db.coordinator.get_run("run-c")
+    assert run.status == "SPAWNING", "Run must not be marked KILLED without authoritative termination"
     att = db.coordinator.get_attempt("att-c")
-    assert att.status == "CANCELED"
+    assert att.status == "RUNNING", "Attempt must not be marked CANCELED without authoritative termination"
+
+    # Now authoritative termination receipt arrives
+    db.coordinator.record_authoritative_termination(
+        intent_id="intent-c",
+        run_id="run-c",
+        exit_code=137,
+        observed_status="KILLED",
+        tokens_spent=150,
+    )
+    run_after = db.coordinator.get_run("run-c")
+    assert run_after.status == "KILLED"
+    assert run_after.exit_code == 137
+    att_after = db.coordinator.get_attempt("att-c")
+    assert att_after.status == "CANCELED"
+    assert att_after.budget_tokens_spent == 150
 
 
 def test_expired_heartbeat_rejection(tmp_path):
@@ -581,7 +598,7 @@ def test_event_cursor_and_evidence_receipt_uniqueness(tmp_path):
     with pytest.raises(sqlite3.IntegrityError):
         db.coordinator.record_run_event("run-e", 0, "duplicate", {})
 
-    # Evidence receipt recording
+    # Evidence receipt recording with explicit admission status
     rcpt = db.coordinator.record_evidence_receipt(
         evidence_id="ev-1",
         issue_id="i",
@@ -593,8 +610,10 @@ def test_event_cursor_and_evidence_receipt_uniqueness(tmp_path):
         key_id="key-v1",
         signature="sig123",
         canonical_payload={"policy_version": 1},
+        admission_status="SUBMITTED",
     )
     assert rcpt.evidence_id == "ev-1"
+    assert rcpt.admission_status == "SUBMITTED"
 
     # Replay of exact same nonce must raise IntegrityError
     with pytest.raises(sqlite3.IntegrityError):
@@ -610,3 +629,409 @@ def test_event_cursor_and_evidence_receipt_uniqueness(tmp_path):
             signature="sig123",
             canonical_payload={"policy_version": 1},
         )
+
+
+def test_wrong_attempt_and_cross_project_ownership_rejection(tmp_path):
+    """Test 12: Run ownership enforcement - contradictory attempt_id and composite FK constraint."""
+    db = PMDatabase(tmp_path / "ownership.db")
+    db.create_project(Project(id="p1", key="OWN1", name="Owner Proj 1"))
+    db.create_project(Project(id="p2", key="OWN2", name="Owner Proj 2"))
+    db.create_issue(Issue(id="i1", project_id="p1", key="OWN1-1", title="Task 1"))
+    db.create_issue(Issue(id="i2", project_id="p2", key="OWN2-1", title="Task 2"))
+
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p1', 'REF-1', 'task-1', 'i1', 'OWN1-1')
+        """)
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p2', 'REF-2', 'task-2', 'i2', 'OWN2-1')
+        """)
+
+    # Attempt 1 and 2
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-1",
+        intent_id="intent-1",
+        tenant_id="tenant-1",
+        project_id="p1",
+        issue_id="i1",
+        task_id="task-1",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+    )
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-2",
+        intent_id="intent-2",
+        tenant_id="tenant-1",
+        project_id="p2",
+        issue_id="i2",
+        task_id="task-2",
+        attempt_seq=1,
+        adapter_type="codex",
+        payload={},
+    )
+
+    db.coordinator.claim_intent("intent-1", "worker-1", 1, 100.0, 30.0)
+
+    # 1. pre_spawn_intent with contradictory attempt_id must raise ValueError and roll back
+    with pytest.raises(ValueError, match="Contradictory attempt_id"):
+        db.coordinator.pre_spawn_intent(
+            intent_id="intent-1",
+            worker_id="worker-1",
+            assigned_fencing_token=2,
+            now_epoch=101.0,
+            run_id="run-fake-1",
+            attempt_id="att-2",  # Contradictory attempt!
+        )
+
+    # Verify atomic rollback: intent remains CLAIMED, run-fake-1 does NOT exist, attempt att-2 remains PENDING
+    intent_state = db.coordinator.get_intent("intent-1")
+    assert intent_state.status == "CLAIMED"
+    assert db.coordinator.get_run("run-fake-1") is None
+    att2_state = db.coordinator.get_attempt("att-2")
+    assert att2_state.status == "PENDING"
+
+    # 2. Direct SQL insertion violating composite FK (intent_id, attempt_id)
+    conn = db._get_connection()
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            """
+            INSERT INTO pm_coordinator_runs (run_id, intent_id, attempt_id, fencing_token, status)
+            VALUES ('run-bad-fk', 'intent-1', 'att-2', 2, 'SPAWNING')
+            """
+        )
+    conn.close()
+
+
+def test_truthful_cancellation_unlaunched_vs_launched(tmp_path):
+    """Test 13: Truthful cancellation distinguishes unlaunched (PENDING) from launched (PROCESSING)."""
+    db = PMDatabase(tmp_path / "truthful_cancel.db")
+    db.create_project(Project(id="p", key="TC", name="Truthful Cancel"))
+    db.create_issue(Issue(id="i1", project_id="p", key="TC-1", title="Task 1", appetite_tokens=100000))
+    db.create_issue(Issue(id="i2", project_id="p", key="TC-2", title="Task 2", appetite_tokens=100000))
+
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p', 'REF-1', 'task-1', 'i1', 'TC-1')
+        """)
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p', 'REF-2', 'task-2', 'i2', 'TC-2')
+        """)
+
+    # Case A: PENDING intent (provably unlaunched)
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-unlaunched",
+        intent_id="intent-unlaunched",
+        tenant_id="tenant-1",
+        project_id="p",
+        issue_id="i1",
+        task_id="task-1",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=25000,
+    )
+    # Cancel while still PENDING
+    assert db.coordinator.cancel_intent("intent-unlaunched", "Cancelled before claim") is True
+    att_un = db.coordinator.get_attempt("att-unlaunched")
+    intent_un = db.coordinator.get_intent("intent-unlaunched")
+    assert intent_un.status == "CANCELED"
+    assert att_un.status == "CANCELED"
+
+    # Verify reservation ledger released hold
+    conn = db._get_connection()
+    res_un = conn.execute(
+        "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = 'att-unlaunched'"
+    ).fetchone()
+    assert res_un["status"] == "RELEASED"
+
+    # Case B: PROCESSING intent (potentially launched)
+    db.coordinator.create_attempt_with_intent(
+        attempt_id="att-launched",
+        intent_id="intent-launched",
+        tenant_id="tenant-1",
+        project_id="p",
+        issue_id="i2",
+        task_id="task-2",
+        attempt_seq=1,
+        adapter_type="codex",
+        payload={},
+        budget_reservation=25000,
+    )
+    db.coordinator.claim_intent("intent-launched", "worker-x", 1, 100.0, 30.0)
+    db.coordinator.pre_spawn_intent("intent-launched", "worker-x", 2, 101.0, "run-launched")
+
+    # Cancel while PROCESSING
+    assert db.coordinator.cancel_intent("intent-launched", "Operator abort") is True
+
+    intent_launch = db.coordinator.get_intent("intent-launched")
+    run_launch = db.coordinator.get_run("run-launched")
+    att_launch = db.coordinator.get_attempt("att-launched")
+
+    assert intent_launch.status == "CANCEL_REQUESTED"
+    assert intent_launch.fencing_token == 3  # Fencing advanced, retiring worker-x authority
+    assert run_launch.status == "SPAWNING", "Run must remain SPAWNING until authoritative observation"
+    assert att_launch.status == "RUNNING", "Attempt must remain RUNNING until authoritative observation"
+
+    res_launch = conn.execute(
+        "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = 'att-launched'"
+    ).fetchone()
+    assert res_launch["status"] == "HELD", "Reservation must remain HELD while execution state is uncertain"
+    conn.close()
+
+    # Repeated cancellation call is idempotent
+    assert db.coordinator.cancel_intent("intent-launched", "Repeated cancel") is True
+
+
+def test_funded_reservation_ledger_and_capacity_bounds(tmp_path):
+    """Test 14: Funded budget reservations enforced against issue appetite, capacity, and concurrent holds."""
+    db = PMDatabase(tmp_path / "reservation.db")
+    # Project with total budget 10,000, 0 consumed
+    db.create_project(Project(id="p-res", key="RES", name="Res Proj", token_budget=10000, tokens_consumed=0))
+    # Issue with appetite 6,000
+    db.create_issue(Issue(id="i-res", project_id="p-res", key="RES-1", title="Res Task", appetite_tokens=6000))
+
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-res', 'REF-R1', 'task-r1', 'i-res', 'RES-1')
+        """)
+
+    # 1. Negative amount rejected
+    with pytest.raises(ValueError, match="non-negative"):
+        db.coordinator.create_attempt_with_intent(
+            attempt_id="att-neg",
+            intent_id="intent-neg",
+            tenant_id="tenant-1",
+            project_id="p-res",
+            issue_id="i-res",
+            task_id="task-r1",
+            attempt_seq=1,
+            adapter_type="antigravity",
+            payload={},
+            budget_reservation=-500,
+        )
+
+    # 2. Non-integer rejected (boolean or string)
+    with pytest.raises(ValueError, match="integer"):
+        db.coordinator.create_attempt_with_intent(
+            attempt_id="att-bool",
+            intent_id="intent-bool",
+            tenant_id="tenant-1",
+            project_id="p-res",
+            issue_id="i-res",
+            task_id="task-r1",
+            attempt_seq=1,
+            adapter_type="antigravity",
+            payload={},
+            budget_reservation=True,  # bool is not allowed
+        )
+
+    # 3. Exceeds task appetite: request 8,000 when appetite is 6,000
+    with pytest.raises(ValueError, match="exceeds issue appetite"):
+        db.coordinator.create_attempt_with_intent(
+            attempt_id="att-over-appetite",
+            intent_id="intent-over-appetite",
+            tenant_id="tenant-1",
+            project_id="p-res",
+            issue_id="i-res",
+            task_id="task-r1",
+            attempt_seq=1,
+            adapter_type="antigravity",
+            payload={},
+            budget_reservation=8000,
+        )
+
+    # 4. Valid reservation within appetite and capacity: request 5,000
+    att1, intent1 = db.coordinator.create_attempt_with_intent(
+        attempt_id="att-res-1",
+        intent_id="intent-res-1",
+        tenant_id="tenant-1",
+        project_id="p-res",
+        issue_id="i-res",
+        task_id="task-r1",
+        attempt_seq=1,
+        adapter_type="antigravity",
+        payload={},
+        budget_reservation=5000,
+    )
+    assert att1.budget_tokens_allocated == 5000
+
+    # 5. Second attempt on another task in same project: remaining available capacity is 10,000 - 5,000 = 5,000
+    db.create_issue(Issue(id="i-res-2", project_id="p-res", key="RES-2", title="Res Task 2", appetite_tokens=8000))
+    with db.atomic_transaction() as conn:
+        conn.execute("""
+        INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+        VALUES ('p-res', 'REF-R2', 'task-r2', 'i-res-2', 'RES-2')
+        """)
+
+    # Attempting 6,000 must fail because available capacity is only 5,000
+    with pytest.raises(ValueError, match="exceeds available project capacity"):
+        db.coordinator.create_attempt_with_intent(
+            attempt_id="att-res-2",
+            intent_id="intent-res-2",
+            tenant_id="tenant-1",
+            project_id="p-res",
+            issue_id="i-res-2",
+            task_id="task-r2",
+            attempt_seq=1,
+            adapter_type="codex",
+            payload={},
+            budget_reservation=6000,
+        )
+
+    # Attempting 5,000 exactly consumes the remaining available pool
+    att2, intent2 = db.coordinator.create_attempt_with_intent(
+        attempt_id="att-res-2",
+        intent_id="intent-res-2",
+        tenant_id="tenant-1",
+        project_id="p-res",
+        issue_id="i-res-2",
+        task_id="task-r2",
+        attempt_seq=1,
+        adapter_type="codex",
+        payload={},
+        budget_reservation=5000,
+    )
+    assert att2.budget_tokens_allocated == 5000
+
+
+def test_tenant_authority_validation(tmp_path):
+    """Test 15: CoordinatorStore validates tenant identity and write authority under tenant_scope."""
+    from mas.iam import MultiTenantIAM
+    from mas.tenancy import tenant_scope
+    from mas.pm.coordinator import trusted_coordinator_admin_scope
+
+    iam = MultiTenantIAM(signing_secret="disposable-test-key-" * 3)
+    iam.create_tenant("tenant-alpha", "Alpha Org")
+    iam.create_tenant("tenant-beta", "Beta Org")
+
+    # Alpha tenant admin with storage:write and storage:read
+    iam.register_principal("tenant-alpha", "alice", roles={"tenant_admin"})
+    token_alpha = iam.issue_token("tenant-alpha", "alice")
+
+    # Alpha read-only principal (read_only role)
+    iam.register_principal("tenant-alpha", "alice-ro", roles={"read_only"})
+    token_alpha_ro = iam.issue_token("tenant-alpha", "alice-ro")
+
+    root = tmp_path / "tenants"
+
+    # 1. Under tenant-alpha scope, writing with tenant_id='tenant-beta' must be rejected
+    with tenant_scope(iam, token_alpha, "tenant-alpha", root):
+        db_alpha = PMDatabase()
+        db_alpha.create_project(Project(id="p-a", key="ALF", name="Alpha Proj"))
+        db_alpha.create_issue(Issue(id="i-a", project_id="p-a", key="ALF-1", title="Task A"))
+        with db_alpha.atomic_transaction() as conn:
+            conn.execute("""
+            INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+            VALUES ('p-a', 'REF-A', 'task-a', 'i-a', 'ALF-1')
+            """)
+
+        with pytest.raises(PermissionError, match="Tenant authority mismatch"):
+            db_alpha.coordinator.create_attempt_with_intent(
+                attempt_id="att-x",
+                intent_id="intent-x",
+                tenant_id="tenant-beta",  # Mismatch!
+                project_id="p-a",
+                issue_id="i-a",
+                task_id="task-a",
+                attempt_seq=1,
+                adapter_type="antigravity",
+                payload={},
+            )
+
+    # 2. Under tenant-alpha read-only scope, mutation must fail storage:write check
+    with tenant_scope(iam, token_alpha_ro, "tenant-alpha", root):
+        db_alpha_ro = PMDatabase()
+        with pytest.raises(PermissionError, match="Tenant authority unavailable or action denied"):
+            db_alpha_ro.coordinator.create_attempt_with_intent(
+                attempt_id="att-ro",
+                intent_id="intent-ro",
+                tenant_id="tenant-alpha",
+                project_id="p-a",
+                issue_id="i-a",
+                task_id="task-a",
+                attempt_seq=1,
+                adapter_type="antigravity",
+                payload={},
+            )
+
+    # 3. Inside trusted_coordinator_admin_scope, administrative access succeeds
+    with trusted_coordinator_admin_scope():
+        db_admin = PMDatabase(tmp_path / "admin_test.db")
+        db_admin.create_project(Project(id="p-adm", key="ADM", name="Admin Proj"))
+        db_admin.create_issue(Issue(id="i-adm", project_id="p-adm", key="ADM-1", title="Admin Task"))
+        with db_admin.atomic_transaction() as conn:
+            conn.execute("""
+            INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key)
+            VALUES ('p-adm', 'REF-ADM', 'task-adm', 'i-adm', 'ADM-1')
+            """)
+
+        att, intent = db_admin.coordinator.create_attempt_with_intent(
+            attempt_id="att-adm",
+            intent_id="intent-adm",
+            tenant_id="tenant-custom",
+            project_id="p-adm",
+            issue_id="i-adm",
+            task_id="task-adm",
+            attempt_seq=1,
+            adapter_type="antigravity",
+            payload={},
+        )
+        assert att.attempt_id == "att-adm"
+
+
+def test_schema_migration_atomic_rollback_on_injected_failure(tmp_path):
+    """Test 16: Versioned transactional migration rolls back atomically on injected failure."""
+    db_file = tmp_path / "migration_rollback.db"
+    conn = sqlite3.connect(str(db_file), isolation_level=None)
+    with conn:
+        conn.execute("""
+        CREATE TABLE pm_projects (
+            id TEXT PRIMARY KEY, key TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+            description TEXT, token_budget INTEGER NOT NULL DEFAULT 5000000,
+            tokens_consumed INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE pm_schema_migrations (
+            version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+    conn.close()
+
+    # Instantiate PMDatabase
+    db = PMDatabase(db_file)
+
+    # Inject a failure during migration execution by patching conn.execute inside migration block
+    def failing_migrate():
+        c = db._get_connection()
+        with db._lock:
+            c.execute("BEGIN IMMEDIATE;")
+            try:
+                # Step 1: create dummy table
+                c.execute("CREATE TABLE pm_mig_step1 (id TEXT PRIMARY KEY);")
+                # Step 2: inject deliberate error
+                raise sqlite3.OperationalError("Simulated mid-migration disk error")
+            except Exception:
+                c.execute("ROLLBACK;")
+                raise
+            finally:
+                c.close()
+
+    db.migrate_coordinator_schema = failing_migrate
+
+    with pytest.raises(sqlite3.OperationalError, match="Simulated mid-migration"):
+        db.migrate_coordinator_schema()
+
+    # Verify atomic rollback: pm_mig_step1 was rolled back completely
+    verify_conn = db._get_connection()
+    tables = [r[0] for r in verify_conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
+    verify_conn.close()
+    assert "pm_mig_step1" not in tables, "Table created before failure must be completely rolled back"

@@ -1,60 +1,87 @@
-# CC-03 Delivery: Durable Coordinator State and Outbox Storage
+# CC-03 Delivery: Durable Coordinator State and Outbox Storage (Remediated)
 
-**Delivery Date:** 2026-10-11  
+**Delivery Date:** 2026-10-12  
 **Target Branch:** `feat/scrum-board-automation`  
-**Delivery Scope:** CC-03 — Durable coordinator state, relational persistence schemas, outbox storage, and recovery tests.  
+**Delivery Scope:** CC-03 — Durable coordinator state, relational persistence schemas, outbox storage, funded reservation ledger, tenant authority, truthful cancellation, and failure-recovery tests.  
 **Implementation Owner:** Antigravity (Backend, Engine, Runtime Integration)  
 **Reviewer:** Codex (Frontend, UI/UX, Interface Requirements) / Independent Reviewer  
-**Status:** **SUBMITTED FOR REVIEW** (Not self-certified as DONE per delivery ownership agreement).
+**Status:** **SUBMITTED FOR REVIEW** (Strictly following delivery ownership agreement; not self-certified as DONE).
 
 ---
 
-## 1. Executive Summary
+## 1. Executive Summary & Resolution of Blockers
 
-This delivery implements the complete persistence foundation and atomic lifecycle state management for **Capable Coordinator (CC-03)** in accordance with the accepted CC-02 contract specification ([`CC_02_COORDINATOR_CONTRACT.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/CC_02_COORDINATOR_CONTRACT.md)) and the resolution of all previous review findings.
+This updated delivery resolves all five blockers and medium-severity findings detailed in [`CC_03_INDEPENDENT_REVIEW.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/CC_03_INDEPENDENT_REVIEW.md) (`fae7d566`):
 
-The implementation establishes durable outbox records, attempts, physical runs, event cursors, and cryptographic evidence receipts without adding live agent dispatch or claiming runtime execution.
+1. **Run Ownership Enforcement & Composite Relational Integrity:**
+   - In `CoordinatorStore.pre_spawn_intent`, the attempt identity is derived strictly from the intent record (`SELECT attempt_id FROM pm_coordinator_intents WHERE intent_id = ?`).
+   - If a caller supplies an optional `attempt_id`, it is strictly verified against `intent["attempt_id"]`. Any contradiction immediately raises `ValueError` and rolls back the transaction.
+   - Enforced composite foreign key `CONSTRAINT uq_intent_attempt_pair UNIQUE (intent_id, attempt_id)` on `pm_coordinator_intents` and composite foreign key `FOREIGN KEY(intent_id, attempt_id) REFERENCES pm_coordinator_intents(intent_id, attempt_id) ON DELETE CASCADE` on `pm_coordinator_runs`.
+   - Covered by independent regression tests attempting contradictory attempt IDs and cross-project assignments with verified rollback.
 
-### Key Architectural Guarantees:
-1. **Non-Destructive Additive Migration:** Existing `pm_task_mappings`, `pm_issues`, `pm_projects`, and `pm_evidence_links` schemas and records are preserved unconditionally. The additive column `legacy_task_id` is introduced alongside composite identity indices (`uq_coord_mapping_identity`, `uq_coord_issue_project`) to enable enforceable relational integrity.
-2. **Strict Relational Ownership:** Multi-column composite foreign keys enforce that attempts, outbox intents, and physical runs cannot cross tenant, project, or task boundaries. Contradictory ownership is rejected directly at the SQLite database engine level.
-3. **Atomic CAS Claims (Unlaunched Work Only):** Compare-And-Swap dispatch claims exclusively target `status = 'PENDING'` intents. Expired `PROCESSING` work is excluded from the claim path, eliminating redispatch hazards.
-4. **Guarded Pre-Spawn Persistence (`SPAWN_INTENT`):** Before any physical run is spawned, the worker commits `status = 'PROCESSING'` and registers a `SPAWNING` run in a single atomic transaction requiring matching assigned worker, active generation token, and unexpired lease.
-5. **Durable `UNKNOWN_EXECUTION` & Pessimistic Budget Holds:** When an in-flight worker's lease expires post-spawn, the reaper transitions the intent and attempt to `UNKNOWN_EXECUTION` and increments the fencing token. Automatic retries are strictly halted, and the full allocated token reservation is retained as a hold against project quotas.
-6. **Cancellation vs. Late Results:** Cancellation advances the generation token atomically. Stale workers attempting completion after cancellation or reaping receive zero updated rows; late results are dropped.
+2. **Truthful Cancellation:**
+   - Distinguishes cancellation intent from observed runtime outcome.
+   - For provably unlaunched work (`status = 'PENDING'`), cancellation immediately transitions both intent and attempt to `CANCELED` and releases the reservation hold in the ledger.
+   - For potentially launched work (`status IN ('CLAIMED', 'PROCESSING')`), `cancel_intent` transitions the intent to `CANCEL_REQUESTED`, advances the fencing token to retire worker authority, clears `worker_id`, and advances the attempt's fencing token.
+   - Crucially, physical runs are **NOT** fabricated as `KILLED` and attempts are **NOT** marked `CANCELED` without an authoritative termination receipt (`record_authoritative_termination()`). Token budget holds remain `HELD`.
+   - Repeated cancellation requests are fully idempotent.
+
+3. **Durable Funded Budget Reservation Ledger:**
+   - Created table `pm_coordinator_reservations` tracking `reservation_id`, `tenant_id`, `project_id`, `issue_id`, `attempt_id`, `authorization_ref`, `amount`, `settled_amount`, `status ('HELD', 'SETTLED', 'RELEASED')`, and timestamps.
+   - In `create_attempt_with_intent` (inside an atomic `BEGIN IMMEDIATE` transaction):
+     - Validates that `budget_reservation` is a finite non-negative integer (rejecting bools, floats, strings, and negatives).
+     - Validates against issue appetite: `budget_reservation <= issue.appetite_tokens`.
+     - Validates against available project capacity: `available = token_budget - tokens_consumed - open_holds`, where `open_holds = SUM(amount - settled_amount) WHERE project_id = ? AND status = 'HELD'`. Rejects concurrent over-allocations.
+     - Atomically logs the funded hold in `pm_coordinator_reservations`.
+
+4. **Tenant Authority & Scoped Access:**
+   - `CoordinatorStore` validates tenant authority on all mutations against active `current_binding()`.
+   - Verifies `binding.identity.tenant_id == tenant_id`, rejecting mismatched tenant IDs with `PermissionError`.
+   - Enforces `binding.require("storage:write")`.
+   - Provides explicit `trusted_coordinator_admin_scope()` for local internal administrative execution.
+   - Tested under multi-tenant IAM with valid, mismatched, and read-only credentials.
+
+5. **Versioned Transactional Migration & Injected Rollback Verification:**
+   - Implemented `pm_schema_migrations` table tracking migration version (`2026101201`), name (`cc_03_coordinator_state`), checksum (`cc03_sha256_composite_ownership_v1`), and application timestamp.
+   - Migration executes inside an explicit `BEGIN IMMEDIATE;` ... `COMMIT;` transaction with `PRAGMA integrity_check`.
+   - Additive column migrations inspect `PRAGMA table_info` before applying alterations.
+   - Regression test injects a failure midway through migration to prove all-or-nothing rollback.
+
+6. **Separating Observations from Claims (Raw vs. Admitted Evidence):**
+   - Added `admission_status ('SUBMITTED', 'ADMITTED', 'REJECTED')` to `pm_coordinator_evidence_receipts`.
+   - Raw receipts submitted by workers default to `SUBMITTED`, explicitly quarantining untrusted submissions until cryptographic admission.
+   - `complete_intent` requires authoritative candidate commit SHA and exit code before settling tokens and recording `SUCCEEDED`/`EXITED`.
 
 ---
 
 ## 2. Implemented Components & Schemas
 
-### 2.1 Additive Persistence Schema ([`mas/pm/db.py`](file:///home/acinonyx/Desktop/MAS/mas/pm/db.py))
-- **`pm_coordinator_attempts`:** Tracks attempt iterations (`attempt_seq`), token budget reservation (`budget_tokens_allocated`), token spend (`budget_tokens_spent`), candidate commit SHA, status (`PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `UNKNOWN_EXECUTION`, `CANCELED`), and fencing generation.
-- **`pm_coordinator_intents`:** Outbox storage tracking adapter type (`antigravity`, `codex`, `synthetic`), dispatch status, worker assignment, lease expiration/heartbeats, payload, and monotonic fencing generation.
-- **`pm_coordinator_runs`:** Physical execution tracking with `uq_physical_dispatch UNIQUE (intent_id, fencing_token)`, enforcing that only one physical process run can be admitted per dispatch generation.
-- **`pm_coordinator_events`:** Monotonic event cursor stream tracking with `uq_run_cursor UNIQUE (run_id, cursor_seq)`.
-- **`pm_coordinator_evidence_receipts`:** Admitted evidence store enforcing `nonce UNIQUE` for cryptographic replay protection.
+### 2.1 Relational Schemas ([`mas/pm/db.py`](file:///home/acinonyx/Desktop/MAS/mas/pm/db.py))
+- `pm_schema_migrations`: Versioned migration ledger.
+- `pm_coordinator_attempts`: Tracks attempts, composite identity, allocated/spent tokens, and fencing tokens.
+- `pm_coordinator_intents`: Outbox storage with composite `(intent_id, attempt_id)` unique constraint.
+- `pm_coordinator_runs`: Physical execution tracking with composite FK `(intent_id, attempt_id)` and `uq_physical_dispatch UNIQUE (intent_id, fencing_token)`.
+- `pm_coordinator_reservations`: Durable funded budget reservation ledger with status `HELD`, `SETTLED`, or `RELEASED`.
+- `pm_coordinator_events`: Monotonic event cursor stream tracking with `uq_run_cursor UNIQUE (run_id, cursor_seq)`.
+- `pm_coordinator_evidence_receipts`: Replay-protected receipt store with explicit `admission_status`.
 
 ### 2.2 Data Models ([`mas/pm/models.py`](file:///home/acinonyx/Desktop/MAS/mas/pm/models.py))
-Added strongly typed Pydantic models:
 - `CoordinatorAttempt`
 - `CoordinatorIntent`
 - `CoordinatorRun`
 - `CoordinatorEvent`
-- `CoordinatorEvidenceReceipt`
-- Updated `TaskMapping` with optional `legacy_task_id: Optional[str] = None`.
+- `CoordinatorEvidenceReceipt` (with `admission_status: str = "SUBMITTED"`)
+- `CoordinatorReservation` (with `status: str = "HELD"`, amounts, refs)
 
 ### 2.3 Coordinator Service Engine ([`mas/pm/coordinator.py`](file:///home/acinonyx/Desktop/MAS/mas/pm/coordinator.py))
-`CoordinatorStore` provides atomic lifecycle operations:
-- `create_attempt()` & `create_intent()`: Enforce composite relational ownership.
-- `create_attempt_with_intent()`: Atomic transaction reserving execution budget and staging outbox intent.
-- `claim_intent()`: Atomic CAS claim query advancing fencing token.
-- `pre_spawn_intent()`: Guarded pre-spawn persistence inserting run record before process launch.
-- `heartbeat_intent()`: Renews unexpired lease; rejects expired leases.
-- `complete_intent()`: Guarded completion settling actual token spend and updating run status.
-- `reap_expired_leases()`: Differentiates pre-spawn (`FAILED`) vs post-spawn (`UNKNOWN_EXECUTION`) lease expiration.
-- `cancel_intent()`: Advances generation and cancels intent/attempt/run.
-- `record_run_event()`: Ingests streaming event cursors.
-- `record_evidence_receipt()`: Enforces nonce replay prevention.
+- `trusted_coordinator_admin_scope()`
+- `create_attempt_with_intent()` with funded capacity validation and reservation ledger recording.
+- `claim_intent()` with atomic CAS update.
+- `pre_spawn_intent()` with strictly derived attempt ownership and composite FK linking.
+- `cancel_intent()` with truthful cancellation distinguishing unlaunched from potentially running work.
+- `record_authoritative_termination()` for processing actual adapter/observer termination receipts.
+- `complete_intent()` requiring authoritative candidate and exit code.
+- `record_evidence_receipt()` with explicit admission status.
 
 ---
 
@@ -69,13 +96,13 @@ python3 -m pytest \
   tests/test_sba_03_plan_publication.py \
   tests/test_scrum_board_actions.py -q
 ```
-**Outcome:** `90 passed in 31.16s`.
+**Outcome:** `95 passed in 33.98s` (0 skips, 0 failures).
 
 ### 3.2 Full Repository Quality Gate Execution
 ```bash
 bash scripts/run_quality_gate.sh
 ```
-**Outcome:** `629 passed, 20 skipped in 144.12s (0:02:24)`.  
+**Outcome:** `634 passed, 20 skipped in 155.55s (0:02:35)`.  
 **Verdict:** `✅ ALL QUALITY GATES PASSED (5/5)`.
 
 ### 3.3 Verification Matrix of Required Scenarios
@@ -93,11 +120,16 @@ bash scripts/run_quality_gate.sh
 | **Duplicate Physical-Run Rejection** | `test_duplicate_physical_run_rejection` | **PASSED** |
 | **Uncertain Execution Budget Hold Retention** | `test_uncertain_execution_retains_budget_holds` | **PASSED** |
 | **Event Cursor & Nonce Replay Prevention** | `test_event_cursor_and_evidence_receipt_uniqueness` | **PASSED** |
+| **Run Ownership & Contradictory Attempt Rejection** | `test_wrong_attempt_and_cross_project_ownership_rejection` | **PASSED** |
+| **Truthful Cancellation: Unlaunched vs. Launched** | `test_truthful_cancellation_unlaunched_vs_launched` | **PASSED** |
+| **Funded Reservation Ledger & Capacity Bounds** | `test_funded_reservation_ledger_and_capacity_bounds` | **PASSED** |
+| **Tenant Authority & Scoped Access** | `test_tenant_authority_validation` | **PASSED** |
+| **Schema Migration Atomic Rollback on Injected Failure** | `test_schema_migration_atomic_rollback_on_injected_failure` | **PASSED** |
 
 ---
 
-## 4. Operational Boundaries & Next Steps
+## 4. Operational Boundaries
 
-1. **Storage-Only Milestone:** Storage records attest to durable coordinator state and outbox tracking. No live CLI processes (`agy` or `codex exec`) were invoked in this milestone; execution was not simulated as completed.
-2. **Frontend Preservation:** Frontend milestone commit `77ba7083` remains intact; all 23 browser action tests in `tests/test_scrum_board_actions.py` pass without regression.
-3. **Next Dependency-Ready Task:** **CC-04 (Outbox Worker & Lease Reaper Background Daemon)** — Implementation of background polling worker, lease reaper loop, and transition dispatching based on this persistence layer.
+1. **Storage-Only Milestone:** CC-03 establishes relational persistence, outbox invariants, funded reservations, and truthful lifecycle state. No live agent daemon process is run in this milestone; storage records do not manufacture measured completion.
+2. **Frontend & Codex Commits Preserved:** Commits `77ba7083` (frontend milestone) and `03da60da` (Codex evidence binding/reconciliation fixes) remain intact; all 23 browser action tests in `tests/test_scrum_board_actions.py` pass without regression.
+3. **No Premature Dispatch (CC-04):** CC-04 daemon dispatch will not begin until CC-03 review acceptance.
