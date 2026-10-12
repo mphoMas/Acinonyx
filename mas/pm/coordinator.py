@@ -423,11 +423,12 @@ class CoordinatorStore:
 
             # Verify funded reservation exists and is HELD
             res_row = conn.execute(
-                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                "SELECT amount, status FROM pm_coordinator_reservations WHERE attempt_id = ?",
                 (actual_attempt_id,),
             ).fetchone()
-            if res_row and res_row["status"] != "HELD":
-                return False
+            if res_row:
+                if res_row["status"] != "HELD" or res_row["amount"] < 0:
+                    return False
 
             # 3. Atomic CAS transition CLAIMED -> PROCESSING
             cursor = conn.execute(

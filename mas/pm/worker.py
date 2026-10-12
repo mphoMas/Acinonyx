@@ -142,6 +142,9 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         status_override: Optional[str] = None,
         attempt_id_override: Optional[str] = None,
         run_id_override: Optional[str] = None,
+        ignore_stop_signal: bool = False,
+        on_stop: Optional[Callable[[], None]] = None,
+        late_events: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.exit_code = exit_code
         self.tokens_billed = tokens_billed
@@ -152,6 +155,9 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         self.status_override = status_override
         self.attempt_id_override = attempt_id_override
         self.run_id_override = run_id_override
+        self.ignore_stop_signal = ignore_stop_signal
+        self.on_stop = on_stop
+        self.late_events = late_events or []
 
     def execute(
         self,
@@ -168,20 +174,30 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         elapsed = 0.0
         while elapsed < self.duration_seconds:
             if stop_event and stop_event.is_set():
-                return AdapterExecutionResult(
-                    attempt_id=self.attempt_id_override or request.attempt_id,
-                    run_id=self.run_id_override or run_id,
-                    status="CANCELED",
-                    exit_code=130,
-                    tokens_billed=self.tokens_billed if self.tokens_billed is not None else 0,
-                    duration_seconds=elapsed,
-                )
+                if self.on_stop:
+                    try:
+                        self.on_stop()
+                    except Exception:
+                        pass
+                if not self.ignore_stop_signal:
+                    return AdapterExecutionResult(
+                        attempt_id=self.attempt_id_override or request.attempt_id,
+                        run_id=self.run_id_override or run_id,
+                        status="CANCELED",
+                        exit_code=130,
+                        tokens_billed=self.tokens_billed if self.tokens_billed is not None else 0,
+                        duration_seconds=elapsed,
+                    )
             sleep_time = min(step, self.duration_seconds - elapsed)
             time.sleep(sleep_time)
             elapsed += sleep_time
 
         if self.simulate_crash:
             raise RuntimeError("Synthetic simulated execution crash / mid-run failure")
+
+        if emit_event and self.late_events:
+            for ev in self.late_events:
+                emit_event(ev.get("type", "PROGRESS"), ev.get("data", {}))
 
         effective_status = self.status_override or ("SUCCEEDED" if self.exit_code == 0 else "FAILED")
         return AdapterExecutionResult(
@@ -194,6 +210,11 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
             runtime_session_id=f"synthetic-session-{run_id}",
             candidate_commit_sha=self.candidate_commit_sha if (effective_status == "SUCCEEDED" and self.exit_code == 0) else None,
         )
+
+
+QUALIFIED_ADAPTER_REGISTRY: frozenset[type] = frozenset({
+    SyntheticExecutionAdapter,
+})
 
 
 class CoordinatorAdmissionEngine:
@@ -436,8 +457,19 @@ class CoordinatorWorker:
         self.db = db
         self.store = db.coordinator
         self.worker_id = worker_id
+        if not (isinstance(execution_timeout_s, (int, float)) and not isinstance(execution_timeout_s, bool) and execution_timeout_s > 0):
+            raise ValueError(f"execution_timeout_s must be a finite positive number, got {execution_timeout_s}")
+        if cleanup_timeout_s is not None and not (isinstance(cleanup_timeout_s, (int, float)) and not isinstance(cleanup_timeout_s, bool) and cleanup_timeout_s > 0):
+            raise ValueError(f"cleanup_timeout_s must be a finite positive number, got {cleanup_timeout_s}")
+
         selected_adapter = adapter or SyntheticExecutionAdapter()
-        # Enforce qualified adapter policy: adapter must explicitly declare bounded stop support
+        # Enforce qualified adapter policy via immutable registry:
+        # Reject unknown adapter classes and arbitrary subclasses, even if they declare supports_bounded_stop = True
+        if type(selected_adapter) not in QUALIFIED_ADAPTER_REGISTRY:
+            raise AdapterNotQualifiedError(
+                f"Adapter {type(selected_adapter).__name__} is not in the immutable qualified adapter registry. "
+                f"Arbitrary injected classes and subclasses cannot self-declare qualification."
+            )
         if not getattr(selected_adapter, "supports_bounded_stop", False):
             raise AdapterNotQualifiedError(
                 f"Adapter {type(selected_adapter).__name__} does not satisfy qualification policy: "
@@ -481,6 +513,20 @@ class CoordinatorWorker:
 
         assigned_fencing = updated_intent.fencing_token
         run_id = f"run_{intent.intent_id}_{assigned_fencing}"
+
+        # Validate adapter routing compatibility
+        if updated_intent.adapter_type != "synthetic":
+            logger.error(
+                f"Unsupported adapter_type '{updated_intent.adapter_type}' for worker {self.worker_id}; "
+                f"only synthetic adapter execution is supported."
+            )
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"UNSUPPORTED_ADAPTER_TYPE_{updated_intent.adapter_type}",
+            )
+            return False
 
         # Revalidate admitted policy version before pre-spawn
         payload = updated_intent.payload or {}
