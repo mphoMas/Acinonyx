@@ -486,6 +486,23 @@ class CoordinatorEvidenceReceipt(BaseModel):
     key_id: str
     signature: str
     canonical_payload: Dict[str, Any] = Field(default_factory=dict)
+    admission_status: str = "SUBMITTED"  # "SUBMITTED" | "ADMITTED" | "REJECTED"
     created_at: str = ""
+
+
+class CoordinatorReservation(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    reservation_id: str
+    tenant_id: str
+    project_id: str
+    issue_id: str
+    attempt_id: str
+    authorization_ref: str
+    amount: int
+    settled_amount: int = 0
+    status: str = "HELD"  # "HELD" | "SETTLED" | "RELEASED"
+    created_at: str = ""
+    settled_at: Optional[str] = None
 
 

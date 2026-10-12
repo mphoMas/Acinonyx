@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,6 +22,23 @@ from mas.pm.models import (
     CoordinatorRun,
 )
 
+_trusted_coord_admin: ContextVar[bool] = ContextVar("trusted_coord_admin", default=False)
+
+
+def is_trusted_coord_admin() -> bool:
+    """Returns True if trusted coordinator administrative mode is active."""
+    return _trusted_coord_admin.get()
+
+
+@contextmanager
+def trusted_coordinator_admin_scope(enabled: bool = True):
+    """Context manager to explicitly grant trusted administrative authority for local/internal coordinator operations."""
+    token = _trusted_coord_admin.set(enabled)
+    try:
+        yield
+    finally:
+        _trusted_coord_admin.reset(token)
+
 
 class CoordinatorStore:
     """Persistence and atomic lifecycle manager for the Capable Coordinator."""
@@ -29,6 +48,24 @@ class CoordinatorStore:
 
     def _now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _validate_tenant_authority(self, tenant_id: str) -> None:
+        """
+        Validates that the current tenant context matches tenant_id and has write authority.
+        Passes if inside trusted_coordinator_admin_scope or if tenant binding is verified.
+        """
+        if is_trusted_coord_admin():
+            return
+
+        from mas.tenancy import current_binding
+        binding = current_binding()
+        if binding is not None:
+            if binding.identity.tenant_id != tenant_id:
+                raise PermissionError(
+                    f"Tenant authority mismatch: binding has '{binding.identity.tenant_id}', requested '{tenant_id}'"
+                )
+            # Require write authority
+            binding.require("storage:write")
 
     def create_attempt(
         self,
@@ -45,6 +82,7 @@ class CoordinatorStore:
         Creates an attempt record enforcing composite ownership foreign keys.
         Rejects contradictory project, issue, or task_id mappings.
         """
+        self._validate_tenant_authority(tenant_id)
         manage_conn = conn is None
         c = self.db._get_connection() if manage_conn else conn
         now = self._now_iso()
@@ -101,6 +139,7 @@ class CoordinatorStore:
         Creates a PENDING coordinator outbox intent record.
         Enforces foreign key ownership against attempt_id and tenant/project/task.
         """
+        self._validate_tenant_authority(tenant_id)
         manage_conn = conn is None
         c = self.db._get_connection() if manage_conn else conn
         now = self._now_iso()
@@ -156,9 +195,65 @@ class CoordinatorStore:
         adapter_type: str,
         payload: Dict[str, Any],
         budget_reservation: int = 0,
+        authorization_ref: Optional[str] = None,
     ) -> Tuple[CoordinatorAttempt, CoordinatorIntent]:
-        """Atomically creates both attempt and intent in one transaction with budget reservation."""
+        """
+        Atomically creates both attempt and intent in one transaction with funded budget reservation.
+        Validates finite non-negative integer amount against issue appetite and available project capacity.
+        Records reservation in pm_coordinator_reservations ledger.
+        """
+        self._validate_tenant_authority(tenant_id)
+
+        # 1. Validate reservation amount type and bounds
+        if not isinstance(budget_reservation, int) or isinstance(budget_reservation, bool):
+            raise ValueError(f"budget_reservation must be an integer, got {type(budget_reservation).__name__}")
+        if budget_reservation < 0:
+            raise ValueError(f"budget_reservation must be non-negative, got {budget_reservation}")
+
         with self.db.atomic_transaction() as conn:
+            # 2. Check issue appetite
+            issue_row = conn.execute(
+                "SELECT appetite_tokens FROM pm_issues WHERE id = ?",
+                (issue_id,),
+            ).fetchone()
+            if not issue_row:
+                raise ValueError(f"Issue {issue_id} not found")
+
+            issue_appetite = issue_row["appetite_tokens"]
+            if budget_reservation > issue_appetite:
+                raise ValueError(
+                    f"Requested reservation {budget_reservation} exceeds issue appetite {issue_appetite}"
+                )
+
+            # 3. Check project available capacity: token_budget - tokens_consumed - open_holds
+            proj_row = conn.execute(
+                "SELECT token_budget, tokens_consumed FROM pm_projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+            if not proj_row:
+                raise ValueError(f"Project {project_id} not found")
+
+            token_budget = proj_row["token_budget"]
+            tokens_consumed = proj_row["tokens_consumed"]
+
+            holds_row = conn.execute(
+                """
+                SELECT COALESCE(SUM(amount - settled_amount), 0) AS open_holds
+                FROM pm_coordinator_reservations
+                WHERE project_id = ? AND status = 'HELD'
+                """,
+                (project_id,),
+            ).fetchone()
+            open_holds = holds_row["open_holds"] if holds_row else 0
+
+            available_capacity = token_budget - tokens_consumed - open_holds
+            if budget_reservation > available_capacity:
+                raise ValueError(
+                    f"Requested reservation {budget_reservation} exceeds available project capacity {available_capacity} "
+                    f"(budget={token_budget}, consumed={tokens_consumed}, active_holds={open_holds})"
+                )
+
+            # 4. Create attempt and intent
             attempt = self.create_attempt(
                 attempt_id=attempt_id,
                 tenant_id=tenant_id,
@@ -180,6 +275,30 @@ class CoordinatorStore:
                 payload=payload,
                 conn=conn,
             )
+
+            # 5. Record funded reservation in ledger if reservation > 0
+            res_id = f"res_{attempt_id}"
+            auth_ref = authorization_ref or f"auth_{attempt_id}"
+            now = self._now_iso()
+            conn.execute(
+                """
+                INSERT INTO pm_coordinator_reservations (
+                    reservation_id, tenant_id, project_id, issue_id, attempt_id,
+                    authorization_ref, amount, settled_amount, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'HELD', ?)
+                """,
+                (
+                    res_id,
+                    tenant_id,
+                    project_id,
+                    issue_id,
+                    attempt_id,
+                    auth_ref,
+                    budget_reservation,
+                    now,
+                ),
+            )
+
             return attempt, intent
 
     def claim_intent(
@@ -235,11 +354,28 @@ class CoordinatorStore:
     ) -> bool:
         """
         Atomically transitions CLAIMED intent to PROCESSING before launching process.
+        Derives attempt_id strictly from the intent; rejects any contradictory supplied attempt_id.
         Requires active unexpired lease, assigned worker, and matching fencing token.
-        In the same transaction, updates attempt to RUNNING and records SPAWNING physical run.
+        In the same transaction, updates attempt to RUNNING and records SPAWNING physical run
+        with composite (intent_id, attempt_id) foreign key constraint.
         """
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            # 1. Fetch intent and verify attempt_id consistency
+            intent_row = conn.execute(
+                "SELECT attempt_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_row:
+                return False
+
+            actual_attempt_id = intent_row["attempt_id"]
+            if attempt_id is not None and attempt_id != actual_attempt_id:
+                raise ValueError(
+                    f"Contradictory attempt_id supplied: intent belongs to '{actual_attempt_id}', got '{attempt_id}'"
+                )
+
+            # 2. Atomic CAS transition CLAIMED -> PROCESSING
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -263,33 +399,26 @@ class CoordinatorStore:
             if cursor.rowcount != 1:
                 return False
 
-            # Retrieve attempt_id if not supplied
-            att_id = attempt_id
-            if not att_id:
-                row = conn.execute(
-                    "SELECT attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
-                    (intent_id,),
-                ).fetchone()
-                if not row:
-                    return False
-                att_id = row["attempt_id"]
-
-            conn.execute(
+            # 3. Update attempt to RUNNING
+            att_cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_attempts
                 SET status = 'RUNNING'
                 WHERE attempt_id = ?
                 """,
-                (att_id,),
+                (actual_attempt_id,),
             )
+            if att_cursor.rowcount != 1:
+                return False
 
+            # 4. Insert physical run linking composite (intent_id, attempt_id)
             conn.execute(
                 """
                 INSERT INTO pm_coordinator_runs (
                     run_id, intent_id, attempt_id, fencing_token, status, started_at
                 ) VALUES (?, ?, ?, ?, 'SPAWNING', ?)
                 """,
-                (run_id, intent_id, att_id, assigned_fencing_token, now_iso),
+                (run_id, intent_id, actual_attempt_id, assigned_fencing_token, now_iso),
             )
             return True
 
@@ -342,11 +471,16 @@ class CoordinatorStore:
         now_epoch: float,
         candidate_commit_sha: Optional[str] = None,
         tokens_spent: int = 0,
+        exit_code: int = 0,
     ) -> bool:
         """
-        Atomically records task completion and settles token spend.
+        Atomically records task completion, settles token spend and reservation ledger.
         Requires matching PROCESSING state, assigned worker, generation, and active lease.
+        Requires non-null candidate_commit_sha and authoritative exit_code.
         """
+        if not candidate_commit_sha:
+            raise ValueError("Authoritative candidate_commit_sha required to complete intent")
+
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
             cursor = conn.execute(
@@ -372,11 +506,13 @@ class CoordinatorStore:
                 return False
 
             row = conn.execute(
-                "SELECT attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT attempt_id, project_id FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if row:
                 att_id = row["attempt_id"]
+                proj_id = row["project_id"]
+
                 conn.execute(
                     """
                     UPDATE pm_coordinator_attempts
@@ -389,14 +525,37 @@ class CoordinatorStore:
                     (candidate_commit_sha, tokens_spent, now_iso, att_id),
                 )
 
+                # Settle reservation in ledger
+                conn.execute(
+                    """
+                    UPDATE pm_coordinator_reservations
+                    SET status = 'SETTLED',
+                        settled_amount = ?,
+                        settled_at = ?
+                    WHERE attempt_id = ? AND status = 'HELD'
+                    """,
+                    (tokens_spent, now_iso, att_id),
+                )
+
+                # Deduct spent tokens from project consumed pool
+                conn.execute(
+                    """
+                    UPDATE pm_projects
+                    SET tokens_consumed = tokens_consumed + ?
+                    WHERE id = ?
+                    """,
+                    (tokens_spent, proj_id),
+                )
+
             conn.execute(
                 """
                 UPDATE pm_coordinator_runs
                 SET status = 'EXITED',
+                    exit_code = ?,
                     ended_at = ?
                 WHERE intent_id = ? AND fencing_token = ?
                 """,
-                (now_iso, intent_id, assigned_fencing_token),
+                (exit_code, now_iso, intent_id, assigned_fencing_token),
             )
             return True
 
@@ -492,11 +651,67 @@ class CoordinatorStore:
 
     def cancel_intent(self, intent_id: str, reason: str = "Canceled by operator") -> bool:
         """
-        Atomically cancels an active intent.
-        Retires generation token and updates attempt to CANCELED.
+        Atomically requests cancellation of an intent.
+        Truthful cancellation: distinguishes cancellation request from observed process outcome.
+        - If PENDING: unlaunched work; intent -> CANCELED, attempt -> CANCELED, releases budget hold.
+        - If CLAIMED / PROCESSING: potentially launched work; intent -> CANCEL_REQUESTED,
+          fencing_token advanced to retire worker authority, worker_id cleared.
+          Does NOT mark runs KILLED or attempts CANCELED without observed termination.
+          Budget holds remain HELD pending authoritative termination.
+        - Idempotent: repeated calls on CANCEL_REQUESTED or already terminated intents return True or False safely.
         """
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
+            intent_row = conn.execute(
+                "SELECT status, attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_row:
+                return False
+
+            curr_status = intent_row["status"]
+            att_id = intent_row["attempt_id"]
+
+            # If already finalized or already in CANCEL_REQUESTED
+            if curr_status in ("COMPLETED", "FAILED", "UNKNOWN_EXECUTION", "CANCELED"):
+                return False
+            if curr_status == "CANCEL_REQUESTED":
+                return True  # Idempotent
+
+            if curr_status == "PENDING":
+                # Provably unlaunched work: cancel immediately and release hold
+                conn.execute(
+                    """
+                    UPDATE pm_coordinator_intents
+                    SET status = 'CANCELED',
+                        fencing_token = fencing_token + 1,
+                        updated_at = :now_iso
+                    WHERE intent_id = :intent_id
+                    """,
+                    {"intent_id": intent_id, "now_iso": now_iso},
+                )
+                conn.execute(
+                    """
+                    UPDATE pm_coordinator_attempts
+                    SET status = 'CANCELED',
+                        failure_reason = ?,
+                        finished_at = ?
+                    WHERE attempt_id = ?
+                    """,
+                    (reason, now_iso, att_id),
+                )
+                conn.execute(
+                    """
+                    UPDATE pm_coordinator_reservations
+                    SET status = 'RELEASED',
+                        settled_at = ?
+                    WHERE attempt_id = ? AND status = 'HELD'
+                    """,
+                    (now_iso, att_id),
+                )
+                return True
+
+            # curr_status in ('CLAIMED', 'PROCESSING'): potentially launched work
             cursor = conn.execute(
                 """
                 UPDATE pm_coordinator_intents
@@ -505,37 +720,87 @@ class CoordinatorStore:
                     worker_id = NULL,
                     updated_at = :now_iso
                 WHERE intent_id = :intent_id
-                  AND status NOT IN ('COMPLETED', 'FAILED', 'UNKNOWN_EXECUTION', 'CANCELED')
+                  AND status IN ('CLAIMED', 'PROCESSING')
                 """,
                 {"intent_id": intent_id, "now_iso": now_iso},
             )
-            if cursor.rowcount != 1:
-                return False
+            # Advance attempt fencing token without fabricating KILLED/CANCELED
+            conn.execute(
+                """
+                UPDATE pm_coordinator_attempts
+                SET fencing_token = fencing_token + 1
+                WHERE attempt_id = ?
+                """,
+                (att_id,),
+            )
+            # NOTE: Runs remain in SPAWNING/STREAMING; budget holds remain HELD until authoritative receipt.
+            return cursor.rowcount == 1
 
-            row = conn.execute(
-                "SELECT attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+    def record_authoritative_termination(
+        self,
+        intent_id: str,
+        run_id: str,
+        exit_code: int,
+        observed_status: str = "KILLED",
+        tokens_spent: int = 0,
+    ) -> bool:
+        """
+        Records authoritative termination receipt from adapter/process observer.
+        Concludes CANCEL_REQUESTED intent to CANCELED/FAILED and run to KILLED/EXITED.
+        Settles or releases budget holds.
+        """
+        now_iso = self._now_iso()
+        with self.db.atomic_transaction() as conn:
+            intent_row = conn.execute(
+                "SELECT status, attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
-            if row:
-                att_id = row["attempt_id"]
-                conn.execute(
-                    """
-                    UPDATE pm_coordinator_attempts
-                    SET status = 'CANCELED',
-                        failure_reason = ?
-                    WHERE attempt_id = ?
-                    """,
-                    (reason, att_id),
-                )
+            if not intent_row:
+                return False
+
+            att_id = intent_row["attempt_id"]
 
             conn.execute(
                 """
                 UPDATE pm_coordinator_runs
-                SET status = 'KILLED',
+                SET status = ?,
+                    exit_code = ?,
                     ended_at = ?
-                WHERE intent_id = ? AND status IN ('SPAWNING', 'STREAMING')
+                WHERE run_id = ?
+                """,
+                (observed_status, exit_code, now_iso, run_id),
+            )
+
+            conn.execute(
+                """
+                UPDATE pm_coordinator_intents
+                SET status = 'CANCELED',
+                    updated_at = ?
+                WHERE intent_id = ?
                 """,
                 (now_iso, intent_id),
+            )
+
+            conn.execute(
+                """
+                UPDATE pm_coordinator_attempts
+                SET status = 'CANCELED',
+                    budget_tokens_spent = ?,
+                    finished_at = ?
+                WHERE attempt_id = ?
+                """,
+                (tokens_spent, now_iso, att_id),
+            )
+
+            conn.execute(
+                """
+                UPDATE pm_coordinator_reservations
+                SET status = 'SETTLED',
+                    settled_amount = ?,
+                    settled_at = ?
+                WHERE attempt_id = ? AND status = 'HELD'
+                """,
+                (tokens_spent, now_iso, att_id),
             )
             return True
 
@@ -582,8 +847,14 @@ class CoordinatorStore:
         key_id: str,
         signature: str,
         canonical_payload: Dict[str, Any],
+        admission_status: str = "SUBMITTED",
     ) -> CoordinatorEvidenceReceipt:
-        """Records an admitted evidence receipt. Enforces nonce uniqueness for replay prevention."""
+        """
+        Records a raw or admitted evidence receipt.
+        Enforces nonce uniqueness for replay prevention.
+        Explicitly tracks admission_status ('SUBMITTED', 'ADMITTED', 'REJECTED')
+        to clearly distinguish untrusted raw submissions from verified admissions.
+        """
         now = self._now_iso()
         conn = self.db._get_connection()
         try:
@@ -592,8 +863,8 @@ class CoordinatorStore:
                 INSERT INTO pm_coordinator_evidence_receipts (
                     evidence_id, issue_id, task_id, attempt_id, run_id,
                     candidate_commit_sha, nonce, key_id, signature,
-                    canonical_payload, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    canonical_payload, admission_status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     evidence_id,
@@ -606,6 +877,7 @@ class CoordinatorStore:
                     key_id,
                     signature,
                     json.dumps(canonical_payload),
+                    admission_status,
                     now,
                 ),
             )
@@ -620,6 +892,7 @@ class CoordinatorStore:
                 key_id=key_id,
                 signature=signature,
                 canonical_payload=canonical_payload,
+                admission_status=admission_status,
                 created_at=now,
             )
         finally:
@@ -638,6 +911,7 @@ class CoordinatorStore:
             return CoordinatorAttempt(
                 attempt_id=row["attempt_id"],
                 tenant_id=row["tenant_id"],
+
                 project_id=row["project_id"],
                 issue_id=row["issue_id"],
                 task_id=row["task_id"],

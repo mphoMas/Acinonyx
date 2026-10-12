@@ -486,13 +486,50 @@ class PMDatabase:
                 END;
                 """)
 
-                # CC-02 / CC-03: Additive column migration for pm_task_mappings
-                try:
+                # CC-02 / CC-03: Additive column migration for pm_task_mappings using PRAGMA inspection
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(pm_task_mappings);").fetchall()]
+                if "legacy_task_id" not in cols:
                     conn.execute("ALTER TABLE pm_task_mappings ADD COLUMN legacy_task_id TEXT;")
-                except sqlite3.OperationalError:
-                    pass
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_task_mappings_legacy ON pm_task_mappings(legacy_task_id);")
 
+                # Schema versioning ledger table
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    checksum TEXT NOT NULL,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+        finally:
+            conn.close()
+
+        # Run CC-03 versioned migration
+        self.migrate_coordinator_schema()
+
+    def migrate_coordinator_schema(self) -> None:
+        """
+        Executes CC-03 transactional migration in an atomic BEGIN IMMEDIATE block.
+        Checks pm_schema_migrations, applies DDL with PRAGMA validation, verifies integrity,
+        and records checksum. Rolls back atomically on error.
+        """
+        CC_03_VERSION = 2026101201
+        CC_03_NAME = "cc_03_coordinator_state"
+        CC_03_CHECKSUM = "cc03_sha256_composite_ownership_v1"
+
+        conn = self._get_connection()
+        with self._lock:
+            # Check if migration already applied
+            applied = conn.execute(
+                "SELECT version, checksum FROM pm_schema_migrations WHERE version = ?",
+                (CC_03_VERSION,),
+            ).fetchone()
+            if applied:
+                conn.close()
+                return
+
+            conn.execute("BEGIN IMMEDIATE;")
+            try:
                 # CC-02 / CC-03: Coordinator Persistence & Outbox State
                 conn.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_coord_mapping_identity
@@ -550,7 +587,8 @@ class PMDatabase:
                     FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
                     FOREIGN KEY(attempt_id, issue_id, task_id, project_id, tenant_id)
                         REFERENCES pm_coordinator_attempts(attempt_id, issue_id, task_id, project_id, tenant_id),
-                    CONSTRAINT uq_intent_issue_attempt UNIQUE (issue_id, attempt_id, adapter_type)
+                    CONSTRAINT uq_intent_issue_attempt UNIQUE (issue_id, attempt_id, adapter_type),
+                    CONSTRAINT uq_intent_attempt_pair UNIQUE (intent_id, attempt_id)
                 );
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_intents_status ON pm_coordinator_intents(status, lease_expires_at);")
@@ -559,7 +597,7 @@ class PMDatabase:
                 conn.execute("""
                 CREATE TABLE IF NOT EXISTS pm_coordinator_runs (
                     run_id TEXT PRIMARY KEY,
-                    intent_id TEXT NOT NULL REFERENCES pm_coordinator_intents(intent_id),
+                    intent_id TEXT NOT NULL,
                     attempt_id TEXT NOT NULL,
                     fencing_token INTEGER NOT NULL,
                     runtime_session_id TEXT,
@@ -569,7 +607,8 @@ class PMDatabase:
                     exit_code INTEGER,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     ended_at TIMESTAMP,
-                    FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
+                    FOREIGN KEY(intent_id, attempt_id)
+                        REFERENCES pm_coordinator_intents(intent_id, attempt_id) ON DELETE CASCADE,
                     CONSTRAINT uq_physical_dispatch UNIQUE (intent_id, fencing_token)
                 );
                 """)
@@ -602,6 +641,7 @@ class PMDatabase:
                     key_id TEXT NOT NULL,
                     signature TEXT NOT NULL,
                     canonical_payload JSON NOT NULL,
+                    admission_status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK(admission_status IN ('SUBMITTED', 'ADMITTED', 'REJECTED')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
                     FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE,
@@ -609,8 +649,48 @@ class PMDatabase:
                 );
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_evidence_issue ON pm_coordinator_evidence_receipts(issue_id);")
-        finally:
-            conn.close()
+
+                # CC-03: Funded budget reservation ledger
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_reservations (
+                    reservation_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    issue_id TEXT NOT NULL,
+                    attempt_id TEXT NOT NULL,
+                    authorization_ref TEXT NOT NULL,
+                    amount INTEGER NOT NULL CHECK(amount >= 0),
+                    settled_amount INTEGER NOT NULL DEFAULT 0 CHECK(settled_amount >= 0),
+                    status TEXT NOT NULL CHECK(status IN ('HELD', 'SETTLED', 'RELEASED')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    settled_at TIMESTAMP,
+                    FOREIGN KEY(issue_id) REFERENCES pm_issues(id) ON DELETE CASCADE,
+                    FOREIGN KEY(attempt_id) REFERENCES pm_coordinator_attempts(attempt_id) ON DELETE CASCADE
+                );
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_reservations_project ON pm_coordinator_reservations(project_id, status);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_reservations_attempt ON pm_coordinator_reservations(attempt_id);")
+
+                # Verify PRAGMA integrity
+                integrity = conn.execute("PRAGMA integrity_check;").fetchone()
+                if not integrity or integrity[0] != "ok":
+                    raise sqlite3.DatabaseError(f"Integrity check failed: {integrity}")
+
+                # Record migration in ledger
+                conn.execute(
+                    """
+                    INSERT INTO pm_schema_migrations (version, name, checksum)
+                    VALUES (?, ?, ?)
+                    """,
+                    (CC_03_VERSION, CC_03_NAME, CC_03_CHECKSUM),
+                )
+                conn.execute("COMMIT;")
+            except Exception:
+                conn.execute("ROLLBACK;")
+                raise
+            finally:
+                conn.close()
+
 
     # --- Project Operations ---
 
