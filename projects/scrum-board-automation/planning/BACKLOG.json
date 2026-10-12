@@ -481,7 +481,8 @@
       ],
       "acceptance": [
         "Pause stops new dispatch; cancellation reports confirmed versus uncertain termination.",
-        "Revocation, outages and budget exhaustion stop safely; usage reservations remain until reconciliation."
+        "Revocation, outages and budget exhaustion stop safely; usage reservations remain until reconciliation.",
+        "Retain UNKNOWN_CREATE and funding holds until durable container operations are reconciled; stale/canceled generations cannot start late-created objects. Verify the implementation and constraints in CONTAINER_RECOVERY_CODEX_DELIVERY.md."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -506,7 +507,8 @@
       ],
       "acceptance": [
         "Provide health, alerts, backups, recovery and credential-rotation procedures with operational owner.",
-        "Demonstrate restart/restore without history loss or artificial completion."
+        "Demonstrate restart/restore without history loss or artificial completion.",
+        "Operate the private durable container journal and authorized bounded janitor from CONTAINER_RECOVERY_RUNBOOK.md; reconcile late-created objects across restart without broad-prefix deletion, guessed absence, funding release or automatic retry."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
