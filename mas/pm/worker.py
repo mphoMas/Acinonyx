@@ -14,6 +14,7 @@ Implements:
 from __future__ import annotations
 
 import logging
+import math
 import random
 import threading
 import time
@@ -142,9 +143,6 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         status_override: Optional[str] = None,
         attempt_id_override: Optional[str] = None,
         run_id_override: Optional[str] = None,
-        ignore_stop_signal: bool = False,
-        on_stop: Optional[Callable[[], None]] = None,
-        late_events: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.exit_code = exit_code
         self.tokens_billed = tokens_billed
@@ -155,9 +153,6 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         self.status_override = status_override
         self.attempt_id_override = attempt_id_override
         self.run_id_override = run_id_override
-        self.ignore_stop_signal = ignore_stop_signal
-        self.on_stop = on_stop
-        self.late_events = late_events or []
 
     def execute(
         self,
@@ -170,34 +165,25 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
             for ev in self.events:
                 emit_event(ev.get("type", "PROGRESS"), ev.get("data", {}))
 
-        step = 0.05
-        elapsed = 0.0
-        while elapsed < self.duration_seconds:
-            if stop_event and stop_event.is_set():
-                if self.on_stop:
-                    try:
-                        self.on_stop()
-                    except Exception:
-                        pass
-                if not self.ignore_stop_signal:
-                    return AdapterExecutionResult(
-                        attempt_id=self.attempt_id_override or request.attempt_id,
-                        run_id=self.run_id_override or run_id,
-                        status="CANCELED",
-                        exit_code=130,
-                        tokens_billed=self.tokens_billed if self.tokens_billed is not None else 0,
-                        duration_seconds=elapsed,
-                    )
-            sleep_time = min(step, self.duration_seconds - elapsed)
-            time.sleep(sleep_time)
-            elapsed += sleep_time
+        # Interruptible wait for duration_seconds or until stop_event is signaled
+        start_time = time.monotonic()
+        if stop_event:
+            stopped = stop_event.wait(timeout=self.duration_seconds)
+            if stopped:
+                elapsed = time.monotonic() - start_time
+                return AdapterExecutionResult(
+                    attempt_id=self.attempt_id_override or request.attempt_id,
+                    run_id=self.run_id_override or run_id,
+                    status="CANCELED",
+                    exit_code=130,
+                    tokens_billed=self.tokens_billed if self.tokens_billed is not None else 0,
+                    duration_seconds=elapsed,
+                )
+        else:
+            time.sleep(self.duration_seconds)
 
         if self.simulate_crash:
             raise RuntimeError("Synthetic simulated execution crash / mid-run failure")
-
-        if emit_event and self.late_events:
-            for ev in self.late_events:
-                emit_event(ev.get("type", "PROGRESS"), ev.get("data", {}))
 
         effective_status = self.status_override or ("SUCCEEDED" if self.exit_code == 0 else "FAILED")
         return AdapterExecutionResult(
@@ -457,10 +443,26 @@ class CoordinatorWorker:
         self.db = db
         self.store = db.coordinator
         self.worker_id = worker_id
-        if not (isinstance(execution_timeout_s, (int, float)) and not isinstance(execution_timeout_s, bool) and execution_timeout_s > 0):
-            raise ValueError(f"execution_timeout_s must be a finite positive number, got {execution_timeout_s}")
-        if cleanup_timeout_s is not None and not (isinstance(cleanup_timeout_s, (int, float)) and not isinstance(cleanup_timeout_s, bool) and cleanup_timeout_s > 0):
-            raise ValueError(f"cleanup_timeout_s must be a finite positive number, got {cleanup_timeout_s}")
+
+        # 1. Finite, positive timing bounds validation
+        def _validate_timing(val: Any, name: str, min_val: float = 0.001, max_val: float = 86400.0) -> float:
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{name} must be a real number, got {type(val).__name__}")
+            if not math.isfinite(val):
+                raise ValueError(f"{name} must be a finite number, got {val}")
+            if val < min_val or val > max_val:
+                raise ValueError(f"{name} must be between {min_val} and {max_val}, got {val}")
+            return float(val)
+
+        execution_timeout_s = _validate_timing(execution_timeout_s, "execution_timeout_s", min_val=0.001, max_val=86400.0)
+        lease_timeout_s = _validate_timing(lease_timeout_s, "lease_timeout_s", min_val=1.0, max_val=86400.0)
+        heartbeat_interval_s = _validate_timing(heartbeat_interval_s, "heartbeat_interval_s", min_val=0.01, max_val=lease_timeout_s)
+        poll_interval_s = _validate_timing(poll_interval_s, "poll_interval_s", min_val=0.001, max_val=3600.0)
+
+        if heartbeat_interval_s >= lease_timeout_s:
+            raise ValueError(
+                f"heartbeat_interval_s ({heartbeat_interval_s}) must be strictly less than lease_timeout_s ({lease_timeout_s})"
+            )
 
         selected_adapter = adapter or SyntheticExecutionAdapter()
         # Enforce qualified adapter policy via immutable registry:
@@ -475,16 +477,32 @@ class CoordinatorWorker:
                 f"Adapter {type(selected_adapter).__name__} does not satisfy qualification policy: "
                 f"must declare supports_bounded_stop=True with terminable supervised execution boundary"
             )
+
+        # Enforce configuration qualification on the approved adapter:
+        # Reject unsafe configurations that disable stopping or execute unmanaged callbacks
+        if getattr(selected_adapter, "ignore_stop_signal", False):
+            raise AdapterNotQualifiedError(
+                "Adapter configuration rejected: ignore_stop_signal=True disables supervised boundary stop"
+            )
+        if getattr(selected_adapter, "on_stop", None) is not None:
+            raise AdapterNotQualifiedError(
+                "Adapter configuration rejected: arbitrary on_stop callback violates supervised execution boundary"
+            )
+        if getattr(selected_adapter, "late_events", None):
+            raise AdapterNotQualifiedError(
+                "Adapter configuration rejected: late_events escape hatch violates event quarantine policy"
+            )
+
+        # Validate adapter's cleanup_timeout_s (both explicit and inherited/default)
+        raw_cleanup = cleanup_timeout_s if cleanup_timeout_s is not None else getattr(selected_adapter, "cleanup_timeout_s", 0.5)
+        validated_cleanup = _validate_timing(raw_cleanup, "cleanup_timeout_s", min_val=0.001, max_val=3600.0)
+
         self.adapter = selected_adapter
-        self.lease_timeout_s = max(lease_timeout_s, 2.0)
-        self.heartbeat_interval_s = max(min(heartbeat_interval_s, self.lease_timeout_s / 2.0), 0.5)
+        self.lease_timeout_s = lease_timeout_s
+        self.heartbeat_interval_s = heartbeat_interval_s
         self.poll_interval_s = poll_interval_s
         self.execution_timeout_s = execution_timeout_s
-        self.cleanup_timeout_s = (
-            cleanup_timeout_s
-            if cleanup_timeout_s is not None
-            else getattr(self.adapter, "cleanup_timeout_s", 0.5)
-        )
+        self.cleanup_timeout_s = validated_cleanup
         self._running = False
         self._stop_requested = threading.Event()
 
@@ -543,6 +561,24 @@ class CoordinatorWorker:
                     worker_id=self.worker_id,
                     assigned_fencing_token=assigned_fencing,
                     error_message=f"STALE_POLICY_VERSION: admitted={admitted_pv}, live={curr_issue.policy_version}",
+                )
+                return False
+
+        # Verify explicit funded reservation exists and is HELD for supported worker path
+        with self.db.atomic_transaction() as conn:
+            res_row = conn.execute(
+                "SELECT amount, status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (updated_intent.attempt_id,),
+            ).fetchone()
+            if not res_row or res_row["status"] != "HELD" or res_row["amount"] <= 0:
+                logger.error(
+                    f"Intent {updated_intent.intent_id} (attempt {updated_intent.attempt_id}) missing valid positive HELD reservation; aborting."
+                )
+                self.store.record_execution_interrupted(
+                    intent_id=intent.intent_id,
+                    worker_id=self.worker_id,
+                    assigned_fencing_token=assigned_fencing,
+                    error_message="MISSING_FUNDED_RESERVATION",
                 )
                 return False
 

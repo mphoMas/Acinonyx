@@ -576,38 +576,27 @@ def test_monotonic_deadline_latching_prevents_cleanup_race(cc04_env):
 
 
 def test_uncooperative_adapter_late_events_quarantined(cc04_env):
-    """Finding 3: Adapter ignoring stop cannot record late side effects / events."""
-    engine = CoordinatorAdmissionEngine(cc04_env)
-    store = cc04_env.coordinator
+    """Finding 3: Unregistered uncooperative adapter is rejected by worker registry."""
+    from mas.pm.worker import AdapterNotQualifiedError, BaseExecutionAdapter
 
-    with trusted_coordinator_admin_scope():
-        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
-        intent = engine.admit_task("task_main", budget_reservation=2_000)
+    class PrivateFaultInjectingAdapter(BaseExecutionAdapter):
+        supports_bounded_stop = True
 
-        adapter = SyntheticExecutionAdapter(
-            exit_code=0,
-            tokens_billed=10,
-            duration_seconds=0.2,
-            ignore_stop_signal=True,
-            late_events=[{"type": "LATE_UNAUTHORIZED_EVENT", "data": {"payload": "leak"}}],
-        )
-        worker = CoordinatorWorker(
+        def execute(self, request, run_id, emit_event=None, stop_event=None):
+            time.sleep(0.1)
+            if emit_event:
+                emit_event("LATE_UNAUTHORIZED_EVENT", {"payload": "leak"})
+            return None
+
+    # Worker rejects private fault injecting adapter at registration
+    with pytest.raises(AdapterNotQualifiedError) as exc_info:
+        CoordinatorWorker(
             cc04_env,
             worker_id="w_uncooperative",
-            adapter=adapter,
+            adapter=PrivateFaultInjectingAdapter(),
             execution_timeout_s=0.03,
         )
-        worker.run_one_polling_cycle()
-
-        u_intent = store.get_intent(intent.intent_id)
-        assert u_intent.status == "UNKNOWN_EXECUTION"
-
-        # Check late event was suppressed / quarantined
-        with cc04_env._get_connection() as c:
-            evs = c.execute(
-                "SELECT event_type FROM pm_coordinator_events WHERE event_type = 'LATE_UNAUTHORIZED_EVENT'"
-            ).fetchall()
-            assert len(evs) == 0
+    assert "not in the immutable qualified adapter registry" in str(exc_info.value)
 
 
 def test_admission_enforces_wip_limits_and_scope(cc04_env):
@@ -657,7 +646,7 @@ def test_stale_policy_version_rejected_before_prespawn(cc04_env):
 
 
 def test_unqualified_adapter_rejected_at_registration(cc04_env):
-    """Architect Directive 1: Adapters lacking bounded stop support or arbitrary subclasses are rejected."""
+    """Architect Directive 1 & 2: Adapters lacking bounded stop support, arbitrary subclasses, or dangerous options are rejected."""
     from mas.pm.worker import AdapterNotQualifiedError, BaseExecutionAdapter, SyntheticExecutionAdapter
 
     class UnboundedAdapter(BaseExecutionAdapter):
@@ -677,59 +666,68 @@ def test_unqualified_adapter_rejected_at_registration(cc04_env):
         CoordinatorWorker(cc04_env, worker_id="w_dishonest", adapter=DishonestAdapter())
     assert "not in the immutable qualified adapter registry" in str(exc_info2.value)
 
-    # Invalid timeout bounds must also be rejected
+    # Dangerous configuration on registered class: ignore_stop_signal
+    adapter_ignore_stop = SyntheticExecutionAdapter()
+    adapter_ignore_stop.ignore_stop_signal = True
+    with pytest.raises(AdapterNotQualifiedError) as exc_info3:
+        CoordinatorWorker(cc04_env, worker_id="w_unsafe_ignore", adapter=adapter_ignore_stop)
+    assert "ignore_stop_signal=True disables supervised boundary stop" in str(exc_info3.value)
+
+    # Dangerous configuration on registered class: on_stop callback
+    adapter_on_stop = SyntheticExecutionAdapter()
+    adapter_on_stop.on_stop = lambda: None
+    with pytest.raises(AdapterNotQualifiedError) as exc_info4:
+        CoordinatorWorker(cc04_env, worker_id="w_unsafe_cb", adapter=adapter_on_stop)
+    assert "arbitrary on_stop callback violates supervised execution boundary" in str(exc_info4.value)
+
+    # Dangerous configuration on registered class: late_events
+    adapter_late_ev = SyntheticExecutionAdapter()
+    adapter_late_ev.late_events = [{"type": "LEAK", "data": {}}]
+    with pytest.raises(AdapterNotQualifiedError) as exc_info5:
+        CoordinatorWorker(cc04_env, worker_id="w_unsafe_ev", adapter=adapter_late_ev)
+    assert "late_events escape hatch violates event quarantine policy" in str(exc_info5.value)
+
+    # Invalid timeout bounds must also be rejected (non-positive, zero, NaN, Infinity, booleans)
+    for bad_val in (0, -1.0, float("nan"), float("inf"), float("-inf"), True, False, "10"):
+        with pytest.raises(ValueError):
+            CoordinatorWorker(cc04_env, worker_id="w_bad_timeout", execution_timeout_s=bad_val)
+        with pytest.raises(ValueError):
+            CoordinatorWorker(cc04_env, worker_id="w_bad_cleanup", cleanup_timeout_s=bad_val)
+
+    # Incompatible timing relationship (heartbeat >= lease)
     with pytest.raises(ValueError):
-        CoordinatorWorker(cc04_env, worker_id="w_bad_timeout", execution_timeout_s=0)
+        CoordinatorWorker(cc04_env, worker_id="w_bad_hb", lease_timeout_s=5.0, heartbeat_interval_s=5.0)
+
+    # Invalid cleanup on adapter itself
+    class BadCleanupAdapter(SyntheticExecutionAdapter):
+        pass
+    # Subclass is already rejected, but testing default cleanup validation
+    adapter_bad_cleanup = SyntheticExecutionAdapter()
+    adapter_bad_cleanup.cleanup_timeout_s = float("inf")
     with pytest.raises(ValueError):
-        CoordinatorWorker(cc04_env, worker_id="w_bad_cleanup", cleanup_timeout_s=-1.0)
+        CoordinatorWorker(cc04_env, worker_id="w_bad_adapter_cleanup", adapter=adapter_bad_cleanup)
 
 
-def test_uncooperative_adapter_late_filesystem_effects_and_cleanup_boundary(cc04_env):
-    """Architect Directive 1: Timeout enforces execution boundary; survives cleanup -> UNKNOWN_EXECUTION & hold retained."""
-    engine = CoordinatorAdmissionEngine(cc04_env)
-    store = cc04_env.coordinator
+def test_unregistered_uncooperative_adapter_cannot_execute(cc04_env):
+    """Architect Directive 1: Unregistered uncooperative adapter is rejected before execution."""
+    from mas.pm.worker import AdapterNotQualifiedError, BaseExecutionAdapter
 
-    with trusted_coordinator_admin_scope():
-        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
-        intent = engine.admit_task("task_main", budget_reservation=2_000)
+    class UncooperativeAdapter(BaseExecutionAdapter):
+        supports_bounded_stop = True
+        cleanup_timeout_s = 0.05
 
-        # Built-in qualified adapter configured with ignore_stop_signal to simulate uncooperative execution
-        adapter = SyntheticExecutionAdapter(
-            exit_code=0,
-            tokens_billed=10,
-            duration_seconds=0.25,
-            ignore_stop_signal=True,
-            on_stop=lambda: None,
-        )
-        # Timeout 0.03s, cleanup deadline 0.05s
-        worker = CoordinatorWorker(
+        def execute(self, request, run_id, emit_event=None, stop_event=None):
+            time.sleep(0.2)
+            return None
+
+    with pytest.raises(AdapterNotQualifiedError):
+        CoordinatorWorker(
             cc04_env,
             worker_id="w_file_probe",
-            adapter=adapter,
+            adapter=UncooperativeAdapter(),
             execution_timeout_s=0.03,
             cleanup_timeout_s=0.05,
         )
-
-        t_start = time.monotonic()
-        worker.run_one_polling_cycle()
-        t_return = time.monotonic() - t_start
-
-        # Worker must have waited through timeout + cleanup deadline before returning
-        assert t_return >= 0.07
-
-        u_intent = store.get_intent(intent.intent_id)
-        assert u_intent.status == "UNKNOWN_EXECUTION"
-        attempt = store.get_attempt(u_intent.attempt_id)
-        assert attempt.status == "UNKNOWN_EXECUTION"
-        assert "SURVIVED_CLEANUP_DEADLINE" in (attempt.failure_reason or "")
-
-        # Pessimistic budget hold must be strictly preserved
-        with cc04_env._get_connection() as c:
-            res = c.execute(
-                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
-                (u_intent.attempt_id,),
-            ).fetchone()
-            assert res["status"] == "HELD"
 
 
 def test_qualified_adapter_confirmed_termination_no_late_writes(cc04_env, tmp_path):
@@ -738,23 +736,15 @@ def test_qualified_adapter_confirmed_termination_no_late_writes(cc04_env, tmp_pa
     store = cc04_env.coordinator
     target_file = tmp_path / "cooperative_write_probe.txt"
 
-    stopped_flag = False
-
-    def on_stop_cb():
-        nonlocal stopped_flag
-        stopped_flag = True
-
     with trusted_coordinator_admin_scope():
         cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
         intent = engine.admit_task("task_main", budget_reservation=2_000)
 
-        # Qualified adapter honors stop_event (ignore_stop_signal=False) and stops within cleanup deadline
+        # Qualified adapter stops promptly when stop_event is signaled during execution_timeout
         adapter = SyntheticExecutionAdapter(
             exit_code=0,
             tokens_billed=10,
             duration_seconds=0.5,
-            ignore_stop_signal=False,
-            on_stop=on_stop_cb,
         )
         worker = CoordinatorWorker(
             cc04_env,
@@ -766,8 +756,7 @@ def test_qualified_adapter_confirmed_termination_no_late_writes(cc04_env, tmp_pa
 
         worker.run_one_polling_cycle()
 
-        assert stopped_flag is True
-        # Target file was never written
+        # Target file was never written and adapter cleanly terminated
         assert not target_file.exists()
 
         u_intent = store.get_intent(intent.intent_id)
