@@ -498,9 +498,11 @@ class CoordinatorStore:
         Requires non-null candidate_commit_sha and authoritative exit_code.
         Enforces truthful outcomes: exit_code != 0 marks attempt as FAILED, never SUCCEEDED.
         Strictly enforces funded budget limit: tokens_spent cannot exceed funded reservation.
+        For exit_code == 0 (SUCCEEDED), non-empty candidate_commit_sha is mandatory.
+        For exit_code != 0 (FAILED), candidate_commit_sha is optional.
         """
-        if not candidate_commit_sha:
-            raise ValueError("Authoritative candidate_commit_sha required to complete intent")
+        if exit_code == 0 and not candidate_commit_sha:
+            raise ValueError("Authoritative candidate_commit_sha required to complete successful intent")
         if not isinstance(tokens_spent, int) or isinstance(tokens_spent, bool):
             raise ValueError(f"tokens_spent must be an integer, got {type(tokens_spent).__name__}")
         if tokens_spent < 0:
@@ -606,6 +608,80 @@ class CoordinatorStore:
                 """,
                 (exit_code, now_iso, intent_id, assigned_fencing_token),
             )
+            return True
+
+    def record_execution_interrupted(
+        self,
+        intent_id: str,
+        worker_id: str,
+        assigned_fencing_token: int,
+        error_message: str = "Execution interrupted or crashed",
+    ) -> bool:
+        """
+        Transitions in-flight PROCESSING intent to UNKNOWN_EXECUTION following an execution crash,
+        timeout, or uncertain failure.
+        - Advances fencing token to revoke worker authority.
+        - Marks attempt as UNKNOWN_EXECUTION.
+        - Marks run as INTERRUPTED.
+        - Strictly preserves budget reservations in HELD status (pessimistic reservation hold).
+        - Does NOT invent candidate commit SHA or recorded token spend.
+        """
+        now_iso = self._now_iso()
+        with self.db.atomic_transaction() as conn:
+            self._validate_tenant_authority()
+            intent_check = conn.execute(
+                "SELECT tenant_id, attempt_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                (intent_id,),
+            ).fetchone()
+            if not intent_check:
+                return False
+            self._validate_tenant_authority(intent_check["tenant_id"])
+
+            cursor = conn.execute(
+                """
+                UPDATE pm_coordinator_intents
+                SET status = 'UNKNOWN_EXECUTION',
+                    fencing_token = fencing_token + 1,
+                    worker_id = NULL,
+                    updated_at = :now_iso
+                WHERE intent_id = :intent_id
+                  AND status = 'PROCESSING'
+                  AND worker_id = :worker_id
+                  AND fencing_token = :assigned_fencing_token
+                """,
+                {
+                    "intent_id": intent_id,
+                    "worker_id": worker_id,
+                    "assigned_fencing_token": assigned_fencing_token,
+                    "now_iso": now_iso,
+                },
+            )
+            if cursor.rowcount != 1:
+                return False
+
+            att_id = intent_check["attempt_id"]
+
+            conn.execute(
+                """
+                UPDATE pm_coordinator_attempts
+                SET status = 'UNKNOWN_EXECUTION',
+                    failure_reason = ?,
+                    finished_at = ?
+                WHERE attempt_id = ?
+                """,
+                (error_message, now_iso, att_id),
+            )
+
+            conn.execute(
+                """
+                UPDATE pm_coordinator_runs
+                SET status = 'INTERRUPTED',
+                    ended_at = ?
+                WHERE intent_id = ? AND fencing_token = ?
+                """,
+                (now_iso, intent_id, assigned_fencing_token),
+            )
+            # Budget reservation remains HELD; no release or settlement
             return True
 
     def reap_expired_leases(self, now_epoch: float) -> List[str]:

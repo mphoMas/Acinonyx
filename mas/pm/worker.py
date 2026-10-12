@@ -1,24 +1,27 @@
 """
 mas.pm.worker: Outbox scheduling worker, single-winner claims, and lease-recovery engine (CC-04).
 Implements:
-- Dependency-ready and funded task admission
+- Dependency-ready and funded task admission under single atomic transaction
+- Monotonic attempt sequence allocation from persistent coordinator store
+- Payload parameter allowlisting preventing override of task scope/budget/identity
 - Single-winner CAS claim protocol on unlaunched (PENDING) intents
-- Bounded polling loops with jitter and graceful shutdown
-- Controlled / synthetic adapter interface (live runtime dispatch strictly gated)
-- Heartbeat loop with lease renewal
+- Supervised execution lifecycle with active heartbeat thread, deadline enforcement, and stop signal
+- Fail-closed error handling: execution exceptions transition to UNKNOWN_EXECUTION with preserved budget holds
+- Strict validation of adapter results against requested/persisted identity and measurements
 - Atomic lease-recovery and reaper engine transitioning expired PROCESSING to UNKNOWN_EXECUTION
-- Conservative token settlement retaining unverified holds
 """
 
 from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
 from mas.pm.db import PMDatabase
+from mas.pm.fsm import FSMEngine
 from mas.pm.guards import validate_dependencies
 from mas.pm.models import (
     CoordinatorIntent,
@@ -71,7 +74,7 @@ class AdapterExecutionResult:
         run_id: str,
         status: str,
         exit_code: Optional[int] = None,
-        tokens_billed: int = 0,
+        tokens_billed: Optional[int] = None,
         duration_seconds: float = 0.0,
         runtime_session_id: Optional[str] = None,
         candidate_commit_sha: Optional[str] = None,
@@ -99,6 +102,7 @@ class BaseExecutionAdapter(ABC):
         request: AdapterExecutionRequest,
         run_id: str,
         emit_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> AdapterExecutionResult:
         """Executes the task and returns execution results."""
         pass
@@ -108,17 +112,20 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
     """
     Controlled synthetic adapter for CC-04 scheduling and lease tests.
     Does NOT invoke external CLI processes (agy or codex).
-    Supports programmable exit codes, spend, latency, and event streaming.
+    Supports programmable exit codes, spend, latency, event streaming, and cancellation.
     """
 
     def __init__(
         self,
         exit_code: int = 0,
-        tokens_billed: int = 10,
+        tokens_billed: Optional[int] = 10,
         duration_seconds: float = 0.01,
         candidate_commit_sha: Optional[str] = "synthetic-sha-0001",
         events: Optional[List[Dict[str, Any]]] = None,
         simulate_crash: bool = False,
+        status_override: Optional[str] = None,
+        attempt_id_override: Optional[str] = None,
+        run_id_override: Optional[str] = None,
     ) -> None:
         self.exit_code = exit_code
         self.tokens_billed = tokens_billed
@@ -126,49 +133,72 @@ class SyntheticExecutionAdapter(BaseExecutionAdapter):
         self.candidate_commit_sha = candidate_commit_sha
         self.events = events or [{"type": "START", "data": {}}, {"type": "COMPLETE", "data": {}}]
         self.simulate_crash = simulate_crash
+        self.status_override = status_override
+        self.attempt_id_override = attempt_id_override
+        self.run_id_override = run_id_override
 
     def execute(
         self,
         request: AdapterExecutionRequest,
         run_id: str,
         emit_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> AdapterExecutionResult:
         if emit_event:
             for ev in self.events:
                 emit_event(ev.get("type", "PROGRESS"), ev.get("data", {}))
 
-        if self.duration_seconds > 0:
-            time.sleep(self.duration_seconds)
+        step = 0.05
+        elapsed = 0.0
+        while elapsed < self.duration_seconds:
+            if stop_event and stop_event.is_set():
+                return AdapterExecutionResult(
+                    attempt_id=self.attempt_id_override or request.attempt_id,
+                    run_id=self.run_id_override or run_id,
+                    status="CANCELED",
+                    exit_code=130,
+                    tokens_billed=self.tokens_billed if self.tokens_billed is not None else 0,
+                    duration_seconds=elapsed,
+                )
+            sleep_time = min(step, self.duration_seconds - elapsed)
+            time.sleep(sleep_time)
+            elapsed += sleep_time
 
         if self.simulate_crash:
             raise RuntimeError("Synthetic simulated execution crash / mid-run failure")
 
-        status = "SUCCEEDED" if self.exit_code == 0 else "FAILED"
+        effective_status = self.status_override or ("SUCCEEDED" if self.exit_code == 0 else "FAILED")
         return AdapterExecutionResult(
-            attempt_id=request.attempt_id,
-            run_id=run_id,
-            status=status,
+            attempt_id=self.attempt_id_override or request.attempt_id,
+            run_id=self.run_id_override or run_id,
+            status=effective_status,
             exit_code=self.exit_code,
             tokens_billed=self.tokens_billed,
             duration_seconds=self.duration_seconds,
             runtime_session_id=f"synthetic-session-{run_id}",
-            candidate_commit_sha=self.candidate_commit_sha if self.exit_code == 0 else None,
+            candidate_commit_sha=self.candidate_commit_sha if (effective_status == "SUCCEEDED" and self.exit_code == 0) else None,
         )
 
 
 class CoordinatorAdmissionEngine:
     """
-    Validates and admits tasks into the coordinator outbox.
+    Validates and admits tasks into the coordinator outbox atomically under lock.
     Enforces:
+    - Task state check (cannot auto-stage DONE or already active issues)
+    - Pending plan reconciliation guard
+    - Monotonic attempt sequence derived from persistent coordinator attempts
     - Dependency readiness (all blockers in pm_dependencies must be DONE)
     - Funded budget reservations (finite integer <= issue appetite and available project budget)
-    - Single active attempt per issue (no duplicate concurrent executions)
-    - Unlaunched work staged into outbox as PENDING
+    - Strict allowlist on payload extra parameters (preventing scope or budget overrides)
+    - Atomic execution: dependency check, attempt/intent creation, reservation, and FSM transition in ONE transaction
     """
+
+    ALLOWED_EXTRA_PAYLOAD_KEYS = frozenset({"extra_metadata", "notes", "tags", "timeout_seconds"})
 
     def __init__(self, db: PMDatabase) -> None:
         self.db = db
         self.store = db.coordinator
+        self.fsm = FSMEngine(db)
 
     def admit_task(
         self,
@@ -181,82 +211,173 @@ class CoordinatorAdmissionEngine:
         payload_extra: Optional[Dict[str, Any]] = None,
     ) -> CoordinatorIntent:
         """
-        Admits a task to STAGED / PENDING outbox intent.
-        Fails closed if dependencies are unresolved, budget is exhausted, or an active attempt exists.
+        Admits a task to STAGED / PENDING outbox intent in one atomic transaction.
+        Fails closed on any inconsistency, unresolved dependencies, or exhausted budget.
         """
-        issue = self.db.get_issue(issue_id)
-        if not issue:
-            raise ValueError(f"Issue {issue_id} not found")
+        with self.db.atomic_transaction() as conn:
+            # 1. Fetch issue under lock
+            cur = conn.execute("SELECT * FROM pm_issues WHERE id = ? OR key = ?", (issue_id, issue_id.upper()))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Issue {issue_id} not found")
+            issue = self.db._row_to_issue(row)
 
-        # 1. Dependency validation
-        validate_dependencies(self.db, issue)
+            # Check task state: cannot admit DONE or issues already in terminal/illegal states
+            if issue.current_state == IssueState.DONE:
+                raise ValueError(f"Issue {issue.key} is already in DONE state; cannot admit completed work")
 
-        # 2. Check that issue does not already have an in-flight attempt
-        active_intents = [
-            i for i in self.store.list_intents_for_issue(issue_id)
-            if i.status in ("PENDING", "CLAIMED", "PROCESSING", "CANCEL_REQUESTED")
-        ]
-        if active_intents:
-            raise ValueError(
-                f"Issue {issue.key} already has an active intent ({active_intents[0].intent_id}: {active_intents[0].status})"
-            )
+            # Check pending plan reconciliation
+            if issue.has_pending_reconciliation:
+                raise ValueError(f"Issue {issue.key} has pending plan reconciliation; explicit decision required before admission")
 
-        # 3. Determine reservation amount (default to issue appetite if not specified)
-        res_amount = budget_reservation if budget_reservation is not None else issue.appetite_tokens
-        if not isinstance(res_amount, int) or isinstance(res_amount, bool):
-            raise ValueError(f"budget_reservation must be an integer, got {type(res_amount).__name__}")
-        if res_amount < 0:
-            raise ValueError(f"budget_reservation must be non-negative, got {res_amount}")
+            # 2. Dependency validation under this transaction
+            validate_dependencies(self.db, issue, conn=conn)
 
-        # 4. Generate identities
-        seq = issue.reflexion_attempts + 1
-        att_id = attempt_id or f"att_{issue_id}_{seq}_{int(time.time()*1000)}"
-        int_id = intent_id or f"intent_{issue_id}_{seq}_{int(time.time()*1000)}"
-
-        # 5. Fetch planning task_id from mapping or fallback
-        with self.db._get_connection() as c:
-            row = c.execute(
-                "SELECT task_id FROM pm_task_mappings WHERE local_issue_id = ?",
-                (issue_id,),
+            # 3. Check for any active or unresolved intent/attempt on this issue
+            active_row = conn.execute(
+                """
+                SELECT intent_id, status FROM pm_coordinator_intents
+                WHERE issue_id = ? AND status IN ('PENDING', 'CLAIMED', 'PROCESSING', 'CANCEL_REQUESTED', 'UNKNOWN_EXECUTION')
+                LIMIT 1
+                """,
+                (issue.id,),
             ).fetchone()
-            planning_task_id = row["task_id"] if row else (issue.task_id or issue.id)
+            if active_row:
+                raise ValueError(
+                    f"Issue {issue.key} already has an active or unresolved intent ({active_row['intent_id']}: {active_row['status']})"
+                )
+
+            # 4. Determine reservation amount (default to issue appetite if not specified)
+            res_amount = budget_reservation if budget_reservation is not None else issue.appetite_tokens
+            if not isinstance(res_amount, int) or isinstance(res_amount, bool):
+                raise ValueError(f"budget_reservation must be an integer, got {type(res_amount).__name__}")
+            if res_amount < 0:
+                raise ValueError(f"budget_reservation must be non-negative, got {res_amount}")
+            if res_amount > issue.appetite_tokens:
+                raise ValueError(
+                    f"Requested reservation {res_amount} exceeds issue appetite {issue.appetite_tokens}"
+                )
+
+            # 5. Monotonic attempt sequence derived from persistent coordinator attempts
+            seq_row = conn.execute(
+                "SELECT COALESCE(MAX(attempt_seq), 0) + 1 AS next_seq FROM pm_coordinator_attempts WHERE issue_id = ?",
+                (issue.id,),
+            ).fetchone()
+            seq = seq_row["next_seq"] if seq_row else 1
+
+            att_id = attempt_id or f"att_{issue.id}_{seq}_{int(time.time()*1000)}"
+            int_id = intent_id or f"intent_{issue.id}_{seq}_{int(time.time()*1000)}"
+
+            # 6. Fetch planning task_id from mapping
+            map_row = conn.execute("SELECT task_id FROM pm_task_mappings WHERE local_issue_id = ?", (issue.id,)).fetchone()
+            planning_task_id = map_row["task_id"] if map_row else (issue.task_id or issue.id)
 
             from mas.tenancy import current_binding
             binding = current_binding()
             tenant_id = binding.identity.tenant_id if binding else "default"
 
-        payload = {
-            "prompt": prompt or f"Execute task {issue.key}: {issue.title}",
-            "workspace_path": "",
-            "path_whitelist": issue.path_whitelist,
-            "budget_token_limit": res_amount,
-            **(payload_extra or {}),
-        }
+            # 7. Payload validation: filter payload_extra through strict allowlist
+            safe_extra: Dict[str, Any] = {}
+            if payload_extra:
+                for k, v in payload_extra.items():
+                    if k in self.ALLOWED_EXTRA_PAYLOAD_KEYS:
+                        safe_extra[k] = v
+                    else:
+                        logger.debug(f"Ignoring unauthorized extra payload key '{k}' during admission")
 
-        # 6. Create attempt and intent atomically with funded reservation
-        attempt, intent = self.store.create_attempt_with_intent(
-            attempt_id=att_id,
-            intent_id=int_id,
-            tenant_id=tenant_id,
-            project_id=issue.project_id,
-            issue_id=issue.id,
-            task_id=planning_task_id,
-            attempt_seq=seq,
-            adapter_type=adapter_type,
-            payload=payload,
-            budget_reservation=res_amount,
-        )
+            payload = {
+                "prompt": prompt or f"Execute task {issue.key}: {issue.title}",
+                "workspace_path": "",
+                "path_whitelist": list(issue.path_whitelist),
+                "budget_token_limit": res_amount,
+                **safe_extra,
+            }
 
-        # Update issue current_state to STAGED if it was BACKLOG or REFINED
-        if issue.current_state in (IssueState.BACKLOG, IssueState.REFINED):
-            self.db.update_issue_state(
+            # 8. Create attempt and intent with budget reservation
+            self.store.create_attempt(
+                attempt_id=att_id,
+                tenant_id=tenant_id,
+                project_id=issue.project_id,
                 issue_id=issue.id,
-                new_state=IssueState.STAGED.value,
-                triggered_by="coordinator:admission",
-                reason="Task admitted to coordinator outbox",
+                task_id=planning_task_id,
+                attempt_seq=seq,
+                budget_tokens_allocated=res_amount,
+                conn=conn,
+            )
+            intent = self.store.create_intent(
+                intent_id=int_id,
+                tenant_id=tenant_id,
+                project_id=issue.project_id,
+                issue_id=issue.id,
+                task_id=planning_task_id,
+                attempt_id=att_id,
+                adapter_type=adapter_type,
+                payload=payload,
+                conn=conn,
             )
 
-        return intent
+            # Record reservation in ledger
+            if res_amount > 0:
+                # Check available capacity
+                proj_row = conn.execute(
+                    "SELECT token_budget, tokens_consumed FROM pm_projects WHERE id = ?",
+                    (issue.project_id,),
+                ).fetchone()
+                if not proj_row:
+                    raise ValueError(f"Project {issue.project_id} not found")
+                token_budget = proj_row["token_budget"]
+                tokens_consumed = proj_row["tokens_consumed"]
+
+                holds_row = conn.execute(
+                    "SELECT COALESCE(SUM(amount - settled_amount), 0) AS open_holds FROM pm_coordinator_reservations WHERE project_id = ? AND status = 'HELD'",
+                    (issue.project_id,),
+                ).fetchone()
+                open_holds = holds_row["open_holds"] if holds_row else 0
+                available_capacity = token_budget - tokens_consumed - open_holds
+                if res_amount > available_capacity:
+                    raise ValueError(
+                        f"Requested reservation {res_amount} exceeds available project capacity {available_capacity}"
+                    )
+
+                res_id = f"res_{att_id}"
+                auth_ref = f"auth_{att_id}"
+                now_iso = self.store._now_iso()
+                conn.execute(
+                    """
+                    INSERT INTO pm_coordinator_reservations (
+                        reservation_id, tenant_id, project_id, issue_id, attempt_id,
+                        authorization_ref, amount, settled_amount, status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'HELD', ?)
+                    """,
+                    (res_id, tenant_id, issue.project_id, issue.id, att_id, auth_ref, res_amount, now_iso),
+                )
+
+            # 9. FSM State progression: advance BACKLOG or REFINED to STAGED
+            if issue.current_state == IssueState.BACKLOG:
+                self.db.update_issue_state(
+                    issue_id=issue.id,
+                    new_state=IssueState.REFINED.value,
+                    triggered_by="coordinator:admission",
+                    reason="Pre-staged via coordinator admission",
+                    conn=conn,
+                )
+                self.db.update_issue_state(
+                    issue_id=issue.id,
+                    new_state=IssueState.STAGED.value,
+                    triggered_by="coordinator:admission",
+                    reason="Admitted to coordinator outbox",
+                    conn=conn,
+                )
+            elif issue.current_state == IssueState.REFINED:
+                self.db.update_issue_state(
+                    issue_id=issue.id,
+                    new_state=IssueState.STAGED.value,
+                    triggered_by="coordinator:admission",
+                    reason="Admitted to coordinator outbox",
+                    conn=conn,
+                )
+
+            return intent
 
 
 class CoordinatorWorker:
@@ -265,10 +386,12 @@ class CoordinatorWorker:
     Features:
     - Single-winner CAS claim protocol on PENDING intents
     - Guarded pre-spawn transition to PROCESSING
-    - Controlled adapter dispatch (synthetic adapter default; live dispatch gated)
+    - Supervised execution with active heartbeat renewal thread
+    - Enforced execution deadlines and stop signals
+    - Strict result validation: binds identity to persisted request/run/fence
+    - Preserves budget holds on crash / exception / unknown execution
     - Monotonic event cursor streaming into pm_coordinator_events
     - Fencing-token guarded completion
-    - Bounded polling with jitter
     - Expired lease reaping with atomic retirement of dead workers
     """
 
@@ -280,20 +403,23 @@ class CoordinatorWorker:
         lease_timeout_s: float = 10.0,
         heartbeat_interval_s: float = 2.0,
         poll_interval_s: float = 0.5,
+        execution_timeout_s: float = 30.0,
     ) -> None:
         self.db = db
         self.store = db.coordinator
         self.worker_id = worker_id
         self.adapter = adapter or SyntheticExecutionAdapter()
-        self.lease_timeout_s = lease_timeout_s
-        self.heartbeat_interval_s = heartbeat_interval_s
+        self.lease_timeout_s = max(lease_timeout_s, 2.0)
+        self.heartbeat_interval_s = max(min(heartbeat_interval_s, self.lease_timeout_s / 2.0), 0.5)
         self.poll_interval_s = poll_interval_s
+        self.execution_timeout_s = execution_timeout_s
         self._running = False
+        self._stop_requested = threading.Event()
 
     def process_one_intent(self, intent: CoordinatorIntent) -> bool:
         """
-        Attempts to claim and execute a single intent.
-        Returns True if claimed and executed, False if race was lost or state changed.
+        Attempts to claim and execute a single intent with active heartbeat supervision and strict result validation.
+        Returns True if claimed and processed, False if race was lost or state changed.
         """
         now = time.time()
 
@@ -306,7 +432,6 @@ class CoordinatorWorker:
             lease_timeout_s=self.lease_timeout_s,
         )
         if not claimed:
-            # Race lost or already claimed by another worker
             return False
 
         # Step 2: Fetch updated intent to obtain new fencing generation
@@ -328,6 +453,10 @@ class CoordinatorWorker:
         if not pre_spawn_ok:
             return False
 
+        # Fetch persisted attempt to use genuine attempt_seq
+        persisted_attempt = self.store.get_attempt(updated_intent.attempt_id)
+        att_seq = persisted_attempt.attempt_seq if persisted_attempt else 1
+
         # Step 4: Prepare execution request
         payload = updated_intent.payload or {}
         req = AdapterExecutionRequest(
@@ -336,56 +465,202 @@ class CoordinatorWorker:
             issue_id=updated_intent.issue_id,
             task_id=updated_intent.task_id,
             attempt_id=updated_intent.attempt_id,
-            attempt_seq=1,
+            attempt_seq=att_seq,
             fencing_token=assigned_fencing,
             runtime_type=updated_intent.adapter_type,
             prompt=payload.get("prompt", ""),
             workspace_path=payload.get("workspace_path", ""),
             path_whitelist=payload.get("path_whitelist", []),
             budget_token_limit=payload.get("budget_token_limit", 10_000),
+            timeout_seconds=self.execution_timeout_s,
         )
 
         cursor_seq = 0
+        cursor_lock = threading.Lock()
 
         def emit_event(ev_type: str, ev_data: Dict[str, Any]) -> None:
             nonlocal cursor_seq
-            try:
-                self.store.record_run_event(
-                    run_id=run_id,
-                    cursor_seq=cursor_seq,
-                    event_type=ev_type,
-                    event_payload=ev_data,
-                )
-                cursor_seq += 1
-            except Exception as e:
-                logger.warning(f"Error recording run event for run {run_id}: {e}")
+            with cursor_lock:
+                try:
+                    self.store.record_run_event(
+                        run_id=run_id,
+                        cursor_seq=cursor_seq,
+                        event_type=ev_type,
+                        event_payload=ev_data,
+                    )
+                    cursor_seq += 1
+                except Exception as e:
+                    logger.warning(f"Error recording run event for run {run_id}: {e}")
 
-        # Step 5: Execute adapter (network/subprocess calls outside DB transaction)
-        try:
-            result = self.adapter.execute(req, run_id=run_id, emit_event=emit_event)
-        except Exception as err:
-            logger.error(f"Execution error on run {run_id}: {err}")
-            # Worker crash / exception during execution -> transition to UNKNOWN_EXECUTION
-            self.store.complete_intent(
+        # Step 5: Start active background heartbeat renewal thread
+        execution_stop = threading.Event()
+        heartbeat_failed = threading.Event()
+
+        # Capture context state for thread execution
+        from mas.pm.coordinator import is_trusted_coord_admin, trusted_coordinator_admin_scope
+        from mas.tenancy import current_binding, _binding
+        current_admin = is_trusted_coord_admin()
+        curr_b = current_binding()
+
+        def heartbeat_loop():
+            with trusted_coordinator_admin_scope(current_admin):
+                b_tok = _binding.set(curr_b)
+                try:
+                    while not execution_stop.is_set():
+                        time.sleep(self.heartbeat_interval_s)
+                        if execution_stop.is_set():
+                            break
+                        try:
+                            hb_ok = self.store.heartbeat_intent(
+                                intent_id=intent.intent_id,
+                                worker_id=self.worker_id,
+                                assigned_fencing_token=assigned_fencing,
+                                now_epoch=time.time(),
+                                lease_timeout_s=self.lease_timeout_s,
+                            )
+                            if not hb_ok:
+                                logger.warning(f"Heartbeat lost or rejected for intent {intent.intent_id}")
+                                heartbeat_failed.set()
+                                break
+                        except Exception as hb_err:
+                            logger.warning(f"Heartbeat exception for intent {intent.intent_id}: {hb_err}")
+                            heartbeat_failed.set()
+                            break
+                finally:
+                    _binding.reset(b_tok)
+
+        hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        hb_thread.start()
+
+        # Step 6: Supervised execution with timeout & cancellation
+        execution_result: Optional[AdapterExecutionResult] = None
+        execution_exception: Optional[Exception] = None
+
+        def run_adapter():
+            nonlocal execution_result, execution_exception
+            with trusted_coordinator_admin_scope(current_admin):
+                b_tok = _binding.set(curr_b)
+                try:
+                    execution_result = self.adapter.execute(
+                        req,
+                        run_id=run_id,
+                        emit_event=emit_event,
+                        stop_event=self._stop_requested,
+                    )
+                except Exception as ex:
+                    execution_exception = ex
+                finally:
+                    _binding.reset(b_tok)
+
+        exec_thread = threading.Thread(target=run_adapter, daemon=True)
+        exec_thread.start()
+        exec_thread.join(timeout=self.execution_timeout_s)
+
+        # Stop heartbeat thread
+        execution_stop.set()
+        hb_thread.join(timeout=1.0)
+
+        # Case A: Execution timed out
+        if exec_thread.is_alive():
+            logger.error(f"Execution timed out on run {run_id} after {self.execution_timeout_s}s")
+            self._stop_requested.set()
+            self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
                 assigned_fencing_token=assigned_fencing,
-                now_epoch=time.time(),
-                candidate_commit_sha="crash-unverified",
-                exit_code=-1,
-                tokens_spent=0,
+                error_message=f"EXECUTION_TIMEOUT_{self.execution_timeout_s}S",
             )
             return True
 
-        # Step 6: Complete intent guarded by fencing generation and active lease
+        # Case B: Execution crashed or threw an exception
+        if execution_exception is not None:
+            logger.error(f"Execution crashed on run {run_id}: {execution_exception}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"CRASH: {execution_exception}",
+            )
+            return True
+
+        # Case C: Heartbeat failed mid-flight -> loss of authority
+        if heartbeat_failed.is_set():
+            logger.error(f"Heartbeat authority lost during execution of run {run_id}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message="HEARTBEAT_AUTHORITY_LOST",
+            )
+            return True
+
+        # Step 7: Strict Validation of Adapter Execution Result
+        result = execution_result
+        if not result:
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message="NULL_ADAPTER_RESULT",
+            )
+            return True
+
+        # 1. Identity binding check: attempt_id and run_id must match request
+        if result.attempt_id != updated_intent.attempt_id or result.run_id != run_id:
+            logger.error(
+                f"Identity mismatch in adapter result: expected attempt={updated_intent.attempt_id}, run={run_id}; "
+                f"got attempt={result.attempt_id}, run={result.run_id}"
+            )
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"IDENTITY_MISMATCH: attempt={result.attempt_id}, run={result.run_id}",
+            )
+            return True
+
+        # 2. Measured usage check: tokens_billed must be a non-negative integer
+        if result.tokens_billed is None or not isinstance(result.tokens_billed, int) or isinstance(result.tokens_billed, bool) or result.tokens_billed < 0:
+            logger.error(f"Missing or invalid measured usage: tokens_billed={result.tokens_billed}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"INVALID_USAGE_MEASUREMENT: tokens_billed={result.tokens_billed}",
+            )
+            return True
+
+        # 3. Status consistency: exit_code must not be None
+        if result.exit_code is None or not isinstance(result.exit_code, int) or isinstance(result.exit_code, bool):
+            logger.error(f"Missing exit_code in adapter result: exit_code={result.exit_code}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"MISSING_EXIT_CODE: exit_code={result.exit_code}",
+            )
+            return True
+
+        # 4. If status is UNKNOWN_EXECUTION or non-conclusive / canceled, preserve uncertainty and hold
+        if result.status in ("UNKNOWN_EXECUTION", "INTERRUPTED", "TIMEOUT", "CANCELED") or self._stop_requested.is_set():
+            logger.warning(f"Adapter returned uncertain status '{result.status}' on run {run_id}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"ADAPTER_STATUS_{result.status}",
+            )
+            return True
+
+        # 5. Complete intent (SUCCEEDED or FAILED) guarded by fencing generation and active lease
         completed = self.store.complete_intent(
             intent_id=intent.intent_id,
             worker_id=self.worker_id,
             assigned_fencing_token=assigned_fencing,
             now_epoch=time.time(),
-            exit_code=result.exit_code or 0,
+            exit_code=result.exit_code,
             candidate_commit_sha=result.candidate_commit_sha,
-            tokens_spent=result.tokens_billed or 0,
+            tokens_spent=result.tokens_billed,
         )
         return completed
 
@@ -405,6 +680,8 @@ class CoordinatorWorker:
         pending = self.store.list_pending_intents(limit=10)
         processed = 0
         for intent in pending:
+            if self._stop_requested.is_set():
+                break
             if self.process_one_intent(intent):
                 processed += 1
         return processed
@@ -412,9 +689,10 @@ class CoordinatorWorker:
     def start_bounded(self, max_cycles: int = 10) -> int:
         """Runs the worker for a bounded number of polling iterations."""
         self._running = True
+        self._stop_requested.clear()
         total_processed = 0
         for _ in range(max_cycles):
-            if not self._running:
+            if not self._running or self._stop_requested.is_set():
                 break
             count = self.run_one_polling_cycle()
             total_processed += count
@@ -423,5 +701,6 @@ class CoordinatorWorker:
         return total_processed
 
     def stop(self) -> None:
-        """Signals worker to halt polling."""
+        """Signals worker to halt polling and cancel in-flight execution."""
         self._running = False
+        self._stop_requested.set()

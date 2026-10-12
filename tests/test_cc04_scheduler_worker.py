@@ -7,7 +7,10 @@ Unit and integration tests for Capable Coordinator CC-04:
 - Expired lease reaping into UNKNOWN_EXECUTION / FAILED
 - Stale worker rejection via monotonic fencing
 - Truthful cancellation races and budget hold preservation
-- Live agent dispatch remains strictly gated
+- Execution crash transitions to UNKNOWN_EXECUTION and preserves budget holds (Finding 1)
+- Strict validation of adapter results: mismatched identities, missing measurements, and uncertain outcomes rejected (Finding 2)
+- Active heartbeat renewal, execution timeout deadline, and in-flight stop handling (Finding 3)
+- Atomic admission, monotonic attempt sequences, and prevention of payload overrides (Findings 4 & 5)
 """
 
 import time
@@ -46,6 +49,7 @@ def cc04_env(tmp_path):
             key="CC4-2",
             title="Main Worker Task",
             appetite_tokens=10_000,
+            path_whitelist=["mas/pm/"],
             current_state=IssueState.BACKLOG,
         ))
         # Link dependency CC4-2 depends on CC4-1: blocker is task_dep, blocked is task_main
@@ -75,7 +79,6 @@ def test_admission_succeeds_when_dependencies_resolved(cc04_env):
     """Admission engine admits task once prerequisite dependency transitions to DONE."""
     engine = CoordinatorAdmissionEngine(cc04_env)
     with trusted_coordinator_admin_scope():
-        # Mark prerequisite as DONE
         cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
 
         intent = engine.admit_task("task_main", budget_reservation=2_000)
@@ -95,8 +98,71 @@ def test_admission_rejects_duplicate_active_intents(cc04_env):
         cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
         engine.admit_task("task_main", budget_reservation=2_000)
 
-        with pytest.raises(ValueError, match="already has an active intent"):
+        with pytest.raises(ValueError, match="already has an active or unresolved intent"):
             engine.admit_task("task_main", budget_reservation=2_000)
+
+
+def test_admission_rejects_done_or_reconciling_issues(cc04_env):
+    """Admission engine rejects admitting tasks already in DONE state or with pending reconciliation."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+
+        # Cannot admit DONE task
+        with pytest.raises(ValueError, match="already in DONE state"):
+            engine.admit_task("task_dep")
+
+        # Flag task_main with pending reconciliation
+        with cc04_env.atomic_transaction() as c:
+            c.execute("UPDATE pm_issues SET has_pending_reconciliation = 1 WHERE id = 'task_main'")
+        with pytest.raises(ValueError, match="pending plan reconciliation"):
+            engine.admit_task("task_main")
+
+
+def test_admission_monotonic_attempt_sequence(cc04_env):
+    """Attempt sequences are strictly monotonic based on persistent coordinator attempts."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+
+        # First admission: attempt_seq = 1
+        intent1 = engine.admit_task("task_main", budget_reservation=1_000)
+        att1 = store.get_attempt(intent1.attempt_id)
+        assert att1.attempt_seq == 1
+
+        # Settle first attempt
+        now = time.time()
+        store.claim_intent(intent1.intent_id, "w", intent1.fencing_token, now, 10.0)
+        store.pre_spawn_intent(intent1.intent_id, "w", 2, now, "run_1")
+        store.complete_intent(intent1.intent_id, "w", 2, now, candidate_commit_sha="c1", tokens_spent=100)
+
+        # Second admission: attempt_seq must be 2
+        intent2 = engine.admit_task("task_main", budget_reservation=1_000)
+        att2 = store.get_attempt(intent2.attempt_id)
+        assert att2.attempt_seq == 2
+
+
+def test_admission_payload_extra_cannot_override_authority(cc04_env):
+    """Payload extra arguments cannot override scope path_whitelist, budget limits, or prompt identity."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+
+        malicious_payload = {
+            "path_whitelist": ["/root", "/etc"],
+            "budget_token_limit": 999_999,
+            "extra_metadata": {"valid_key": True},
+        }
+        intent = engine.admit_task("task_main", budget_reservation=2_000, payload_extra=malicious_payload)
+        stored_intent = store.get_intent(intent.intent_id)
+
+        # Whitelist and budget must remain server-derived
+        assert stored_intent.payload["path_whitelist"] == ["mas/pm/"]
+        assert stored_intent.payload["budget_token_limit"] == 2_000
+        # Allowlisted extra key preserved
+        assert stored_intent.payload["extra_metadata"] == {"valid_key": True}
 
 
 def test_admission_rejects_excessive_or_exhausted_budget(cc04_env):
@@ -123,9 +189,7 @@ def test_single_winner_claim_race(cc04_env):
 
         store = cc04_env.coordinator
         now = time.time()
-        # Worker 1 claims
         won_1 = store.claim_intent(intent.intent_id, "worker_1", intent.fencing_token, now, 10.0)
-        # Worker 2 attempts to claim with same initial fencing token
         won_2 = store.claim_intent(intent.intent_id, "worker_2", intent.fencing_token, now, 10.0)
 
         assert won_1 is True
@@ -163,6 +227,183 @@ def test_worker_end_to_end_execution_and_events(cc04_env):
         assert len(events) >= 2
         assert events[0].cursor_seq == 0
         assert events[1].cursor_seq == 1
+
+
+def test_crash_transitions_to_unknown_execution_and_preserves_hold(cc04_env):
+    """Finding 1: Simulated execution crash transitions to UNKNOWN_EXECUTION and preserves budget hold."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        adapter = SyntheticExecutionAdapter(simulate_crash=True)
+        worker = CoordinatorWorker(cc04_env, worker_id="worker_crash", adapter=adapter)
+
+        processed = worker.run_one_polling_cycle()
+        assert processed == 1
+
+        updated_intent = store.get_intent(intent.intent_id)
+        assert updated_intent.status == "UNKNOWN_EXECUTION"
+        assert updated_intent.worker_id is None
+
+        attempt = store.get_attempt(updated_intent.attempt_id)
+        assert attempt.status == "UNKNOWN_EXECUTION"
+        assert "CRASH" in (attempt.failure_reason or "")
+
+        # Crucial check: Reservation hold is preserved as HELD, not settled to zero
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status, amount, settled_amount FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (attempt.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+            assert res["amount"] == 2_000
+            assert res["settled_amount"] == 0
+
+        # Run record is INTERRUPTED
+        with cc04_env._get_connection() as c:
+            run_row = c.execute("SELECT status FROM pm_coordinator_runs WHERE intent_id = ?", (intent.intent_id,)).fetchone()
+            assert run_row["status"] == "INTERRUPTED"
+
+
+def test_mismatched_run_identity_rejected_and_quarantined(cc04_env):
+    """Finding 2: Adapter returning foreign attempt/run IDs is quarantined into UNKNOWN_EXECUTION with hold preserved."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Adapter returns foreign attempt and run IDs
+        adapter = SyntheticExecutionAdapter(
+            attempt_id_override="foreign_attempt",
+            run_id_override="foreign_run",
+            exit_code=0,
+            tokens_billed=50,
+        )
+        worker = CoordinatorWorker(cc04_env, worker_id="worker_mismatch", adapter=adapter)
+        worker.run_one_polling_cycle()
+
+        updated_intent = store.get_intent(intent.intent_id)
+        assert updated_intent.status == "UNKNOWN_EXECUTION"
+
+        # Hold is strictly preserved
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (updated_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
+
+def test_missing_measurements_rejected(cc04_env):
+    """Finding 2: Adapter returning null tokens_billed or null exit_code is rejected and hold preserved."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=None)
+        worker = CoordinatorWorker(cc04_env, worker_id="worker_unmeasured", adapter=adapter)
+        worker.run_one_polling_cycle()
+
+        updated_intent = store.get_intent(intent.intent_id)
+        assert updated_intent.status == "UNKNOWN_EXECUTION"
+
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (updated_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
+
+def test_active_heartbeat_renews_lease_during_long_execution(cc04_env):
+    """Finding 3: Active heartbeat loop renews lease for duration of execution."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Lease is 2.0s, duration is 0.6s, heartbeat is 0.2s
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, duration_seconds=0.6)
+        worker = CoordinatorWorker(
+            cc04_env,
+            worker_id="worker_heartbeat",
+            adapter=adapter,
+            lease_timeout_s=2.0,
+            heartbeat_interval_s=0.2,
+        )
+
+        initial_time = time.time()
+        worker.run_one_polling_cycle()
+
+        final_intent = store.get_intent(intent.intent_id)
+        assert final_intent.status == "COMPLETED"
+        assert final_intent.lease_heartbeat_at is not None
+        assert final_intent.lease_heartbeat_at >= initial_time
+
+
+def test_execution_timeout_deadline_enforced(cc04_env):
+    """Finding 3: Hung adapter exceeding execution_timeout_s is interrupted with preserved hold."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Adapter duration is 2.0s, execution timeout is 0.3s
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, duration_seconds=2.0)
+        worker = CoordinatorWorker(
+            cc04_env,
+            worker_id="worker_timeout",
+            adapter=adapter,
+            execution_timeout_s=0.3,
+        )
+
+        worker.run_one_polling_cycle()
+
+        updated_intent = store.get_intent(intent.intent_id)
+        assert updated_intent.status == "UNKNOWN_EXECUTION"
+
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (updated_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
+
+def test_in_flight_stop_signal_cancels_cleanly(cc04_env):
+    """Finding 3: stop() halts worker and signals cancellation to in-flight adapter."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Adapter with duration that responds to stop_event
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, duration_seconds=1.0)
+        worker = CoordinatorWorker(cc04_env, worker_id="worker_stopping", adapter=adapter)
+
+        # Trigger worker in a background thread with trusted admin scope, then call worker.stop()
+        import threading
+        def worker_loop():
+            with trusted_coordinator_admin_scope():
+                worker.run_one_polling_cycle()
+
+        t = threading.Thread(target=worker_loop)
+        t.start()
+        time.sleep(0.1)  # Allow process_one_intent to claim and start adapter
+        worker.stop()
+        t.join(timeout=2.0)
+
+        # Work was interrupted safely into UNKNOWN_EXECUTION with hold preserved
+        updated_intent = store.get_intent(intent.intent_id)
+        assert updated_intent.status == "UNKNOWN_EXECUTION"
 
 
 def test_expired_processing_lease_reaped_to_unknown_execution(cc04_env):
