@@ -21,6 +21,13 @@ One SBA project, one board, one delivery branch: `feat/scrum-board-automation`. 
 | CC-06 | CRITICAL | Antigravity | CC-01, CC-03 | Implement verifier and reviewer runtime adapters |
 | CC-07 | CRITICAL | Antigravity | CC-04, CC-05, CC-06, SBA-04 | Automate rejection correction and resubmission |
 | CC-08 | HIGH | Antigravity | CC-04, CC-07 | Handle plan changes and stale approvals |
-| CC-09 | HIGH | Antigravity | CC-05, CC-06 | Manage isolated workspaces and integrated candidates |
+| CC-09 | CRITICAL | Antigravity | CC-05, CC-06 | Manage isolated workspaces and integrated candidates |
 | CC-11 | CRITICAL | Antigravity | CC-03, CC-05 | Implement pause cancellation and uncertainty controls |
 | CC-12 | HIGH | Antigravity | CC-03, CC-11 | Provide coordinator operations and recovery runbook |
+
+
+## Live integration packages
+
+The [live-loop implementation plan](CC_LIVE_LOOP_IMPLEMENTATION_PLAN.md) maps proposed provider, candidate, verification, activity and correction packages to existing SBA/CC task identities. CC-09 is CRITICAL because export/integration is on the live delivery path. Existing runtime status, assignee, budgets and history are unchanged.
+
+The four proposed contracts require Antigravity technical acknowledgement before backend implementation. Independent actual-container acceptance remains outstanding. Repository planning updates are not a claim of authenticated board publication, accepted runtime dependencies or live dispatch.

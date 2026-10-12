@@ -86,7 +86,9 @@
       "acceptance": [
         "Once the CEO starts Antigravity, assignment, start, progress, blocker, comments, notes and evidence events persist automatically against the correct task.",
         "Authenticated tenant and task ownership enforced; duplicate, replayed and out-of-order events handled; agent claims cannot certify DONE.",
-        "Demonstrate the adapter with actual Antigravity execution, not only a simulated producer."
+        "Demonstrate the adapter with actual Antigravity execution, not only a simulated producer.",
+        "Implement the proposed CC_ACTIVITY_BRIDGE_CONTRACT_V1.md after joint acknowledgement: authenticated producer/run/generation binding, early durable session, atomic event/state/change/handoff records, exact replay and bounded credential-free spool.",
+        "Preserve the prepared UI activity/attempt/review field names, tenant-scoped cursor pagination and gap recovery; guest observations cannot emit trusted verification/review/completion events."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -133,7 +135,9 @@
       "acceptance": [
         "Board reflects persisted agent events within five seconds on a healthy connection without manual refresh.",
         "Show comments, notes, evidence provenance, blockers and independent review state; visibly report stale/disconnected data and reconnect safely.",
-        "Render coordinator progress, review requests, escalation and freshness; backend Antigravity, frontend Codex."
+        "Render coordinator progress, review requests, escalation and freshness; backend Antigravity, frontend Codex.",
+        "Integrate the acknowledged CC_ACTIVITY_BRIDGE_CONTRACT_V1.md read contract using incremental polling, consistent snapshot/cursors, pagination, stale/denied/disconnected states and response-generation race protection.",
+        "Capture actual authenticated backend-to-browser event updates and empty-board/cursor-gap/reconnect failures; mocked browser checks do not qualify real agent activity."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -162,7 +166,8 @@
       "acceptance": [
         "Restart and reconnect retain project/task history and resume event processing without duplicate tickets or transitions.",
         "Reject cross-tenant writes, forged identity, replay, invalid transitions and fabricated completion evidence; attach actual executed results.",
-        "Qualify coordinator crash/replay, conflicting edits, fabricated evidence, malicious artifact instructions, revoked access and emergency controls."
+        "Qualify coordinator crash/replay, conflicting edits, fabricated evidence, malicious artifact instructions, revoked access and emergency controls.",
+        "Qualify broker transmission uncertainty, artifact/path attacks, stale integrated approval, session revocation, spool/cursor replay and handoff crash windows using the four proposed integration contracts; report actual versus mocked executions."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -188,7 +193,8 @@
         "Capture native browser evidence of progress, comments, evidence and independently reviewed completion; no CEO SQL, import commands, ticket dragging or manual status maintenance.",
         "Independent reviewer accepts the exact candidate; CEO approves rollout and rollback procedure.",
         "Demonstrate automatic reviewer invocation and deliberately rejected candidate correction/resubmission without CEO relay.",
-        "Restart and network interruption cause no duplicate work or lost handoffs; zero routine CEO import commands, ticket moves or repairs."
+        "Restart and network interruption cause no duplicate work or lost handoffs; zero routine CEO import commands, ticket moves or repairs.",
+        "Complete the zero-routine-relay acceptance in CC_LIVE_LOOP_IMPLEMENTATION_PLAN.md with real provider, runtime, Git export/integration, external verification, independent review, rejected-candidate correction and live browser evidence; record remaining human decision gates separately."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -338,7 +344,9 @@
       ],
       "acceptance": [
         "Start real admitted repository work and obtain attributable results and cancellation status.",
-        "Unknown execution is reconciled before retry; preserve dirty worktrees."
+        "Unknown execution is reconciled before retry; preserve dirty worktrees.",
+        "Complete the independent real-container acceptance gate recorded in CC_05_06_REVIEW_RECONCILIATION.md before any live registry admission.",
+        "Implement the proposed CC_PROVIDER_BROKER_CONTRACT_V1.md after technical acknowledgement: service-owned provider/model authority, no guest credentials/egress, bounded mediated transport, measured usage and crash-safe funding holds; no silent model/runtime substitution."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -363,7 +371,10 @@
       ],
       "acceptance": [
         "Invoke actual verification and separate reviewer runtimes against the exact candidate.",
-        "Fabricated success, changed candidates and builder self-approval cannot authorize completion."
+        "Fabricated success, changed candidates and builder self-approval cannot authorize completion.",
+        "Preserve bounded solve(payload) verification and strict service-owned IAM issuer/evidence admission; label the repository profile unsupported until separately qualified.",
+        "Qualify a repository-profile external test driver/oracle against immutable exported candidates before treating arbitrary repository runs as completion evidence; printed pytest summaries and guest-produced reports remain claims.",
+        "Use strict candidate/policy-bound final reviewer outputs, and independently test live provider-mediated review only after broker and export qualification."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -390,7 +401,10 @@
       ],
       "acceptance": [
         "A real rejected candidate returns to its builder, is corrected and resubmitted without CEO message relay.",
-        "Bound rework, spending and deadlines; completion uses existing guarded PM operations."
+        "Bound rework, spending and deadlines; completion uses existing guarded PM operations.",
+        "Implement the proposed CC_AUTOMATIC_LOOP_CONTRACT_V1.md: durable role handoffs, at most three default development attempts and shared authorized time/token/currency bounds; unknown execution/provider/integration blocks blind retry.",
+        "Normalize rejected findings into one idempotent correction intent, preserve task identity and historical receipts, and reverify/review each exact new candidate without CEO message relay; retain required separate human approval.",
+        "Reconcile phase dependencies from CC_LIVE_LOOP_IMPLEMENTATION_PLAN.md through the authenticated plan publisher before machine dispatch; do not create a reciprocal CC-06/CC-09 macro dependency."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
@@ -425,7 +439,7 @@
       "source_key": "CC-09",
       "task_id": "d40ba16a-18b3-56c0-b256-2594805c5a69",
       "title": "Manage isolated workspaces and integrated candidates",
-      "priority": "HIGH",
+      "priority": "CRITICAL",
       "delivery_owner": "Antigravity",
       "reviewer": "Codex; separate design review required where Codex authors the design",
       "dependencies": [
@@ -440,7 +454,9 @@
       ],
       "acceptance": [
         "Avoid conflicting edits and preserve every contribution and dirty checkout.",
-        "Verify the combined candidate and retain a known-good rollback baseline."
+        "Verify the combined candidate and retain a known-good rollback baseline.",
+        "Implement the proposed CC_CANDIDATE_INTEGRATION_CONTRACT_V1.md: bounded regular-file export, exact authorized base/scope, trusted Git objects without guest hooks/credentials or dirty-checkout mutation.",
+        "Integrate only under explicit merger/required approver authority and exact target-ref compare-and-swap; changed integrated candidates require fresh verification/review; reconcile lost acknowledgement before retry."
       ],
       "status": "BACKLOG",
       "appetite_tokens": 0,
