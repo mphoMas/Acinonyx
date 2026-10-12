@@ -474,3 +474,186 @@ def test_stale_worker_completion_rejected_after_reap(cc04_env):
         # Intent remains in UNKNOWN_EXECUTION
         curr_intent = store.get_intent(intent.intent_id)
         assert curr_intent.status == "UNKNOWN_EXECUTION"
+
+
+def test_contradictory_result_status_rejected_to_unknown_execution(cc04_env):
+    """Finding 1: Contradictory result status (FAILED with 0, SUCCEEDED with nonzero, unknown enums) is quarantined."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+
+        for idx in range(1, 5):
+            tid = f"task_contra_{idx}"
+            cc04_env.create_issue(Issue(
+                id=tid,
+                project_id="p1",
+                key=f"CC4-C{idx}",
+                title=f"Contradictory Task {idx}",
+                appetite_tokens=10_000,
+                path_whitelist=["mas/pm/"],
+                current_state=IssueState.BACKLOG,
+            ))
+            with cc04_env.atomic_transaction() as c:
+                c.execute(
+                    "INSERT INTO pm_task_mappings(project_id, planning_reference, task_id, local_issue_id, local_issue_key) "
+                    "VALUES ('p1', ?, ?, ?, ?)",
+                    (f"CC4-C{idx}", f"uuid_c{idx}", tid, f"CC4-C{idx}")
+                )
+
+        # Case 1: status FAILED, exit_code 0
+        intent1 = engine.admit_task("task_contra_1", budget_reservation=2_000)
+        adapter1 = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, status_override="FAILED")
+        worker1 = CoordinatorWorker(cc04_env, worker_id="w_contra1", adapter=adapter1)
+        worker1.run_one_polling_cycle()
+
+        u_intent1 = store.get_intent(intent1.intent_id)
+        assert u_intent1.status == "UNKNOWN_EXECUTION"
+        with cc04_env._get_connection() as c:
+            res1 = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (u_intent1.attempt_id,),
+            ).fetchone()
+            assert res1["status"] == "HELD"
+
+        # Case 2: status SUCCEEDED, exit_code 1
+        intent2 = engine.admit_task("task_contra_2", budget_reservation=2_000)
+        adapter2 = SyntheticExecutionAdapter(exit_code=1, tokens_billed=10, status_override="SUCCEEDED", candidate_commit_sha="sha1")
+        worker2 = CoordinatorWorker(cc04_env, worker_id="w_contra2", adapter=adapter2)
+        worker2.run_one_polling_cycle()
+
+        u_intent2 = store.get_intent(intent2.intent_id)
+        assert u_intent2.status == "UNKNOWN_EXECUTION"
+
+        # Case 3: status SUCCEEDED, exit_code 0, but missing candidate_commit_sha
+        intent3 = engine.admit_task("task_contra_3", budget_reservation=2_000)
+        adapter3 = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, candidate_commit_sha="")
+        worker3 = CoordinatorWorker(cc04_env, worker_id="w_contra3", adapter=adapter3)
+        worker3.run_one_polling_cycle()
+
+        u_intent3 = store.get_intent(intent3.intent_id)
+        assert u_intent3.status == "UNKNOWN_EXECUTION"
+
+        # Case 4: unknown status enum (e.g. "FOO_BAR")
+        intent4 = engine.admit_task("task_contra_4", budget_reservation=2_000)
+        adapter4 = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, status_override="FOO_BAR")
+        worker4 = CoordinatorWorker(cc04_env, worker_id="w_contra4", adapter=adapter4)
+        worker4.run_one_polling_cycle()
+
+        u_intent4 = store.get_intent(intent4.intent_id)
+        assert u_intent4.status == "UNKNOWN_EXECUTION"
+
+
+def test_monotonic_deadline_latching_prevents_cleanup_race(cc04_env):
+    """Finding 2: Overrunning adapter finishing during cleanup is latched as deadline expiration."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Probe reproducing review finding: deadline 0.02s, adapter runs 0.15s
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10, duration_seconds=0.15)
+        worker = CoordinatorWorker(
+            cc04_env,
+            worker_id="w_deadline_probe",
+            adapter=adapter,
+            execution_timeout_s=0.02,
+            heartbeat_interval_s=0.5,
+        )
+        worker.run_one_polling_cycle()
+
+        u_intent = store.get_intent(intent.intent_id)
+        assert u_intent.status == "UNKNOWN_EXECUTION"
+        attempt = store.get_attempt(u_intent.attempt_id)
+        assert attempt.status == "UNKNOWN_EXECUTION"
+        with cc04_env._get_connection() as c:
+            res = c.execute(
+                "SELECT status FROM pm_coordinator_reservations WHERE attempt_id = ?",
+                (u_intent.attempt_id,),
+            ).fetchone()
+            assert res["status"] == "HELD"
+
+
+def test_uncooperative_adapter_late_events_quarantined(cc04_env):
+    """Finding 3: Adapter ignoring stop cannot record late side effects / events."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+
+    class UncooperativeAdapter(SyntheticExecutionAdapter):
+        def execute(self, request, run_id, emit_event=None, stop_event=None):
+            # Ignores stop_event and sleeps, then tries late event
+            time.sleep(0.1)
+            if emit_event:
+                emit_event("LATE_UNAUTHORIZED_EVENT", {"payload": "leak"})
+            return super().execute(request, run_id, emit_event=None, stop_event=None)
+
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        adapter = UncooperativeAdapter(exit_code=0, tokens_billed=10, duration_seconds=0.2)
+        worker = CoordinatorWorker(
+            cc04_env,
+            worker_id="w_uncooperative",
+            adapter=adapter,
+            execution_timeout_s=0.03,
+        )
+        worker.run_one_polling_cycle()
+
+        u_intent = store.get_intent(intent.intent_id)
+        assert u_intent.status == "UNKNOWN_EXECUTION"
+
+        # Check late event was suppressed / quarantined
+        with cc04_env._get_connection() as c:
+            evs = c.execute(
+                "SELECT event_type FROM pm_coordinator_events WHERE event_type = 'LATE_UNAUTHORIZED_EVENT'"
+            ).fetchall()
+            assert len(evs) == 0
+
+
+def test_admission_enforces_wip_limits_and_scope(cc04_env):
+    """Finding 4: Admission transaction enforces scope jail and WIP limits before admitting."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+
+        # Create issue without path_whitelist
+        cc04_env.create_issue(Issue(
+            id="task_no_scope",
+            project_id="p1",
+            key="CC4-NOSCOPE",
+            title="Unscoped Task",
+            appetite_tokens=5_000,
+            path_whitelist=[],
+            current_state=IssueState.BACKLOG,
+        ))
+
+        from mas.pm.guards import ScopeJailViolationError
+        with pytest.raises(ScopeJailViolationError):
+            engine.admit_task("task_no_scope")
+
+
+def test_stale_policy_version_rejected_before_prespawn(cc04_env):
+    """Finding 4: If issue policy_version changes between admission and pre-spawn, worker rejects."""
+    engine = CoordinatorAdmissionEngine(cc04_env)
+    store = cc04_env.coordinator
+    with trusted_coordinator_admin_scope():
+        cc04_env.update_issue_state("task_dep", IssueState.DONE.value, triggered_by="test")
+        intent = engine.admit_task("task_main", budget_reservation=2_000)
+
+        # Mutate policy version on issue
+        with cc04_env.atomic_transaction() as c:
+            c.execute("UPDATE pm_issues SET policy_version = policy_version + 1 WHERE id = 'task_main'")
+
+        adapter = SyntheticExecutionAdapter(exit_code=0, tokens_billed=10)
+        worker = CoordinatorWorker(cc04_env, worker_id="w_policy_guard", adapter=adapter)
+        processed = worker.process_one_intent(intent)
+        assert processed is False
+
+        u_intent = store.get_intent(intent.intent_id)
+        assert u_intent.status == "UNKNOWN_EXECUTION"
+        attempt = store.get_attempt(u_intent.attempt_id)
+        assert attempt.status == "UNKNOWN_EXECUTION"
+        assert "STALE_POLICY_VERSION" in (attempt.failure_reason or "")
+

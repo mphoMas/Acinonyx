@@ -645,7 +645,7 @@ class CoordinatorStore:
                     worker_id = NULL,
                     updated_at = :now_iso
                 WHERE intent_id = :intent_id
-                  AND status = 'PROCESSING'
+                  AND status IN ('PROCESSING', 'CLAIMED')
                   AND worker_id = :worker_id
                   AND fencing_token = :assigned_fencing_token
                 """,

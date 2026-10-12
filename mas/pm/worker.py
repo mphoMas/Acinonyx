@@ -22,7 +22,12 @@ from typing import Any, Callable, Dict, List, Optional
 
 from mas.pm.db import PMDatabase
 from mas.pm.fsm import FSMEngine
-from mas.pm.guards import validate_dependencies
+from mas.pm.guards import (
+    validate_appetite,
+    validate_dependencies,
+    validate_scope_jail,
+    validate_wip_limit,
+)
 from mas.pm.models import (
     CoordinatorIntent,
     IssueState,
@@ -222,18 +227,11 @@ class CoordinatorAdmissionEngine:
                 raise ValueError(f"Issue {issue_id} not found")
             issue = self.db._row_to_issue(row)
 
-            # Check task state: cannot admit DONE or issues already in terminal/illegal states
-            if issue.current_state == IssueState.DONE:
-                raise ValueError(f"Issue {issue.key} is already in DONE state; cannot admit completed work")
-
-            # Check pending plan reconciliation
+            # 1. Check pending plan reconciliation
             if issue.has_pending_reconciliation:
                 raise ValueError(f"Issue {issue.key} has pending plan reconciliation; explicit decision required before admission")
 
-            # 2. Dependency validation under this transaction
-            validate_dependencies(self.db, issue, conn=conn)
-
-            # 3. Check for any active or unresolved intent/attempt on this issue
+            # 2. Check for any active or unresolved intent/attempt on this issue
             active_row = conn.execute(
                 """
                 SELECT intent_id, status FROM pm_coordinator_intents
@@ -246,6 +244,23 @@ class CoordinatorAdmissionEngine:
                 raise ValueError(
                     f"Issue {issue.key} already has an active or unresolved intent ({active_row['intent_id']}: {active_row['status']})"
                 )
+
+            # 3. Check task state: allow ONLY BACKLOG, REFINED (or STAGED if previous attempt was completed/settled)
+            if issue.current_state == IssueState.DONE:
+                raise ValueError(f"Issue {issue.key} is already in DONE state; cannot admit completed work")
+            if issue.current_state not in (IssueState.BACKLOG, IssueState.REFINED, IssueState.STAGED):
+                raise ValueError(
+                    f"Issue {issue.key} is in state {issue.current_state.value}; "
+                    f"only BACKLOG, REFINED, or STAGED tasks can be admitted to coordinator outbox"
+                )
+
+            # 4. Evaluate FSM admission guards under transaction
+            validate_appetite(issue)
+            validate_scope_jail(issue)
+            validate_wip_limit(self.db, issue.project_id, IssueState.STAGED.value, conn=conn)
+
+            # 5. Dependency validation under this transaction
+            validate_dependencies(self.db, issue, conn=conn)
 
             # 4. Determine reservation amount (default to issue appetite if not specified)
             res_amount = budget_reservation if budget_reservation is not None else issue.appetite_tokens
@@ -290,6 +305,7 @@ class CoordinatorAdmissionEngine:
                 "workspace_path": "",
                 "path_whitelist": list(issue.path_whitelist),
                 "budget_token_limit": res_amount,
+                "admitted_policy_version": issue.policy_version,
                 **safe_extra,
             }
 
@@ -442,6 +458,24 @@ class CoordinatorWorker:
         assigned_fencing = updated_intent.fencing_token
         run_id = f"run_{intent.intent_id}_{assigned_fencing}"
 
+        # Revalidate admitted policy version before pre-spawn
+        payload = updated_intent.payload or {}
+        admitted_pv = payload.get("admitted_policy_version")
+        if admitted_pv is not None:
+            curr_issue = self.db.get_issue(updated_intent.issue_id)
+            if curr_issue and curr_issue.policy_version != admitted_pv:
+                logger.error(
+                    f"Policy version changed for issue {updated_intent.issue_id} "
+                    f"(admitted: {admitted_pv}, live: {curr_issue.policy_version}); aborting execution."
+                )
+                self.store.record_execution_interrupted(
+                    intent_id=intent.intent_id,
+                    worker_id=self.worker_id,
+                    assigned_fencing_token=assigned_fencing,
+                    error_message=f"STALE_POLICY_VERSION: admitted={admitted_pv}, live={curr_issue.policy_version}",
+                )
+                return False
+
         # Step 3: Guarded pre-spawn persistence
         pre_spawn_ok = self.store.pre_spawn_intent(
             intent_id=intent.intent_id,
@@ -477,9 +511,14 @@ class CoordinatorWorker:
 
         cursor_seq = 0
         cursor_lock = threading.Lock()
+        execution_stop = threading.Event()
+        heartbeat_failed = threading.Event()
 
         def emit_event(ev_type: str, ev_data: Dict[str, Any]) -> None:
             nonlocal cursor_seq
+            if execution_stop.is_set() or self._stop_requested.is_set():
+                logger.warning(f"Quarantining late run event '{ev_type}' for run {run_id} after stop requested or deadline expired")
+                return
             with cursor_lock:
                 try:
                     self.store.record_run_event(
@@ -493,9 +532,6 @@ class CoordinatorWorker:
                     logger.warning(f"Error recording run event for run {run_id}: {e}")
 
         # Step 5: Start active background heartbeat renewal thread
-        execution_stop = threading.Event()
-        heartbeat_failed = threading.Event()
-
         # Capture context state for thread execution
         from mas.pm.coordinator import is_trusted_coord_admin, trusted_coordinator_admin_scope
         from mas.tenancy import current_binding, _binding
@@ -506,9 +542,10 @@ class CoordinatorWorker:
             with trusted_coordinator_admin_scope(current_admin):
                 b_tok = _binding.set(curr_b)
                 try:
-                    while not execution_stop.is_set():
-                        time.sleep(self.heartbeat_interval_s)
-                        if execution_stop.is_set():
+                    while not execution_stop.is_set() and not self._stop_requested.is_set():
+                        # Use interruptible Event.wait rather than time.sleep
+                        interrupted = execution_stop.wait(timeout=self.heartbeat_interval_s)
+                        if interrupted or execution_stop.is_set() or self._stop_requested.is_set():
                             break
                         try:
                             hb_ok = self.store.heartbeat_intent(
@@ -532,7 +569,7 @@ class CoordinatorWorker:
         hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         hb_thread.start()
 
-        # Step 6: Supervised execution with timeout & cancellation
+        # Step 6: Supervised execution with monotonic deadline latching & cancellation
         execution_result: Optional[AdapterExecutionResult] = None
         execution_exception: Optional[Exception] = None
 
@@ -554,15 +591,31 @@ class CoordinatorWorker:
 
         exec_thread = threading.Thread(target=run_adapter, daemon=True)
         exec_thread.start()
-        exec_thread.join(timeout=self.execution_timeout_s)
 
-        # Stop heartbeat thread
+        deadline_epoch = time.monotonic() + self.execution_timeout_s
+        timed_out = False
+
+        # Monotonic supervision loop with bounded polling
+        while exec_thread.is_alive():
+            now_mono = time.monotonic()
+            if now_mono >= deadline_epoch:
+                timed_out = True
+                break
+            if self._stop_requested.is_set() or heartbeat_failed.is_set():
+                break
+            step_wait = min(0.05, max(0.001, deadline_epoch - now_mono))
+            exec_thread.join(timeout=step_wait)
+
+        if not timed_out and (time.monotonic() >= deadline_epoch or exec_thread.is_alive()):
+            timed_out = True
+
+        # Stop heartbeat thread and quarantine further activity
         execution_stop.set()
         hb_thread.join(timeout=1.0)
 
-        # Case A: Execution timed out
-        if exec_thread.is_alive():
-            logger.error(f"Execution timed out on run {run_id} after {self.execution_timeout_s}s")
+        # Case A: Monotonic deadline expiration latched
+        if timed_out:
+            logger.error(f"Execution timed out on run {run_id} after {self.execution_timeout_s}s (deadline latched)")
             self._stop_requested.set()
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
@@ -572,18 +625,18 @@ class CoordinatorWorker:
             )
             return True
 
-        # Case B: Execution crashed or threw an exception
-        if execution_exception is not None:
-            logger.error(f"Execution crashed on run {run_id}: {execution_exception}")
+        # Case B: In-flight worker stop requested
+        if self._stop_requested.is_set():
+            logger.warning(f"Execution interrupted by worker stop request on run {run_id}")
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
                 assigned_fencing_token=assigned_fencing,
-                error_message=f"CRASH: {execution_exception}",
+                error_message="ADAPTER_STATUS_CANCELED",
             )
             return True
 
-        # Case C: Heartbeat failed mid-flight -> loss of authority
+        # Case C: Heartbeat authority lost mid-flight
         if heartbeat_failed.is_set():
             logger.error(f"Heartbeat authority lost during execution of run {run_id}")
             self.store.record_execution_interrupted(
@@ -591,6 +644,17 @@ class CoordinatorWorker:
                 worker_id=self.worker_id,
                 assigned_fencing_token=assigned_fencing,
                 error_message="HEARTBEAT_AUTHORITY_LOST",
+            )
+            return True
+
+        # Case D: Execution crashed or threw an exception
+        if execution_exception is not None:
+            logger.error(f"Execution crashed on run {run_id}: {execution_exception}")
+            self.store.record_execution_interrupted(
+                intent_id=intent.intent_id,
+                worker_id=self.worker_id,
+                assigned_fencing_token=assigned_fencing,
+                error_message=f"CRASH: {execution_exception}",
             )
             return True
 
@@ -641,9 +705,10 @@ class CoordinatorWorker:
             )
             return True
 
-        # 4. If status is UNKNOWN_EXECUTION or non-conclusive / canceled, preserve uncertainty and hold
-        if result.status in ("UNKNOWN_EXECUTION", "INTERRUPTED", "TIMEOUT", "CANCELED") or self._stop_requested.is_set():
-            logger.warning(f"Adapter returned uncertain status '{result.status}' on run {run_id}")
+        # 4. Strict Result Schema and Consistency (Finding 1)
+        # Allowed conclusive completion statuses are strictly SUCCEEDED or FAILED
+        if result.status not in ("SUCCEEDED", "FAILED"):
+            logger.warning(f"Adapter returned non-conclusive status '{result.status}' on run {run_id}")
             self.store.record_execution_interrupted(
                 intent_id=intent.intent_id,
                 worker_id=self.worker_id,
@@ -651,6 +716,36 @@ class CoordinatorWorker:
                 error_message=f"ADAPTER_STATUS_{result.status}",
             )
             return True
+
+        if result.status == "SUCCEEDED":
+            if result.exit_code != 0:
+                logger.error(f"Contradictory result: status SUCCEEDED with non-zero exit_code={result.exit_code}")
+                self.store.record_execution_interrupted(
+                    intent_id=intent.intent_id,
+                    worker_id=self.worker_id,
+                    assigned_fencing_token=assigned_fencing,
+                    error_message=f"CONTRADICTORY_RESULT: SUCCEEDED requires exit_code==0, got {result.exit_code}",
+                )
+                return True
+            if not result.candidate_commit_sha or not result.candidate_commit_sha.strip():
+                logger.error("Contradictory result: status SUCCEEDED missing candidate_commit_sha")
+                self.store.record_execution_interrupted(
+                    intent_id=intent.intent_id,
+                    worker_id=self.worker_id,
+                    assigned_fencing_token=assigned_fencing,
+                    error_message="CONTRADICTORY_RESULT: SUCCEEDED requires candidate_commit_sha",
+                )
+                return True
+        elif result.status == "FAILED":
+            if result.exit_code == 0:
+                logger.error("Contradictory result: status FAILED with exit_code=0")
+                self.store.record_execution_interrupted(
+                    intent_id=intent.intent_id,
+                    worker_id=self.worker_id,
+                    assigned_fencing_token=assigned_fencing,
+                    error_message="CONTRADICTORY_RESULT: FAILED requires non-zero exit_code",
+                )
+                return True
 
         # 5. Complete intent (SUCCEEDED or FAILED) guarded by fencing generation and active lease
         completed = self.store.complete_intent(
