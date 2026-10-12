@@ -1630,10 +1630,11 @@ def test_negative_case_8_caller_admitted_status_or_fake_receipt_cannot_obtain_tr
     conn.close()
     assert row["admission_status"] == "SUBMITTED"
 
-    # Only explicit trusted admission promotes it to ADMITTED
-    db.coordinator.admit_evidence_receipt("ev-untrusted")
+    # Authorization alone cannot authenticate a forged receipt.
+    with pytest.raises(PermissionError, match="admission is disabled"):
+        db.coordinator.admit_evidence_receipt("ev-untrusted")
     conn2 = db._get_connection()
     row2 = conn2.execute("SELECT admission_status FROM pm_coordinator_evidence_receipts WHERE evidence_id = 'ev-untrusted'").fetchone()
     conn2.close()
-    assert row2["admission_status"] == "ADMITTED"
+    assert row2["admission_status"] == "SUBMITTED"
 

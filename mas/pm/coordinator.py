@@ -7,6 +7,7 @@ expired lease reaping, pessimistic budget holds for UNKNOWN_EXECUTION, and relat
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -815,11 +816,15 @@ class CoordinatorStore:
         if not isinstance(exit_code, int) or isinstance(exit_code, bool):
             raise ValueError(f"exit_code must be an integer, got {type(exit_code).__name__}")
 
+        if observed_status not in ("KILLED", "EXITED"):
+            raise ValueError("observed_status must be KILLED or EXITED")
+        if receipt_id is not None and (not isinstance(receipt_id, str) or not receipt_id.strip()):
+            raise ValueError("receipt_id must be a nonempty string when supplied")
         now_iso = self._now_iso()
         with self.db.atomic_transaction() as conn:
             self._validate_tenant_authority()
             intent_row = conn.execute(
-                "SELECT status, attempt_id, project_id, tenant_id FROM pm_coordinator_intents WHERE intent_id = ?",
+                "SELECT status, attempt_id, project_id, tenant_id, issue_id, task_id FROM pm_coordinator_intents WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if not intent_row:
@@ -831,47 +836,43 @@ class CoordinatorStore:
             att_id = intent_row["attempt_id"]
             proj_id = intent_row["project_id"]
 
-            # Idempotent receipt replay check if receipt_id is provided
-            if receipt_id:
-                existing_rcpt = conn.execute(
-                    "SELECT * FROM pm_coordinator_evidence_receipts WHERE evidence_id = ?",
-                    (receipt_id,),
-                ).fetchone()
-                if existing_rcpt:
-                    # Check for conflict
-                    if (
-                        existing_rcpt["run_id"] != run_id
-                        or existing_rcpt["attempt_id"] != att_id
-                    ):
-                        raise sqlite3.IntegrityError(f"Conflicting receipt {receipt_id} already exists")
-                    return True  # Idempotent replay
-
-            # Eligible states: CANCEL_REQUESTED or UNKNOWN_EXECUTION
-            if curr_intent_status in ("COMPLETED", "SUCCEEDED"):
-                raise ValueError(
-                    f"Cannot terminate already {curr_intent_status} intent {intent_id}"
-                )
-
-            # Check if already terminated
-            if curr_intent_status in ("CANCELED", "FAILED"):
-                # If run is also already terminated with matching run_id, treat as idempotent replay
-                run_check = conn.execute(
-                    "SELECT status, exit_code FROM pm_coordinator_runs WHERE run_id = ? AND intent_id = ?",
-                    (run_id, intent_id),
-                ).fetchone()
-                if run_check and run_check["status"] in ("KILLED", "EXITED"):
-                    return True
-                return False
-
-            if curr_intent_status not in ("CANCEL_REQUESTED", "UNKNOWN_EXECUTION"):
-                return False
-
-            # Require that run_id exists, matches intent_id, and is in an in-flight status
+            # An observer capability is distinct from generic storage mutation.
+            from mas.tenancy import current_binding
+            binding = current_binding()
+            if not is_trusted_coord_admin():
+                binding.require("coordinator:observe")
+            observer = (f"{binding.identity.tenant_id}:{binding.identity.principal_id}"
+                        if binding else "trusted-coordinator-admin")
             run_row = conn.execute(
-                "SELECT status, attempt_id FROM pm_coordinator_runs WHERE run_id = ? AND intent_id = ?",
-                (run_id, intent_id),
+                "SELECT * FROM pm_coordinator_runs WHERE run_id=? AND intent_id=? AND attempt_id=?",
+                (run_id, intent_id, att_id),
             ).fetchone()
             if not run_row:
+                return False
+            receipt_key = "external:" + receipt_id if receipt_id else "termination:" + run_id
+            payload = {
+                "schema_version": 1, "tenant_id": intent_row["tenant_id"],
+                "project_id": proj_id, "issue_id": intent_row["issue_id"],
+                "task_id": intent_row["task_id"], "intent_id": intent_id,
+                "attempt_id": att_id, "run_id": run_id,
+                "fencing_token": run_row["fencing_token"], "observer_principal": observer,
+                "exit_code": exit_code, "status": observed_status, "tokens_spent": tokens_spent,
+            }
+            canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            existing = conn.execute(
+                "SELECT canonical_payload,content_hash FROM pm_coordinator_termination_observations WHERE receipt_key=?",
+                (receipt_key,),
+            ).fetchone()
+            if existing:
+                if existing["canonical_payload"] != canonical or existing["content_hash"] != digest:
+                    raise sqlite3.IntegrityError(f"Conflicting termination receipt {receipt_key}")
+                return True
+            if curr_intent_status == "COMPLETED":
+                raise ValueError(f"Cannot terminate already COMPLETED intent {intent_id}")
+            if curr_intent_status not in ("CANCEL_REQUESTED", "UNKNOWN_EXECUTION"):
+                return False
+            if run_row["status"] not in ("SPAWNING", "STREAMING", "INTERRUPTED"):
                 return False
 
             # Check reservation bounds
@@ -953,34 +954,14 @@ class CoordinatorStore:
                     (tokens_spent, proj_id),
                 )
 
-            # Record receipt if receipt_id was provided
-            if receipt_id:
-                issue_id = conn.execute(
-                    "SELECT issue_id FROM pm_coordinator_attempts WHERE attempt_id = ?",
-                    (att_id,),
-                ).fetchone()["issue_id"]
-                conn.execute(
-                    """
-                    INSERT INTO pm_coordinator_evidence_receipts (
-                        evidence_id, issue_id, task_id, attempt_id, run_id,
-                        candidate_commit_sha, nonce, key_id, signature,
-                        canonical_payload, admission_status, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ADMITTED', ?)
-                    """,
-                    (
-                        receipt_id,
-                        issue_id,
-                        intent_row["attempt_id"],
-                        att_id,
-                        run_id,
-                        f"term_exit_{exit_code}",
-                        f"nonce_{receipt_id}",
-                        "system:observer",
-                        "sig:system:observer",
-                        json.dumps({"exit_code": exit_code, "status": observed_status}),
-                        now_iso,
-                    ),
-                )
+            # Keep exact accounting observations separate from signed evidence.
+            # No placeholder key, candidate or signature is invented.
+            conn.execute(
+                """INSERT INTO pm_coordinator_termination_observations
+                (receipt_key,intent_id,run_id,attempt_id,canonical_payload,content_hash,observed_at)
+                VALUES(?,?,?,?,?,?,?)""",
+                (receipt_key, intent_id, run_id, att_id, canonical, digest, now_iso),
+            )
 
             return True
 
@@ -1099,36 +1080,13 @@ class CoordinatorStore:
             )
 
     def admit_evidence_receipt(self, evidence_id: str) -> bool:
-        """
-        Promotes a verified evidence receipt from SUBMITTED to ADMITTED.
-        Requires trusted admin or verified tenant write authority.
-        """
-        with self.db.atomic_transaction() as conn:
-            self._validate_tenant_authority()
-            row = conn.execute(
-                """
-                SELECT r.admission_status, a.tenant_id
-                FROM pm_coordinator_evidence_receipts r
-                JOIN pm_coordinator_attempts a ON r.attempt_id = a.attempt_id
-                WHERE r.evidence_id = ?
-                """,
-                (evidence_id,),
-            ).fetchone()
-            if not row:
-                return False
-            self._validate_tenant_authority(row["tenant_id"])
-            if row["admission_status"] != "SUBMITTED":
-                return False
+        """Fail closed until trusted coordinator envelope verification is implemented.
 
-            cursor = conn.execute(
-                """
-                UPDATE pm_coordinator_evidence_receipts
-                SET admission_status = 'ADMITTED'
-                WHERE evidence_id = ? AND admission_status = 'SUBMITTED'
-                """,
-                (evidence_id,),
-            )
-            return cursor.rowcount == 1
+        Write authority cannot establish signature authenticity. Raw receipts stay
+        SUBMITTED, including those submitted by trusted administrators.
+        """
+        self._validate_tenant_authority()
+        raise PermissionError("Coordinator evidence admission is disabled until signature and envelope verification is implemented")
 
     def get_attempt(self, attempt_id: str) -> Optional[CoordinatorAttempt]:
         """Retrieves attempt record by ID."""

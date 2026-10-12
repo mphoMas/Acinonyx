@@ -514,9 +514,14 @@ class PMDatabase:
         temporary tables for composite foreign keys, verifies foreign_key_check and integrity_check,
         computes migration checksum, and commits atomically.
         """
-        CC_03_VERSION = 2026101201
-        CC_03_NAME = "cc_03_coordinator_state"
-        CC_03_CHECKSUM = "cc03_sha256_composite_ownership_v1"
+        # Never reuse the historically applied migration identity.
+        import hashlib
+        import inspect
+        CC_03_VERSION = 2026101202
+        CC_03_NAME = "cc_03_receipt_and_ownership_correction"
+        CC_03_CHECKSUM = hashlib.sha256(
+            inspect.getsource(PMDatabase.migrate_coordinator_schema).encode("utf-8")
+        ).hexdigest()
 
         conn = self._get_connection()
         with self._lock:
@@ -767,6 +772,22 @@ class PMDatabase:
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_reservations_project ON pm_coordinator_reservations(project_id, status);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_coord_reservations_attempt ON pm_coordinator_reservations(attempt_id);")
+
+                # Observations are accounting receipts, not verified AI evidence.
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS pm_coordinator_termination_observations (
+                    receipt_key TEXT PRIMARY KEY,
+                    intent_id TEXT NOT NULL REFERENCES pm_coordinator_intents(intent_id),
+                    run_id TEXT NOT NULL REFERENCES pm_coordinator_runs(run_id),
+                    attempt_id TEXT NOT NULL REFERENCES pm_coordinator_attempts(attempt_id),
+                    canonical_payload TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    observed_at TEXT NOT NULL
+                );
+                """)
+                # No coordinator signature verifier existed in the prior releases.
+                # Preserve receipt bytes while retiring unjustified admission labels.
+                conn.execute("UPDATE pm_coordinator_evidence_receipts SET admission_status='SUBMITTED' WHERE admission_status='ADMITTED'")
 
                 # 8. Foreign key integrity and PRAGMA integrity checks
                 fk_violations = conn.execute("PRAGMA foreign_key_check;").fetchall()
