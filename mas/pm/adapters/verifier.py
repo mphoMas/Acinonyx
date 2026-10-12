@@ -1,378 +1,206 @@
-"""
-mas.pm.adapters.verifier: Trusted verification and batch Codex review adapters (CC-06).
+"""Candidate-bound verification with host-owned expectations and strict signed results.
 
-Implements:
-- VerifierAdapter:
-  * Resolves exact immutable candidate commit and base commit within authorized Git repository.
-  * Checks out candidate into an isolated, ephemeral git worktree or working directory.
-  * Executes owner-controlled test suite/contract against candidate.
-  * Collects verified runner test counts and exit codes.
-  * Fails closed if commit does not exist, tests fail, zero tests run, or worktree cannot be created.
-- CodexReviewerAdapter:
-  * Invokes non-interactive batch review (`codex exec review`) on immutable candidate commit diff.
-  * Parses strict review schema (rejecting ambiguous substring matches such as "NOT APPROVED").
-- Canonical serialization:
-  * Deterministic sorted JSON serialization (versioned schema) and constant-time HMAC-SHA256 signatures.
-  * Strictly requires explicit private minimum-length secret keys (no public hardcoded fallback).
-  * Enforces separation of domains: test/simulation cannot produce production-admitted evidence receipts.
-- Nonce replay prevention & envelope verification.
-- Separation of Builder, Verifier, and Reviewer authority.
+Supported contract: a Git-owned Python solve(payload) function evaluated in the
+existing no-egress Docker worker. Arbitrary shell/pytest stdout is not evidence.
+Repository-wide test runners and provider-connected review need separate qualification.
 """
-
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
-import json
-import logging
-import os
-import subprocess
-import tempfile
-import time
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-logger = logging.getLogger("mas.pm.adapters.verifier")
+from mas.pm.adapters.boundary import ContainerBoundary, finite_timeout
+from mas.swarm.contracts import CandidateError, Limits, SwarmError, canonical, cases_contract, digest, strict_json
+from mas.swarm.process import run_process
+from mas.swarm.worker import DockerWorker
 
-DEFAULT_CODEX_BIN = "/snap/bin/codex"
-MIN_SECRET_LENGTH = 16
+MIN_SECRET_LENGTH = 32
+SCHEMA = 'mas-coordinator-evidence-v1'
+BINDING_FIELDS = {'tenant_id', 'project_id', 'issue_id', 'task_id', 'attempt_id', 'run_id',
+                  'candidate_commit_sha', 'base_commit_sha', 'policy_version', 'fencing_token',
+                  'suite_digest', 'worker_image', 'developer_principal_id'}
 
 
 def canonical_payload_json(data: Any) -> str:
-    """
-    Deterministic versioned JSON serialization for signing.
-    Sorts keys, uses compact delimiters without whitespace, and formats numbers consistently.
-    """
-    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    return canonical(data)
 
 
-def sign_payload(payload: Dict[str, Any], secret_bytes: bytes) -> str:
-    """Computes HMAC-SHA256 signature over the deterministic payload string."""
-    if len(secret_bytes) < MIN_SECRET_LENGTH:
-        raise ValueError(f"Signing key must be at least {MIN_SECRET_LENGTH} bytes, got {len(secret_bytes)}")
-    canonical_str = canonical_payload_json(payload)
-    return hmac.new(secret_bytes, canonical_str.encode("utf-8"), hashlib.sha256).hexdigest()
+def sign_payload(payload, secret_bytes):
+    if not isinstance(secret_bytes, bytes) or len(secret_bytes) < MIN_SECRET_LENGTH:
+        raise ValueError('Signing key must be at least 32 bytes')
+    return hmac.new(secret_bytes, canonical(payload).encode(), hashlib.sha256).hexdigest()
 
 
-def verify_signature(payload: Dict[str, Any], signature: str, secret_bytes: bytes) -> bool:
-    """Verifies HMAC-SHA256 signature against payload using constant-time comparison."""
-    if len(secret_bytes) < MIN_SECRET_LENGTH:
+def verify_signature(payload, signature, secret_bytes):
+    if not isinstance(signature, str) or not re.fullmatch('[0-9a-f]{64}', signature):
         return False
-    expected = sign_payload(payload, secret_bytes)
-    return hmac.compare_digest(expected, signature)
+    try:
+        return hmac.compare_digest(sign_payload(payload, secret_bytes), signature)
+    except (ValueError, SwarmError):
+        return False
+
+
+def resolve_commit(repo: Path, sha: str) -> str:
+    if not isinstance(sha, str) or not re.fullmatch('[0-9a-f]{40}', sha):
+        raise ValueError('Exact immutable 40-character commit SHA required')
+    code, out, _ = asyncio.run(run_process(['git', '-C', str(repo), 'rev-parse', '--verify', sha+'^{commit}'],
+                                         timeout=10, output_limit=1024))
+    if code or out.decode().strip() != sha:
+        raise ValueError('Commit does not exist in authorized repository')
+    return sha
+
+
+@dataclass(frozen=True)
+class VerificationContract:
+    """Trusted operator configuration; immutable copy of expected results stays on host."""
+    source_path: str
+    cases_json: str
+    worker_image: str
+
+    def __post_init__(self):
+        path = Path(self.source_path)
+        if path.is_absolute() or '..' in path.parts or not self.source_path.endswith('.py'):
+            raise ValueError('Invalid contract source path')
+        validated = cases_contract(strict_json(self.cases_json), Limits())
+        object.__setattr__(self, 'cases_json', canonical(validated))
+        ContainerBoundary(self.worker_image)
+
+    @property
+    def suite_digest(self):
+        return digest({'source_path': self.source_path, 'cases': strict_json(self.cases_json)})
+
+
+def evidence_binding(**values):
+    if set(values) != BINDING_FIELDS:
+        raise ValueError('Incomplete evidence binding')
+    for key, value in values.items():
+        if key in {'policy_version', 'fencing_token'}:
+            if type(value) is not int or value <= 0:
+                raise ValueError('Invalid policy or generation')
+        elif not isinstance(value, str) or not value.strip() or len(value) > 256:
+            raise ValueError('Invalid evidence identity')
+    for field in ('candidate_commit_sha', 'base_commit_sha'):
+        if not re.fullmatch('[0-9a-f]{40}', values[field]):
+            raise ValueError('Exact immutable commit required')
+    if not re.fullmatch('[0-9a-f]{64}', values['suite_digest']):
+        raise ValueError('Invalid suite digest')
+    ContainerBoundary(values['worker_image'])
+    return values
+
+
+def signed_envelope(binding, role, issuer, key_id, secret, domain, result):
+    import secrets
+    payload = {'schema': SCHEMA, 'domain': domain, 'type': role, **binding,
+               'issuer_id': issuer, 'key_id': key_id, 'nonce': secrets.token_hex(32), 'result': result}
+    return {'evidence_id': 'ev-'+secrets.token_hex(16),
+            **{key: binding[key] for key in ('issue_id', 'task_id', 'attempt_id', 'run_id', 'candidate_commit_sha')},
+            'nonce': payload['nonce'], 'key_id': key_id, 'signature': sign_payload(payload, secret),
+            'canonical_payload': payload}
 
 
 class VerifierAdapter:
-    """
-    Trusted verifier adapter (CC-06).
-    Executes owner checks against the exact immutable candidate commit in an isolated
-    Git worktree and produces signed evidence receipt envelopes.
-    """
-
-    def __init__(
-        self,
-        verifier_id: str,
-        key_id: str,
-        signing_secret: bytes,
-        repo_root: Optional[Path] = None,
-        is_test_domain: bool = False,
-    ) -> None:
-        if not verifier_id or not verifier_id.strip():
-            raise ValueError("verifier_id must be a non-empty string")
-        if not key_id or not key_id.strip():
-            raise ValueError("key_id must be a non-empty string")
-        if not signing_secret or len(signing_secret) < MIN_SECRET_LENGTH:
-            raise ValueError(f"signing_secret must be at least {MIN_SECRET_LENGTH} bytes")
-
-        self.verifier_id = verifier_id.strip()
-        self.key_id = key_id.strip()
-        self._signing_secret = signing_secret
+    def __init__(self, verifier_id, key_id, signing_secret, repo_root=None, is_test_domain=False,
+                 contract: VerificationContract | None = None):
+        sign_payload({}, signing_secret)
+        if not verifier_id or not key_id or type(is_test_domain) is not bool:
+            raise ValueError('Explicit verifier identity/key/domain required')
+        self.verifier_id, self.key_id, self._secret = verifier_id, key_id, signing_secret
         self.repo_root = (repo_root or Path.cwd()).resolve()
-        self.is_test_domain = is_test_domain
+        self.contract, self.is_test_domain = contract, is_test_domain
 
-    def verify_candidate(
-        self,
-        tenant_id: str,
-        project_id: str,
-        issue_id: str,
-        task_id: str,
-        attempt_id: str,
-        run_id: str,
-        candidate_commit_sha: str,
-        base_commit_sha: str,
-        test_command: Optional[List[str]] = None,
-        timeout_seconds: float = 60.0,
-        developer_principal_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Executes verification checks against the candidate commit in an isolated worktree.
-        Fails closed on nonexistent commit, failed tests, zero tests, or builder self-verification.
-        """
-        # Separation of Builder and Verifier
-        if developer_principal_id and developer_principal_id == self.verifier_id:
-            raise PermissionError(f"Builder cannot verify own candidate: {self.verifier_id}")
-
-        if not candidate_commit_sha or len(candidate_commit_sha) < 7:
-            raise ValueError(f"Invalid candidate commit SHA: {candidate_commit_sha}")
-
-        # 1. Resolve candidate commit in repository
-        rev_check = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{candidate_commit_sha}^{{commit}}"],
-            cwd=str(self.repo_root),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if rev_check.returncode != 0:
-            raise ValueError(f"Candidate commit {candidate_commit_sha} does not exist in repository {self.repo_root}")
-        resolved_candidate_sha = rev_check.stdout.strip()
-
-        # 2. Setup isolated worktree
-        nonce = f"nonce-{task_id}-{run_id}-{os.urandom(8).hex()}"
-        observed_at = time.time()
-        passed = False
-        test_count = 0
-        exit_code = 1
-        output_summary = ""
-
-        with tempfile.TemporaryDirectory(prefix="mas_verifier_worktree_") as worktree_dir:
-            add_worktree = subprocess.run(
-                ["git", "worktree", "add", "--detach", worktree_dir, resolved_candidate_sha],
-                cwd=str(self.repo_root),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if add_worktree.returncode != 0:
-                raise RuntimeError(f"Failed to create isolated worktree for candidate: {add_worktree.stderr}")
-
-            try:
-                cmd = test_command or ["pytest", "-q"]
-                proc = subprocess.run(
-                    cmd,
-                    cwd=worktree_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_seconds,
-                    check=False,
-                )
-                exit_code = proc.returncode
-                stdout = proc.stdout
-                stderr = proc.stderr
-                output_summary = stdout[-500:] if stdout else stderr[-500:]
-
-                # Count tests passed from pytest summary line (e.g., "5 passed in 0.12s")
-                import re
-                match = re.search(r"(\d+)\s+passed", stdout)
-                if match:
-                    test_count = int(match.group(1))
-                else:
-                    test_count = 0
-
-                # Must pass cleanly AND run at least one test
-                passed = (exit_code == 0 and test_count > 0)
-            except subprocess.TimeoutExpired:
-                exit_code = 124
-                passed = False
-                output_summary = "Verification execution timed out"
-                test_count = 0
-            except Exception as e:
-                exit_code = 127
-                passed = False
-                output_summary = f"Verification error: {e}"
-                test_count = 0
-            finally:
-                # Remove worktree cleanly
-                subprocess.run(
-                    ["git", "worktree", "remove", "--force", worktree_dir],
-                    cwd=str(self.repo_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-
-        canonical_payload = {
-            "type": "VERIFICATION_EVIDENCE",
-            "is_test_domain": self.is_test_domain,
-            "verifier_id": self.verifier_id,
-            "tenant_id": tenant_id,
-            "project_id": project_id,
-            "issue_id": issue_id,
-            "task_id": task_id,
-            "attempt_id": attempt_id,
-            "run_id": run_id,
-            "candidate_commit_sha": resolved_candidate_sha,
-            "base_commit_sha": base_commit_sha,
-            "nonce": nonce,
-            "observed_at": observed_at,
-            "passed": passed,
-            "exit_code": exit_code,
-            "test_count": test_count,
-            "summary": output_summary,
-        }
-
-        signature = sign_payload(canonical_payload, self._signing_secret)
-
-        return {
-            "evidence_id": f"ev-{task_id}-{run_id}",
-            "issue_id": issue_id,
-            "task_id": task_id,
-            "attempt_id": attempt_id,
-            "run_id": run_id,
-            "candidate_commit_sha": resolved_candidate_sha,
-            "nonce": nonce,
-            "key_id": self.key_id,
-            "signature": signature,
-            "canonical_payload": canonical_payload,
-            "passed": passed,
-        }
+    def verify_candidate(self, tenant_id, project_id, issue_id, task_id, attempt_id, run_id,
+                         candidate_commit_sha, base_commit_sha, test_command=None, timeout_seconds=30,
+                         developer_principal_id=None, policy_version=1, fencing_token=1):
+        if not developer_principal_id or developer_principal_id == self.verifier_id:
+            raise PermissionError('Distinct durable builder identity required; builder cannot verify own candidate')
+        if test_command is not None:
+            raise PermissionError('Arbitrary commands and stdout summaries are not trusted test evidence')
+        if self.contract is None:
+            raise PermissionError('Owner-controlled verification contract required')
+        timeout = finite_timeout(timeout_seconds, 30)
+        resolve_commit(self.repo_root, candidate_commit_sha)
+        resolve_commit(self.repo_root, base_commit_sha)
+        # Git tree mode check prevents symlink source substitution.
+        code, raw, _ = asyncio.run(run_process(['git', '-C', str(self.repo_root), 'ls-tree', candidate_commit_sha,
+                                              '--', self.contract.source_path], timeout=10, output_limit=2048))
+        if code or not raw.startswith(b'100644 blob ') and not raw.startswith(b'100755 blob '):
+            raise ValueError('Candidate source must be a regular Git blob')
+        code, source, _ = asyncio.run(run_process(['git', '-C', str(self.repo_root), 'show',
+            candidate_commit_sha+':'+self.contract.source_path], timeout=10, output_limit=8192))
+        if code:
+            raise ValueError('Candidate source unavailable')
+        binding = evidence_binding(tenant_id=tenant_id, project_id=project_id, issue_id=issue_id,
+            task_id=task_id, attempt_id=attempt_id, run_id=run_id, candidate_commit_sha=candidate_commit_sha,
+            base_commit_sha=base_commit_sha, policy_version=policy_version, fencing_token=fencing_token,
+            suite_digest=self.contract.suite_digest, worker_image=self.contract.worker_image,
+            developer_principal_id=developer_principal_id)
+        async def evaluate():
+            limits = Limits(worker_seconds=min(timeout, 5))
+            worker = DockerWorker(self.contract.worker_image, limits)
+            await worker.check()
+            outcomes = []
+            for case in strict_json(self.contract.cases_json):
+                try:
+                    actual = await worker.evaluate(source.decode('utf-8'), case['input'], run_id)
+                    passed = canonical(actual) == canonical(case['expected'])
+                except CandidateError:
+                    passed = False
+                outcomes.append({'id': case['id'], 'passed': passed})
+            return outcomes
+        async def bounded_evaluate():
+            return await asyncio.wait_for(evaluate(), timeout)
+        outcomes = asyncio.run(bounded_evaluate())
+        result = {'passed': all(item['passed'] for item in outcomes),
+                  'test_count': len(outcomes), 'outcomes': outcomes}
+        return signed_envelope(binding, 'VERIFICATION_EVIDENCE', self.verifier_id, self.key_id,
+                               self._secret, 'TEST' if self.is_test_domain else 'PRODUCTION', result)
 
 
 class CodexReviewerAdapter:
-    """
-    Batch Codex Reviewer Adapter (CC-06).
-    Invokes non-interactive batch review (`codex exec review`) and strictly parses
-    structured approval verdicts without naive substring matching.
-    """
-
-    def __init__(
-        self,
-        reviewer_id: str,
-        key_id: str,
-        signing_secret: bytes,
-        binary_path: Optional[str] = None,
-        repo_root: Optional[Path] = None,
-        is_test_domain: bool = False,
-    ) -> None:
-        if not reviewer_id or not reviewer_id.strip():
-            raise ValueError("reviewer_id must be a non-empty string")
-        if not key_id or not key_id.strip():
-            raise ValueError("key_id must be a non-empty string")
-        if not signing_secret or len(signing_secret) < MIN_SECRET_LENGTH:
-            raise ValueError(f"signing_secret must be at least {MIN_SECRET_LENGTH} bytes")
-
-        self.reviewer_id = reviewer_id.strip()
-        self.key_id = key_id.strip()
-        self._signing_secret = signing_secret
-        self.binary_path = binary_path or DEFAULT_CODEX_BIN
+    def __init__(self, reviewer_id, key_id, signing_secret, *, image, binary_path='/usr/local/bin/codex',
+                 repo_root=None, is_test_domain=False):
+        sign_payload({}, signing_secret)
+        if not reviewer_id or not key_id or type(is_test_domain) is not bool:
+            raise ValueError('Explicit reviewer identity/key/domain required')
+        self.reviewer_id, self.key_id, self._secret = reviewer_id, key_id, signing_secret
+        self.boundary = ContainerBoundary(image)
+        self.binary_path = binary_path
         self.repo_root = (repo_root or Path.cwd()).resolve()
         self.is_test_domain = is_test_domain
 
-    def review_candidate(
-        self,
-        tenant_id: str,
-        project_id: str,
-        issue_id: str,
-        task_id: str,
-        attempt_id: str,
-        run_id: str,
-        candidate_commit_sha: str,
-        base_commit_sha: str,
-        policy_version: int,
-        developer_principal_id: Optional[str] = None,
-        timeout_seconds: float = 60.0,
-    ) -> Dict[str, Any]:
-        """
-        Executes code review against immutable candidate commit and returns signed review evidence envelope.
-        """
-        # Separation of Builder and Reviewer
-        if developer_principal_id and developer_principal_id == self.reviewer_id:
-            raise PermissionError(f"Builder cannot review own candidate: {self.reviewer_id}")
+    @staticmethod
+    def parse_final(raw, binding):
+        # One strict final object only. JSON event streams, quoted approvals, conflicting
+        # verdicts and textual suffixes cannot approve a candidate.
+        payload = strict_json(raw)
+        if not isinstance(payload, dict) or set(payload) != {'schema', 'binding', 'verdict', 'comments'}:
+            raise ValueError('Invalid final reviewer schema')
+        if payload['schema'] != 'mas-review-v1' or evidence_binding(**payload['binding']) != binding:
+            raise ValueError('Reviewer result does not match candidate contract')
+        if payload['verdict'] not in {'APPROVED', 'REJECTED'} or not isinstance(payload['comments'], str) or len(payload['comments']) > 8192:
+            raise ValueError('Invalid reviewer verdict')
+        return {'verdict': payload['verdict'], 'comments': payload['comments']}
 
-        # Resolve commit
-        rev_check = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{candidate_commit_sha}^{{commit}}"],
-            cwd=str(self.repo_root),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if rev_check.returncode != 0:
-            raise ValueError(f"Candidate commit {candidate_commit_sha} does not exist in repository {self.repo_root}")
-        resolved_candidate_sha = rev_check.stdout.strip()
-
-        nonce = f"nonce-rev-{task_id}-{run_id}-{os.urandom(8).hex()}"
-        observed_at = time.time()
-        verdict = "REJECTED"
-        comments = ""
-
-        cmd = [
-            self.binary_path,
-            "exec",
-            "review",
-            "--commit",
-            resolved_candidate_sha,
-            "--json",
-        ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=str(self.repo_root),
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
-            stdout = proc.stdout
-            stderr = proc.stderr
-            comments = stdout[-500:] if stdout else stderr[-500:]
-
-            # Strict verdict parsing: must have exit_code 0 and explicit structured approval
-            if proc.returncode == 0:
-                # Look for structured JSON approval or explicit conclusive terminal verdict
-                parsed_approved = False
-                for line in stdout.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        ev = json.loads(line)
-                        if isinstance(ev, dict) and ev.get("verdict") == "APPROVED":
-                            parsed_approved = True
-                            break
-                    except Exception:
-                        pass
-                if parsed_approved or (stdout.strip().endswith("VERDICT: APPROVED")):
-                    verdict = "APPROVED"
-                else:
-                    verdict = "REJECTED"
-            else:
-                verdict = "REJECTED"
-        except Exception as e:
-            verdict = "REJECTED"
-            comments = f"Review execution error: {e}"
-
-        canonical_payload = {
-            "type": "REVIEW_EVIDENCE",
-            "is_test_domain": self.is_test_domain,
-            "reviewer_id": self.reviewer_id,
-            "tenant_id": tenant_id,
-            "project_id": project_id,
-            "issue_id": issue_id,
-            "task_id": task_id,
-            "attempt_id": attempt_id,
-            "run_id": run_id,
-            "candidate_commit_sha": resolved_candidate_sha,
-            "base_commit_sha": base_commit_sha,
-            "policy_version": policy_version,
-            "nonce": nonce,
-            "observed_at": observed_at,
-            "verdict": verdict,
-            "comments": comments,
-        }
-
-        signature = sign_payload(canonical_payload, self._signing_secret)
-
-        return {
-            "evidence_id": f"ev-rev-{task_id}-{run_id}",
-            "issue_id": issue_id,
-            "task_id": task_id,
-            "attempt_id": attempt_id,
-            "run_id": run_id,
-            "candidate_commit_sha": resolved_candidate_sha,
-            "nonce": nonce,
-            "key_id": self.key_id,
-            "signature": signature,
-            "canonical_payload": canonical_payload,
-            "verdict": verdict,
-        }
+    def review_candidate(self, *, binding, timeout_seconds=30):
+        binding = evidence_binding(**binding)
+        if binding['developer_principal_id'] == self.reviewer_id:
+            raise PermissionError('Builder cannot review own candidate')
+        resolve_commit(self.repo_root, binding['candidate_commit_sha'])
+        resolve_commit(self.repo_root, binding['base_commit_sha'])
+        # Immutable diff is data inside the container; no repository/home/socket mounts.
+        code, diff, _ = asyncio.run(run_process(['git', '-C', str(self.repo_root), 'diff',
+            binding['base_commit_sha'], binding['candidate_commit_sha'], '--'], timeout=10, output_limit=32768))
+        if code:
+            raise ValueError('Review diff unavailable')
+        prompt = canonical({'required_schema': 'mas-review-v1', 'binding': binding, 'diff': diff.decode('utf-8')})
+        code, out, _ = self.boundary.run([self.binary_path, 'exec', prompt], timeout=timeout_seconds)
+        if code:
+            raise SwarmError('Reviewer execution failed')
+        result = self.parse_final(out, binding)
+        return signed_envelope(binding, 'REVIEW_EVIDENCE', self.reviewer_id, self.key_id,
+            self._secret, 'TEST' if self.is_test_domain else 'PRODUCTION', result)

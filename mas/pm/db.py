@@ -506,6 +506,7 @@ class PMDatabase:
 
         # Run CC-03 versioned migration
         self.migrate_coordinator_schema()
+        self.migrate_coordinator_evidence_schema()
 
     def migrate_coordinator_schema(self) -> None:
         """
@@ -812,6 +813,28 @@ class PMDatabase:
                 raise
             finally:
                 conn.close()
+
+
+    def migrate_coordinator_evidence_schema(self) -> None:
+        """Add immutable evidence jobs and demote receipts admitted by old CC-06.
+
+        Separate migration identity preserves previously applied CC-03 checksums.
+        """
+        import hashlib
+        import inspect
+        checksum = hashlib.sha256(inspect.getsource(PMDatabase.migrate_coordinator_evidence_schema).encode()).hexdigest()
+        with self.atomic_transaction() as conn:
+            prior = conn.execute("SELECT checksum FROM pm_schema_migrations WHERE version=2026101203").fetchone()
+            if prior:
+                if prior["checksum"] != checksum:
+                    raise sqlite3.DatabaseError("Evidence migration checksum mismatch")
+                return
+            conn.execute("""CREATE TABLE pm_coordinator_evidence_contracts (
+                run_id TEXT PRIMARY KEY REFERENCES pm_coordinator_runs(run_id),
+                manifest TEXT NOT NULL
+            )""")
+            conn.execute("UPDATE pm_coordinator_evidence_receipts SET admission_status='SUBMITTED' WHERE admission_status='ADMITTED'")
+            conn.execute("INSERT INTO pm_schema_migrations(version,name,checksum) VALUES (2026101203,'cc06_trusted_evidence_jobs',?)", (checksum,))
 
 
     # --- Project Operations ---

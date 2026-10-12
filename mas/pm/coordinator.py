@@ -44,8 +44,12 @@ def trusted_coordinator_admin_scope(enabled: bool = True):
 class CoordinatorStore:
     """Persistence and atomic lifecycle manager for the Capable Coordinator."""
 
-    def __init__(self, db: PMDatabase) -> None:
+    def __init__(self, db: PMDatabase, *, evidence_trust=None) -> None:
+        from mas.pm.adapters.admission import EvidenceTrust
+        if evidence_trust is not None and not isinstance(evidence_trust, EvidenceTrust):
+            raise TypeError("Service-owned EvidenceTrust required")
         self.db = db
+        self._evidence_trust = evidence_trust
 
     def _now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -1218,97 +1222,18 @@ class CoordinatorStore:
                 created_at=now,
             )
 
-    def admit_evidence_receipt(
-        self,
-        evidence_id: str,
-        trusted_keys: Optional[Dict[str, bytes]] = None,
-    ) -> bool:
-        """
-        Admit evidence receipt after cryptographic envelope verification (CC-06).
-        Enforces:
-        - Valid trusted key ID matching key_id
-        - HMAC-SHA256 signature verification over canonical payload
-        - Payload binding validation (task, attempt, run, candidate_commit_sha, nonce)
-        - Nonce uniqueness / replay prevention
-        - Separation of roles
-        Fails closed on missing/invalid keys, forged signatures, or tampered payloads.
-        """
+    def register_evidence_contract(self, binding, verifier_id, reviewer_id, case_ids):
+        from mas.pm.adapters.admission import register_contract
+        return register_contract(self, binding, verifier_id, reviewer_id, case_ids)
+
+    def admit_evidence_receipt(self, evidence_id: str, trusted_keys=None) -> bool:
+        """Default disabled; keys cannot be provided by receipt callers."""
         self._validate_tenant_authority()
-
-        import os
-        from mas.pm.adapters.verifier import verify_signature
-
-        # Fallback to MAS_EVIDENCE_SECRET if not explicitly provided
-        keys = trusted_keys or {}
-        if not keys:
-            env_secret = os.environ.get("MAS_EVIDENCE_SECRET")
-            if env_secret:
-                keys["mas-verifier-key-1"] = env_secret.encode("utf-8")
-
-        with self.db.atomic_transaction() as conn:
-            row = conn.execute(
-                """
-                SELECT evidence_id, issue_id, task_id, attempt_id, run_id,
-                       candidate_commit_sha, nonce, key_id, signature,
-                       canonical_payload, admission_status
-                FROM pm_coordinator_evidence_receipts
-                WHERE evidence_id = ?
-                """,
-                (evidence_id,),
-            ).fetchone()
-
-            if not row:
-                raise ValueError(f"Evidence receipt {evidence_id} not found")
-
-            # Check if key is trusted
-            key_id = row["key_id"]
-            if not keys or key_id not in keys:
-                raise PermissionError(f"Coordinator evidence admission is disabled until signature and envelope verification is implemented (untrusted or missing key_id '{key_id}')")
-
-            secret_bytes = keys[key_id]
-            raw_payload = row["canonical_payload"]
-            try:
-                payload = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
-            except Exception as e:
-                raise ValueError(f"Malformed canonical_payload: {e}")
-
-            # Verify cryptographic signature
-            if not verify_signature(payload, row["signature"], secret_bytes):
-                raise PermissionError("Evidence admission rejected: invalid or forged cryptographic signature")
-
-            # Disallow test-domain simulated evidence from production admission
-            if payload.get("is_test_domain", False) is True:
-                raise PermissionError("Evidence admission rejected: test-domain simulated evidence cannot be promoted to ADMITTED in production")
-
-            # Must have actually passed verification
-            if payload.get("type") == "VERIFICATION_EVIDENCE":
-                if not payload.get("passed", False) or payload.get("exit_code", 1) != 0 or payload.get("test_count", 0) <= 0:
-                    raise ValueError("Evidence admission rejected: verification failed or zero tests executed")
-
-            # Verify envelope binding consistency
-            if (
-                payload.get("task_id") != row["task_id"]
-                or payload.get("attempt_id") != row["attempt_id"]
-                or payload.get("run_id") != row["run_id"]
-                or payload.get("candidate_commit_sha") != row["candidate_commit_sha"]
-                or payload.get("nonce") != row["nonce"]
-            ):
-                raise ValueError("Evidence admission rejected: payload attributes do not match receipt envelope")
-
-            # Check nonce uniqueness (prevent replay across different receipts)
-            replay_count = conn.execute(
-                "SELECT COUNT(*) FROM pm_coordinator_evidence_receipts WHERE nonce = ? AND evidence_id != ?",
-                (row["nonce"], evidence_id),
-            ).fetchone()[0]
-            if replay_count > 0:
-                raise ValueError(f"Evidence admission rejected: nonce '{row['nonce']}' replayed")
-
-            # Mark ADMITTED
-            conn.execute(
-                "UPDATE pm_coordinator_evidence_receipts SET admission_status = 'ADMITTED' WHERE evidence_id = ?",
-                (evidence_id,),
-            )
-            return True
+        if trusted_keys is not None:
+            raise PermissionError("Per-receipt trust overrides are forbidden")
+        if self._evidence_trust is None:
+            raise PermissionError("Coordinator evidence admission is disabled until service-owned trust is configured")
+        return self._evidence_trust.admit(self, evidence_id)
 
     def get_attempt(self, attempt_id: str) -> Optional[CoordinatorAttempt]:
         """Retrieves attempt record by ID."""
