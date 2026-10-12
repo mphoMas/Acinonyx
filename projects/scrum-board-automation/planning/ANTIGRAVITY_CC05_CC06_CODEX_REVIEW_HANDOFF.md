@@ -23,7 +23,7 @@ The owner explicitly assigned Codex to fix CC-05 and CC-06. The code is now subm
    bash scripts/run_quality_gate.sh
    ```
 
-   The container tests require Docker access and an available pinned Python execution image. The delivered cloud fixture uses local image ID `sha256:df18428df8a0f9189c84e7424d214b4c50092af1f9dca5842a00c41c39bda316`; CC-05 also resolves the local `python:3.12-slim` image to its immutable ID. Report missing infrastructure and skips honestly. Do not describe mock output, shell exit or skipped containment tests as execution proof.
+   The container tests require Docker access and an available Python execution image. The shared fixture now resolves the local `python:3.12-slim` image to its actual immutable ID, or accepts an explicit immutable ID/repository digest via `MAS_COORDINATOR_TEST_IMAGE`. It does not require the author-cloud config ID; see [the portability delivery and recovery finding](CC_05_06_IMAGE_PORTABILITY_DELIVERY.md). Report missing infrastructure and skips honestly. Do not describe mock output, shell exit or skipped containment tests as execution proof.
 7. Build/install the wheel into a clean venv outside the checkout. Confirm adapter imports without psutil, new database creation, historical upgrade/demotion preserving receipt bytes, reopen and fail-closed unconfigured admission.
 8. Commit a candidate-specific independent review, with APPROVED / APPROVED WITH CONDITIONS / REJECTED and exact supported scope. State actual commands, counts, skips, negative probes and any remaining failures. If you identify a defect, reproduce it and name the mechanism before changing the implementation.
 
