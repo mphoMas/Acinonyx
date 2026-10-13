@@ -1,0 +1,158 @@
+{
+  "scope": "Recorded SBA/CC implementation reviews through local revision 1315c456; retrospective, not all agent work",
+  "unit": "One combined implementation package per reviewed submission; excludes design-only reviews",
+  "records": [
+    {
+      "package": "SBA-02/SBA-05",
+      "round": 1,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "SBA_02_05_BACKEND_REVIEW.md"
+    },
+    {
+      "package": "SBA-02/SBA-05",
+      "round": 2,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "SBA_02_05_REWORK_REVIEW.md"
+    },
+    {
+      "package": "SBA-02/SBA-05",
+      "round": 3,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "conditional_acceptance",
+      "source": "SBA_02_05_ACCEPTANCE_REVIEW.md"
+    },
+    {
+      "package": "SBA-03",
+      "round": 1,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "SBA_03_REVIEW.md"
+    },
+    {
+      "package": "SBA-03",
+      "round": 2,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_01_SBA_03_RESUBMISSION_REVIEW.md"
+    },
+    {
+      "package": "SBA-03",
+      "round": 3,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_02_SBA_03_REVIEW.md"
+    },
+    {
+      "package": "SBA-03",
+      "round": 4,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_02_REVIEW_3.md"
+    },
+    {
+      "package": "SBA-03",
+      "round": 5,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_02_REVIEW_4.md"
+    },
+    {
+      "package": "CC-03",
+      "round": 1,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_03_INDEPENDENT_REVIEW.md"
+    },
+    {
+      "package": "CC-03",
+      "round": 2,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_03_REWORK_REVIEW.md"
+    },
+    {
+      "package": "CC-03",
+      "round": 3,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_03_REVIEW_3.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 1,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_04_INDEPENDENT_REVIEW.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 2,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_04_REWORK_REVIEW.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 3,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_04_REVIEW_3.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 4,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_04_REVIEW_4.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 5,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_04_REVIEW_5.md"
+    },
+    {
+      "package": "CC-04",
+      "round": 6,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "conditional_acceptance",
+      "source": "CC_04_ACCEPTANCE_REVIEW.md"
+    },
+    {
+      "package": "CC-05/CC-06",
+      "round": 1,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_05_06_INDEPENDENT_REVIEW.md"
+    },
+    {
+      "package": "CC-05/CC-06",
+      "round": 2,
+      "builder": "Antigravity",
+      "reviewer": "Codex",
+      "outcome": "rejected",
+      "source": "CC_05_06_REWORK_REVIEW.md"
+    }
+  ]
+}
