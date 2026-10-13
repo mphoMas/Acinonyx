@@ -629,6 +629,7 @@ class CoordinatorWorker:
             if (current is None or current.status != 'PROCESSING' or current.worker_id != self.worker_id
                     or current.fencing_token != assigned_fencing or current.lease_expires_at <= time.time()):
                 raise PermissionError('Container start denied: stale generation, lease or assignment')
+            self.store.validate_delivery_execution(intent.intent_id)
 
         req.authorize_start = authorize_container_start
         from mas.tenancy import current_binding

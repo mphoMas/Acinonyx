@@ -60,88 +60,94 @@ class EvidenceTrust:
         if not is_trusted_coord_admin():
             binding.require('coordinator:evidence:admit')
         with store.db.atomic_transaction() as conn:
-            row = conn.execute('SELECT * FROM pm_coordinator_evidence_receipts WHERE evidence_id=?', (evidence_id,)).fetchone()
-            if not row:
-                raise ValueError('Evidence receipt not found')
-            grant = self._require_issuer(row['key_id'])
-            payload = strict_json(row['canonical_payload'])
-            fields = BINDING_FIELDS | {'schema', 'domain', 'type', 'issuer_id', 'key_id', 'nonce', 'result'}
-            if not isinstance(payload, dict) or set(payload) != fields:
-                raise ValueError('Strict versioned evidence envelope required')
-            if payload['schema'] != SCHEMA or payload['domain'] != 'PRODUCTION' or payload['type'] != grant.role:
-                raise PermissionError('Unknown or untrusted evidence schema/domain/role')
-            if payload['issuer_id'] != grant.issuer_id or payload['tenant_id'] != grant.tenant_id or payload['key_id'] != row['key_id']:
-                raise PermissionError('Issuer authority does not match envelope')
-            if not verify_signature(payload, row['signature'], grant.secret):
-                raise PermissionError('Invalid evidence signature')
-            expected_binding = evidence_binding(**{k: payload[k] for k in BINDING_FIELDS})
-            store._validate_tenant_authority(payload['tenant_id'])
-            for key in ('issue_id', 'task_id', 'attempt_id', 'run_id', 'candidate_commit_sha', 'nonce'):
-                if payload[key] != row[key]:
-                    raise ValueError('Receipt envelope mismatch')
-            contract = conn.execute('SELECT manifest FROM pm_coordinator_evidence_contracts WHERE run_id=?', (payload['run_id'],)).fetchone()
-            if not contract:
-                raise PermissionError('Missing owner-controlled evidence contract')
-            manifest = strict_json(contract['manifest'])
-            if manifest['binding'] != expected_binding:
-                raise ValueError('Evidence does not match immutable job contract')
-            if grant.issuer_id != manifest['verifier_id' if grant.role == 'VERIFICATION_EVIDENCE' else 'reviewer_id']:
-                raise PermissionError('Issuer is not assigned to this verification job')
-            if payload['developer_principal_id'] in {manifest['verifier_id'], manifest['reviewer_id']} or manifest['verifier_id'] == manifest['reviewer_id']:
-                raise PermissionError('Builder/verifier/reviewer separation violated')
-            current = conn.execute('''SELECT a.tenant_id,a.project_id,a.issue_id,a.task_id,a.candidate_commit_sha,
-                a.status AS attempt_status,r.status AS run_status,r.exit_code,r.fencing_token AS run_fence,
-                i.status AS intent_status,i.fencing_token AS intent_fence,q.policy_version,q.has_pending_reconciliation
-                FROM pm_coordinator_runs r JOIN pm_coordinator_attempts a ON a.attempt_id=r.attempt_id
-                JOIN pm_coordinator_intents i ON i.intent_id=r.intent_id AND i.attempt_id=a.attempt_id
-                JOIN pm_issues q ON q.id=a.issue_id AND q.project_id=a.project_id WHERE r.run_id=? AND a.attempt_id=?''',
-                (payload['run_id'], payload['attempt_id'])).fetchone()
-            if not current:
-                raise ValueError('Run/attempt ownership unavailable')
-            if any(current[k] != payload[k] for k in ('tenant_id', 'project_id', 'issue_id', 'task_id', 'candidate_commit_sha', 'policy_version')):
-                raise ValueError('Current ownership, candidate or policy mismatch')
-            if current['run_fence'] != payload['fencing_token'] or current['intent_fence'] != payload['fencing_token'] or current['has_pending_reconciliation']:
-                raise ValueError('Stale generation or pending reconciliation')
-            if current['attempt_status'] != 'SUCCEEDED' or current['run_status'] != 'EXITED' or current['exit_code'] != 0 or current['intent_status'] != 'COMPLETED':
-                raise ValueError('Execution is not confirmed successful')
-            result = payload['result']
-            if grant.role == 'VERIFICATION_EVIDENCE':
-                if not isinstance(result, dict) or set(result) != {'passed', 'test_count', 'outcomes'}:
-                    raise ValueError('Invalid verification result schema')
-                outcomes = result['outcomes']
-                if result['passed'] is not True or type(result['test_count']) is not int or result['test_count'] != len(manifest['case_ids']):
-                    raise ValueError('Failed, zero or unmeasured tests')
-                if not isinstance(outcomes, list) or len(outcomes) != len(manifest['case_ids']):
-                    raise ValueError('Incomplete measured outcomes')
-                if any(not isinstance(item, dict) or set(item) != {'id', 'passed'} or item['passed'] is not True for item in outcomes):
-                    raise ValueError('Failed or malformed measured outcomes')
-                if [item['id'] for item in outcomes] != manifest['case_ids']:
-                    raise ValueError('Measured suite does not match owner contract')
-            else:
-                if not isinstance(result, dict) or set(result) != {'verdict', 'comments'} or result['verdict'] != 'APPROVED' or not isinstance(result['comments'], str) or len(result['comments']) > 8192:
-                    raise ValueError('Rejected or malformed review result')
-                # A review cannot approve without a current admitted verifier receipt.
-                verifications = conn.execute('SELECT canonical_payload,signature FROM pm_coordinator_evidence_receipts WHERE run_id=? AND admission_status=\'ADMITTED\'', (payload['run_id'],)).fetchall()
-                verified = False
-                for v in verifications:
-                    p = strict_json(v['canonical_payload'])
-                    if p.get('type') != 'VERIFICATION_EVIDENCE' or p.get('issuer_id') != manifest['verifier_id']:
-                        continue
-                    verification_grant = self._require_issuer(p.get('key_id'))
-                    if verification_grant.role == 'VERIFICATION_EVIDENCE' and verify_signature(p, v['signature'],
-                            verification_grant.secret) and p.get('schema') == SCHEMA and p.get('domain') == 'PRODUCTION' and p.get('tenant_id') == verification_grant.tenant_id and {k: p.get(k) for k in BINDING_FIELDS} == expected_binding:
-                        r = p.get('result')
-                        if isinstance(r, dict) and set(r) == {'passed', 'test_count', 'outcomes'} and r['passed'] is True and type(r['test_count']) is int and r['test_count'] == len(manifest['case_ids']):
-                            outcomes = r['outcomes']
-                            verified = isinstance(outcomes, list) and len(outcomes) == len(manifest['case_ids']) and all(
-                                isinstance(item, dict) and set(item) == {'id', 'passed'} and item['passed'] is True and item['id'] == expected
-                                for item, expected in zip(outcomes, manifest['case_ids']))
-                            if verified:
-                                break
-                if not verified:
-                    raise PermissionError('Current independently verified evidence required before review admission')
-            conn.execute("UPDATE pm_coordinator_evidence_receipts SET admission_status='ADMITTED' WHERE evidence_id=?", (evidence_id,))
-            return True
+            return self._admit_in_transaction(store, evidence_id, conn)
+
+    def _admit_in_transaction(self, store, evidence_id, conn):
+        row = conn.execute('SELECT * FROM pm_coordinator_evidence_receipts WHERE evidence_id=?', (evidence_id,)).fetchone()
+        if not row:
+            raise ValueError('Evidence receipt not found')
+        grant = self._require_issuer(row['key_id'])
+        payload = strict_json(row['canonical_payload'])
+        fields = BINDING_FIELDS | {'schema', 'domain', 'type', 'issuer_id', 'key_id', 'nonce', 'result'}
+        if not isinstance(payload, dict) or set(payload) != fields:
+            raise ValueError('Strict versioned evidence envelope required')
+        if payload.get('type') == 'REVIEW_EVIDENCE':
+            from mas.pm.delivery import require_review
+            require_review(conn, payload.get('issue_id'), payload.get('candidate_commit_sha'))
+        if payload['schema'] != SCHEMA or payload['domain'] != 'PRODUCTION' or payload['type'] != grant.role:
+            raise PermissionError('Unknown or untrusted evidence schema/domain/role')
+        if payload['issuer_id'] != grant.issuer_id or payload['tenant_id'] != grant.tenant_id or payload['key_id'] != row['key_id']:
+            raise PermissionError('Issuer authority does not match envelope')
+        if not verify_signature(payload, row['signature'], grant.secret):
+            raise PermissionError('Invalid evidence signature')
+        expected_binding = evidence_binding(**{k: payload[k] for k in BINDING_FIELDS})
+        store._validate_tenant_authority(payload['tenant_id'])
+        for key in ('issue_id', 'task_id', 'attempt_id', 'run_id', 'candidate_commit_sha', 'nonce'):
+            if payload[key] != row[key]:
+                raise ValueError('Receipt envelope mismatch')
+        contract = conn.execute('SELECT manifest FROM pm_coordinator_evidence_contracts WHERE run_id=?', (payload['run_id'],)).fetchone()
+        if not contract:
+            raise PermissionError('Missing owner-controlled evidence contract')
+        manifest = strict_json(contract['manifest'])
+        if manifest['binding'] != expected_binding:
+            raise ValueError('Evidence does not match immutable job contract')
+        if grant.issuer_id != manifest['verifier_id' if grant.role == 'VERIFICATION_EVIDENCE' else 'reviewer_id']:
+            raise PermissionError('Issuer is not assigned to this verification job')
+        if payload['developer_principal_id'] in {manifest['verifier_id'], manifest['reviewer_id']} or manifest['verifier_id'] == manifest['reviewer_id']:
+            raise PermissionError('Builder/verifier/reviewer separation violated')
+        current = conn.execute('''SELECT a.tenant_id,a.project_id,a.issue_id,a.task_id,a.candidate_commit_sha,
+            a.status AS attempt_status,r.status AS run_status,r.exit_code,r.fencing_token AS run_fence,
+            i.status AS intent_status,i.fencing_token AS intent_fence,q.policy_version,q.has_pending_reconciliation
+            FROM pm_coordinator_runs r JOIN pm_coordinator_attempts a ON a.attempt_id=r.attempt_id
+            JOIN pm_coordinator_intents i ON i.intent_id=r.intent_id AND i.attempt_id=a.attempt_id
+            JOIN pm_issues q ON q.id=a.issue_id AND q.project_id=a.project_id WHERE r.run_id=? AND a.attempt_id=?''',
+            (payload['run_id'], payload['attempt_id'])).fetchone()
+        if not current:
+            raise ValueError('Run/attempt ownership unavailable')
+        if any(current[k] != payload[k] for k in ('tenant_id', 'project_id', 'issue_id', 'task_id', 'candidate_commit_sha', 'policy_version')):
+            raise ValueError('Current ownership, candidate or policy mismatch')
+        if current['run_fence'] != payload['fencing_token'] or current['intent_fence'] != payload['fencing_token'] or current['has_pending_reconciliation']:
+            raise ValueError('Stale generation or pending reconciliation')
+        if current['attempt_status'] != 'SUCCEEDED' or current['run_status'] != 'EXITED' or current['exit_code'] != 0 or current['intent_status'] != 'COMPLETED':
+            raise ValueError('Execution is not confirmed successful')
+        result = payload['result']
+        if grant.role == 'VERIFICATION_EVIDENCE':
+            if not isinstance(result, dict) or set(result) != {'passed', 'test_count', 'outcomes'}:
+                raise ValueError('Invalid verification result schema')
+            outcomes = result['outcomes']
+            if result['passed'] is not True or type(result['test_count']) is not int or result['test_count'] != len(manifest['case_ids']):
+                raise ValueError('Failed, zero or unmeasured tests')
+            if not isinstance(outcomes, list) or len(outcomes) != len(manifest['case_ids']):
+                raise ValueError('Incomplete measured outcomes')
+            if any(not isinstance(item, dict) or set(item) != {'id', 'passed'} or item['passed'] is not True for item in outcomes):
+                raise ValueError('Failed or malformed measured outcomes')
+            if [item['id'] for item in outcomes] != manifest['case_ids']:
+                raise ValueError('Measured suite does not match owner contract')
+        else:
+            if not isinstance(result, dict) or set(result) != {'verdict', 'comments'} or result['verdict'] != 'APPROVED' or not isinstance(result['comments'], str) or len(result['comments']) > 8192:
+                raise ValueError('Rejected or malformed review result')
+            # A review cannot approve without a current admitted verifier receipt.
+            verifications = conn.execute('SELECT canonical_payload,signature FROM pm_coordinator_evidence_receipts WHERE run_id=? AND admission_status=\'ADMITTED\'', (payload['run_id'],)).fetchall()
+            verified = False
+            for v in verifications:
+                p = strict_json(v['canonical_payload'])
+                if p.get('type') != 'VERIFICATION_EVIDENCE' or p.get('issuer_id') != manifest['verifier_id']:
+                    continue
+                verification_grant = self._require_issuer(p.get('key_id'))
+                if verification_grant.role == 'VERIFICATION_EVIDENCE' and verify_signature(p, v['signature'],
+                        verification_grant.secret) and p.get('schema') == SCHEMA and p.get('domain') == 'PRODUCTION' and p.get('tenant_id') == verification_grant.tenant_id and {k: p.get(k) for k in BINDING_FIELDS} == expected_binding:
+                    r = p.get('result')
+                    if isinstance(r, dict) and set(r) == {'passed', 'test_count', 'outcomes'} and r['passed'] is True and type(r['test_count']) is int and r['test_count'] == len(manifest['case_ids']):
+                        outcomes = r['outcomes']
+                        verified = isinstance(outcomes, list) and len(outcomes) == len(manifest['case_ids']) and all(
+                            isinstance(item, dict) and set(item) == {'id', 'passed'} and item['passed'] is True and item['id'] == expected
+                            for item, expected in zip(outcomes, manifest['case_ids']))
+                        if verified:
+                            break
+            if not verified:
+                raise PermissionError('Current independently verified evidence required before review admission')
+        conn.execute("UPDATE pm_coordinator_evidence_receipts SET admission_status='ADMITTED' WHERE evidence_id=?", (evidence_id,))
+        return True
 
 
 def register_contract(store, binding, verifier_id, reviewer_id, case_ids):

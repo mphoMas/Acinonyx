@@ -6,6 +6,12 @@ This repo uses RunQL for SQL workflows and schema exploration.
 
 Read [the delivery ownership agreement](company/DELIVERY_OWNERSHIP.md) before assigning or implementing work. Codex owns frontend development, UX/UI, design and art direction. The Antigravity development team owns backend, engine and remaining technical implementation. Agree shared interface changes and name one owner per task. Antigravity is a development team, distinct from the bounded supervised `mas-swarm` workflow; assignments do not grant runtime permissions. Keep planning in MAS-PM and use the [handoff template](templates/development-handoff.template.md).
 
+## Delivery process gates
+
+For scoped delivery work, use the [readiness and review checklist](projects/scrum-board-automation/planning/DELIVERY_READINESS_AND_REVIEW_CHECKLIST.md): share versioned requirements/checks before implementation, provide actual readiness evidence, justify blockers, record new scope separately and pause when a claimed-closed rule fails again. Count readiness returns as repeat work rather than hiding them.
+
+For projects explicitly enrolled in the durable gate, use the [operator guide](projects/scrum-board-automation/planning/DELIVERY_GATE_OPERATOR_GUIDE.md) and supported DeliveryService; do not bypass it with direct SQL, fabricated evidence or legacy admission. The guide distinguishes enforced records from independent semantic verification. Do not enroll active projects or infer production release permission from scoped acceptance. Unenrolled legacy projects retain their separately qualified scope.
+
 <!-- RUNQL:BEGIN -->
 # RunQL Context
 

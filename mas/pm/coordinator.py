@@ -91,10 +91,16 @@ class CoordinatorStore:
         Rejects contradictory project, issue, or task_id mappings.
         """
         self._validate_tenant_authority(tenant_id)
+        if conn is None:
+            with self.db.atomic_transaction() as transaction:
+                return self.create_attempt(attempt_id, tenant_id, project_id, issue_id, task_id,
+                                           attempt_seq, budget_tokens_allocated, conn=transaction)
         manage_conn = conn is None
         c = self.db._get_connection() if manage_conn else conn
         now = self._now_iso()
         try:
+            from mas.pm.delivery import require_dispatch
+            require_dispatch(c, issue_id, tenant_id)
             c.execute(
                 """
                 INSERT INTO pm_coordinator_attempts (
@@ -148,10 +154,16 @@ class CoordinatorStore:
         Enforces foreign key ownership against attempt_id and tenant/project/task.
         """
         self._validate_tenant_authority(tenant_id)
+        if conn is None:
+            with self.db.atomic_transaction() as transaction:
+                return self.create_intent(intent_id, tenant_id, project_id, issue_id, task_id,
+                                          attempt_id, adapter_type, payload, conn=transaction)
         manage_conn = conn is None
         c = self.db._get_connection() if manage_conn else conn
         now = self._now_iso()
         try:
+            from mas.pm.delivery import require_dispatch, record_dispatch
+            require_dispatch(c, issue_id, tenant_id)
             c.execute(
                 """
                 INSERT INTO pm_coordinator_intents (
@@ -173,6 +185,7 @@ class CoordinatorStore:
                     now,
                 ),
             )
+            record_dispatch(c, issue_id, tenant_id, intent_id)
             return CoordinatorIntent(
                 intent_id=intent_id,
                 tenant_id=tenant_id,
@@ -392,6 +405,8 @@ class CoordinatorStore:
 
             self._validate_tenant_authority(intent_row["tenant_id"])
 
+            from mas.pm.delivery import require_dispatch
+            require_dispatch(conn, intent_row["issue_id"], intent_row["tenant_id"], intent_id=intent_id)
             actual_attempt_id = intent_row["attempt_id"]
             if attempt_id is not None and attempt_id != actual_attempt_id:
                 raise ValueError(
@@ -479,6 +494,8 @@ class CoordinatorStore:
                 """,
                 (run_id, intent_id, actual_attempt_id, assigned_fencing_token, now_iso),
             )
+            from mas.pm.delivery import execution_phase
+            execution_phase(conn, intent_row["issue_id"], 'EXECUTING', {'intent_id': intent_id, 'run_id': run_id})
             return True
 
     def heartbeat_intent(
@@ -567,6 +584,8 @@ class CoordinatorStore:
                 return False
             self._validate_tenant_authority(intent_check["tenant_id"])
 
+            from mas.pm.delivery import require_execution
+            require_execution(conn, intent_check['issue_id'], intent_check['tenant_id'], intent_id)
             # Verify issue policy version and pending reconciliation has not changed mid-flight
             issue_id = intent_check["issue_id"]
             if issue_id:
@@ -675,6 +694,9 @@ class CoordinatorStore:
                 """,
                 (exit_code, now_iso, intent_id, assigned_fencing_token),
             )
+            from mas.pm.delivery import execution_phase
+            execution_phase(conn, issue_id, 'AWAITING_SUBMISSION' if exit_code == 0 else 'UNCERTAIN',
+                            {'intent_id': intent_id, 'exit_code': exit_code})
             return True
 
     def record_execution_interrupted(
@@ -748,6 +770,9 @@ class CoordinatorStore:
                 """,
                 (now_iso, intent_id, assigned_fencing_token),
             )
+            from mas.pm.delivery import execution_phase
+            issue_id = conn.execute('SELECT issue_id FROM pm_coordinator_intents WHERE intent_id=?', (intent_id,)).fetchone()['issue_id']
+            execution_phase(conn, issue_id, 'UNCERTAIN', {'intent_id': intent_id})
             # Budget reservation remains HELD; no release or settlement
             return True
 
@@ -808,6 +833,9 @@ class CoordinatorStore:
                 )
                 if cursor.rowcount == 1:
                     reaped.append(intent_id)
+                    from mas.pm.delivery import execution_phase
+                    gate_issue = t_conn.execute('SELECT issue_id FROM pm_coordinator_intents WHERE intent_id=?', (intent_id,)).fetchone()['issue_id']
+                    execution_phase(t_conn, gate_issue, 'UNCERTAIN', {'intent_id': intent_id, 'reason': 'lease_expired'})
                     # Check whether any runs were inserted
                     runs_count = t_conn.execute(
                         "SELECT COUNT(*) as cnt FROM pm_coordinator_runs WHERE intent_id = ?",
@@ -870,6 +898,8 @@ class CoordinatorStore:
 
             curr_status = intent_row["status"]
             att_id = intent_row["attempt_id"]
+            from mas.pm.delivery import execution_phase
+            gate_issue = conn.execute('SELECT issue_id FROM pm_coordinator_intents WHERE intent_id=?', (intent_id,)).fetchone()['issue_id']
 
             # If already finalized or already in CANCEL_REQUESTED
             if curr_status in ("COMPLETED", "FAILED", "UNKNOWN_EXECUTION", "CANCELED"):
@@ -908,6 +938,7 @@ class CoordinatorStore:
                     """,
                     (now_iso, att_id),
                 )
+                execution_phase(conn, gate_issue, 'UNCERTAIN', {'intent_id': intent_id, 'reason': 'canceled_before_launch'})
                 return True
 
             # curr_status in ('CLAIMED', 'PROCESSING'): potentially launched work
@@ -933,6 +964,8 @@ class CoordinatorStore:
                 (att_id,),
             )
             # NOTE: Runs remain in SPAWNING/STREAMING; budget holds remain HELD until authoritative receipt.
+            if cursor.rowcount == 1:
+                execution_phase(conn, gate_issue, 'UNCERTAIN', {'intent_id': intent_id, 'reason': 'cancellation_requested'})
             return cursor.rowcount == 1
 
     def record_authoritative_termination(
@@ -1234,6 +1267,15 @@ class CoordinatorStore:
         if self._evidence_trust is None:
             raise PermissionError("Coordinator evidence admission is disabled until service-owned trust is configured")
         return self._evidence_trust.admit(self, evidence_id)
+
+    def validate_delivery_execution(self, intent_id):
+        with self.db.atomic_transaction() as conn:
+            row = conn.execute("SELECT tenant_id,issue_id FROM pm_coordinator_intents WHERE intent_id=?", (intent_id,)).fetchone()
+            if not row:
+                raise PermissionError("Unknown coordinator intent")
+            self._validate_tenant_authority(row['tenant_id'])
+            from mas.pm.delivery import require_execution
+            require_execution(conn, row['issue_id'], row['tenant_id'], intent_id)
 
     def get_attempt(self, attempt_id: str) -> Optional[CoordinatorAttempt]:
         """Retrieves attempt record by ID."""

@@ -507,6 +507,8 @@ class PMDatabase:
         # Run CC-03 versioned migration
         self.migrate_coordinator_schema()
         self.migrate_coordinator_evidence_schema()
+        from mas.pm.delivery import migrate
+        migrate(self)
 
     def migrate_coordinator_schema(self) -> None:
         """
@@ -1251,6 +1253,11 @@ class PMDatabase:
     def create_issue(self, issue: Issue, conn: Optional[sqlite3.Connection] = None) -> Issue:
         now = datetime.now(timezone.utc).isoformat()
         def _execute(c: sqlite3.Connection) -> None:
+            if issue.current_state == IssueState.DONE and c.execute(
+                "SELECT 1 FROM pm_delivery_projects WHERE project_id=?", (issue.project_id,)
+            ).fetchone():
+                from mas.pm.delivery import DeliveryGateError
+                raise DeliveryGateError("Cannot create pre-completed issues in an enrolled project")
             c.execute(
                 """
                 INSERT INTO pm_issues (
@@ -1452,6 +1459,9 @@ class PMDatabase:
     ) -> None:
         """Atomic state update with transition audit log and rework cycle tracking."""
         def _execute_update(c: sqlite3.Connection) -> None:
+            if new_state == "DONE":
+                from mas.pm.delivery import require_accepted
+                require_accepted(c, issue_id, self.coordinator)
             cur = c.execute(
                 "SELECT current_state, reflexion_attempts, rework_cycle FROM pm_issues WHERE id = ?",
                 (issue_id,),
