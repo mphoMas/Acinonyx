@@ -2,7 +2,7 @@
 
 Evidence-based case study and applicable delivery improvement plan
 
-Version 1.0 | 13 October 2026 | Retrospective findings complete for the stated sample; intervention validation pending
+Version 1.1 | 13 October 2026 | Retrospective findings complete for the stated sample; intervention validation pending
 
 ## Executive summary
 
@@ -308,3 +308,11 @@ Interpretation: A separately checked policy could change before launch. Permissi
 - [REWORK_CAUSE_ANALYSIS.md](https://github.com/mphoMas/Acinonyx/blob/9d053629d170c37ff2a6aff31c7c726c8e529bbd/projects/scrum-board-automation/planning/REWORK_CAUSE_ANALYSIS.md)
 - [REWORK_CAUSE_LEDGER.json](https://github.com/mphoMas/Acinonyx/blob/9d053629d170c37ff2a6aff31c7c726c8e529bbd/projects/scrum-board-automation/planning/REWORK_CAUSE_LEDGER.json)
 - [DELIVERY_READINESS_AND_REVIEW_CHECKLIST.md](https://github.com/mphoMas/Acinonyx/blob/9d053629d170c37ff2a6aff31c7c726c8e529bbd/projects/scrum-board-automation/planning/DELIVERY_READINESS_AND_REVIEW_CHECKLIST.md)
+
+## Implementation addendum — 13 October 2026
+
+The proposed process now has durable coordinator enforcement in code candidate `173f940d8e986520bec6f226beb090f80108649d`. The scope is explicitly enrolled projects; operational projects were not enrolled automatically. The service records brief/version agreement, dispatch binding, readiness returns, existing-requirement findings, scope decisions, challenges, recurrence pauses and independently signed acceptance. Low-level coordinator paths and premature PM completion cannot bypass the enrolled gate.
+
+All five repository quality stages passed: 839 tests, zero failures or skips. Forty-seven process-gate cases are included, and the 113-test targeted run is a subset. The clean installed wheel demonstrated controlled synthetic execution and persisted readiness/completion guards outside the checkout. These checks qualify implementation behavior, not a measured reduction in rework or live end-to-end agent delivery.
+
+Metadata screening cannot prove technical correctness; the existing qualified verifier contract and separate reviewer remain necessary. No new public endpoint, live provider admission, activity feed or automatic conversational producer was activated. Separate implementation acceptance and configured client/service integration remain pending. The next evaluation is a deliberately enrolled controlled pilot using the case-study metrics, without weakening existing gates or asking the owner to become the routine messenger.
