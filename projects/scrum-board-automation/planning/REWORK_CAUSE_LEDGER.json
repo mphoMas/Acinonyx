@@ -1,0 +1,205 @@
+{
+  "scope": "Eight selected recurring issue families; thematic observations overlap and must not be summed as unique defects",
+  "chains": [
+    {
+      "chain_id": "RW-01",
+      "theme": "Planning authority",
+      "package": "SBA-03",
+      "review_rounds_observed": 4,
+      "additional_rounds_after_first_observation": 3,
+      "mechanism": "Nonempty/name-based principal treated as authorization across successive fixes.",
+      "classification": "Repeated original authority defect / incomplete boundary fix",
+      "sources": [
+        "SBA_03_REVIEW.md",
+        "CC_01_SBA_03_RESUBMISSION_REVIEW.md",
+        "CC_02_SBA_03_REVIEW.md",
+        "CC_02_REVIEW_3.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-02",
+      "theme": "Active planning policy preservation",
+      "package": "SBA-03",
+      "review_rounds_observed": 2,
+      "additional_rounds_after_first_observation": 1,
+      "mechanism": "Initial active scope overwrite; subsequent null reviewer staging still removed live policy.",
+      "classification": "Same invariant, different edge case",
+      "sources": [
+        "SBA_03_REVIEW.md",
+        "CC_01_SBA_03_RESUBMISSION_REVIEW.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-03",
+      "theme": "Reconciliation proposal binding",
+      "package": "SBA-03",
+      "review_rounds_observed": 3,
+      "additional_rounds_after_first_observation": 2,
+      "mechanism": "Missing proposal version, then optional binding, then permissive HTTP types.",
+      "classification": "Incremental contract hardening; not necessarily identical bug",
+      "sources": [
+        "CC_02_SBA_03_REVIEW.md",
+        "CC_02_REVIEW_3.md",
+        "CC_02_REVIEW_4.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-04",
+      "theme": "Migration safety",
+      "package": "CC-03",
+      "review_rounds_observed": 3,
+      "additional_rounds_after_first_observation": 2,
+      "mechanism": "Upgrade of already-shipped databases and prior migration-ledger paths remained incomplete.",
+      "classification": "Repeated migration requirement / incomplete historical coverage",
+      "sources": [
+        "CC_03_INDEPENDENT_REVIEW.md",
+        "CC_03_REWORK_REVIEW.md",
+        "CC_03_REVIEW_3.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-05",
+      "theme": "Truthful bounded settlement",
+      "package": "CC-03",
+      "review_rounds_observed": 3,
+      "additional_rounds_after_first_observation": 2,
+      "mechanism": "Funding/cancellation lifecycle, false success/overspend, then conflicting termination replay.",
+      "classification": "Related invariant failures, not one identical defect",
+      "sources": [
+        "CC_03_INDEPENDENT_REVIEW.md",
+        "CC_03_REWORK_REVIEW.md",
+        "CC_03_REVIEW_3.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-06",
+      "theme": "Physical termination",
+      "package": "CC-04",
+      "review_rounds_observed": 5,
+      "additional_rounds_after_first_observation": 4,
+      "mechanism": "Missing bounded supervision; cooperative stop; self-declared qualification; class registry with unsafe configuration.",
+      "classification": "Repeated containment requirement / symptom-level fixes",
+      "sources": [
+        "CC_04_INDEPENDENT_REVIEW.md",
+        "CC_04_REWORK_REVIEW.md",
+        "CC_04_REVIEW_3.md",
+        "CC_04_REVIEW_4.md",
+        "CC_04_REVIEW_5.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-07",
+      "theme": "Measured candidate-bound verification",
+      "package": "CC-05/06",
+      "review_rounds_observed": 2,
+      "additional_rounds_after_first_observation": 1,
+      "mechanism": "Nonexistent candidate/trivial command could pass; after checkout fix, printed test text still manufactured a pass.",
+      "classification": "Repeated independent-evidence requirement / incomplete trust boundary",
+      "sources": [
+        "CC_05_06_INDEPENDENT_REVIEW.md",
+        "CC_05_06_REWORK_REVIEW.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    },
+    {
+      "chain_id": "RW-08",
+      "theme": "Whole-boundary containment",
+      "package": "CC-05/06",
+      "review_rounds_observed": 2,
+      "additional_rounds_after_first_observation": 1,
+      "mechanism": "Parent exit mistaken for descendant termination; environment filtering/worktree still lacked containment.",
+      "classification": "Repeated isolation requirement / mechanism mismatch",
+      "sources": [
+        "CC_05_06_INDEPENDENT_REVIEW.md",
+        "CC_05_06_REWORK_REVIEW.md"
+      ],
+      "confidence": "Documented review observations; causal inference is narrower than model blame"
+    }
+  ],
+  "selected_remediation_commits": [
+    {
+      "sha": "148ad03403887c8a63471553ecc192060ba072e1",
+      "subject": "fix(pm): resolve SBA-03 planning publication review findings",
+      "numstat": "47\t1\tmas/dashboard/server.py\n53\t5\tmas/pm/db.py\n3\t0\tmas/pm/fsm.py\n11\t2\tmas/pm/guards.py\n59\t4\tmas/pm/models.py\n200\t71\tmas/pm/plans.py\n15\t2\tmas/pm/tools.py\n117\t3\ttests/test_sba_03_plan_publication.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "69e4029025b05e6f74714c72575c8a5c3efc5b25",
+      "subject": "fix(pm): resolve active reviewer staging and planning authority blockers",
+      "numstat": "109\t8\tmas/dashboard/server.py\n13\t3\tmas/pm/db.py\n7\t0\tmas/pm/models.py\n127\t3\tmas/pm/plans.py\n6\t4\tmas/pm/tools.py\n210\t0\ttests/test_sba_03_plan_publication.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "7bcdd079e484539545bc5661b6654ac6b0489b7e",
+      "subject": "fix(pm): version-bind reconciliation decisions and enforce strict planning authority",
+      "numstat": "17\t4\tmas/dashboard/server.py\n142\t2\tmas/pm/db.py\n6\t0\tmas/pm/guards.py\n26\t0\tmas/pm/models.py\n123\t6\tmas/pm/plans.py\n7\t0\tmas/pm/tools.py\n221\t0\ttests/test_sba_03_plan_publication.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "70f2d2d0b16ea51c453b3f251624ed5bb808e67f",
+      "subject": "fix(pm): enforce verified planning authority and mandatory version-bound reconciliation",
+      "numstat": "14\t7\tmas/dashboard/server.py\n56\t0\tmas/pm/client.py\n5\t0\tmas/pm/db.py\n29\t5\tmas/pm/guards.py\n20\t0\tmas/pm/models.py\n36\t19\tmas/pm/plans.py\n30\t6\tmas/pm/tools.py\n494\t2\ttests/test_sba_03_plan_publication.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "49ce36dbaae959799dfa9d23b54d0eb28e4a00fa",
+      "subject": "fix(coordinator): enforce run ownership, truthful cancellation, and funded reservations",
+      "numstat": "316\t42\tmas/pm/coordinator.py\n89\t9\tmas/pm/db.py\n17\t0\tmas/pm/models.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "fc4886cd99ec2c5ad05615026bdd1807cac2f883",
+      "subject": "fix(coordinator): remediate CC-03 authority, truthful outcomes, budget settlement, and upgrade migration",
+      "numstat": "312\t80\tmas/pm/coordinator.py\n201\t100\tmas/pm/db.py\n14\t6\tprojects/scrum-board-automation/planning/CC_03_DELIVERY.md\n650\t48\ttests/test_cc_03_coordinator_state.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "490e2ce0fa86ac84831110f7e5edda601a35fe51",
+      "subject": "fix(coordinator): remediate CC-04 review findings with preserved holds, strict result validation, active heartbeats, and atomic admission",
+      "numstat": "78\t2\tmas/pm/coordinator.py\n397\t118\tmas/pm/worker.py\n100\t0\tprojects/scrum-board-automation/planning/CC_04_RESUBMISSION_DELIVERY.md\n246\t5\ttests/test_cc04_scheduler_worker.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "f6d2f34a7f7c72872d10769177ae06f1fe2315a2",
+      "subject": "fix(cc04): remediate review findings for strict result schema, deadline latching, and FSM governance",
+      "numstat": "1\t1\tmas/pm/coordinator.py\n125\t30\tmas/pm/worker.py\n58\t75\tprojects/scrum-board-automation/planning/CC_04_RESUBMISSION_DELIVERY.md\n183\t0\ttests/test_cc04_scheduler_worker.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "276c2e1f45935db6f583e4fd4f22bf341faf05d3",
+      "subject": "fix(cc04): enforce execution termination and atomic launch policy authorization",
+      "numstat": "67\t5\tmas/pm/coordinator.py\n59\t4\tmas/pm/worker.py\n41\t44\tprojects/scrum-board-automation/planning/CC_04_RESUBMISSION_DELIVERY.md\n214\t1\ttests/test_cc04_scheduler_worker.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "07294b0fb74d4073b9cd2315cc0f60f35fc9ab38",
+      "subject": "fix(cc04): enforce immutable qualified adapter registry and bounded termination",
+      "numstat": "4\t3\tmas/pm/coordinator.py\n55\t9\tmas/pm/worker.py\n78\t27\ttests/test_cc04_scheduler_worker.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "a12c945ad7c0cda5594574d6af08e58eb89182fe",
+      "subject": "fix(cc04): reject unsafe adapter configurations and enforce finite timing bounds",
+      "numstat": "78\t42\tmas/pm/worker.py\n69\t80\ttests/test_cc04_scheduler_worker.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "4c60713f48735254aac2d5e7ea5ff5498ee1db87",
+      "subject": "fix(cc05): sanitize execution environment and enforce whole process-tree termination",
+      "numstat": "160\t69\tmas/pm/adapters/antigravity.py\n98\t52\ttests/test_cc05_antigravity_adapter.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    },
+    {
+      "sha": "b4db4a7d1dd3d65273810899341ff0cb2b5178d7",
+      "subject": "fix(cc06): enforce real Git candidate checkout in worktrees and gate test-domain admission",
+      "numstat": "188\t89\tmas/pm/adapters/verifier.py\n9\t0\tmas/pm/coordinator.py\n128\t23\ttests/test_cc06_verifier_reviewer.py\n",
+      "role": "Selected reviewed remediation candidate, not all rework commits"
+    }
+  ]
+}
