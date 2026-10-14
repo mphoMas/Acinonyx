@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Mapping
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from mas.pm.delivery_validator import DeliveryManifest, StrictModel
 
@@ -132,37 +134,168 @@ class GitHubConnectorConfig(StrictModel):
         return self
 
 
+@dataclass(frozen=True)
+class ConnectorPolicySnapshot:
+    """Deeply detached, immutable snapshot of connector authorization policy identity."""
+
+    repository_id: str
+    repository_owner_id: str
+    tenant_id: str
+    project_id: str
+    approved_workflow_repo: str
+    approved_workflow_path: str
+    approved_workflow_sha: str
+    permitted_events: tuple[str, ...]
+    permitted_ref_patterns: tuple[tuple[str, str], ...]
+    required_runner_env: str
+    status: Literal["ACTIVE", "REVOKED"]
+    generation: int
+    canonical_digest: str
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, ConnectorPolicySnapshot):
+            return self.canonical_digest == other.canonical_digest
+        if isinstance(other, GitHubConnectorConfig):
+            return self.canonical_digest == ConnectorPolicySnapshot.from_config(other).canonical_digest
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.canonical_digest)
+
+    @property
+    def permitted_ref_patterns_dict(self) -> dict[str, str]:
+        """Return a detached dictionary copy of the ref patterns."""
+        return dict(self.permitted_ref_patterns)
+
+    def get_ref_pattern(self, event_name: str) -> str | None:
+        """Resolve ref pattern regex for a specific event."""
+        for ev, pat in self.permitted_ref_patterns:
+            if ev == event_name:
+                return pat
+        return None
+
+    @classmethod
+    def from_config(cls, config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> ConnectorPolicySnapshot:
+        if isinstance(config, ConnectorPolicySnapshot):
+            return config
+
+        sorted_events = tuple(sorted(config.permitted_events))
+        patterns_map = dict(config.permitted_ref_patterns or {})
+        sorted_patterns = tuple(sorted(patterns_map.items()))
+
+        canonical_data = {
+            "approved_workflow_path": str(config.approved_workflow_path),
+            "approved_workflow_repo": str(config.approved_workflow_repo),
+            "approved_workflow_sha": str(config.approved_workflow_sha),
+            "generation": int(config.generation),
+            "permitted_events": list(sorted_events),
+            "permitted_ref_patterns": [list(item) for item in sorted_patterns],
+            "project_id": str(config.project_id),
+            "repository_id": str(config.repository_id),
+            "repository_owner_id": str(config.repository_owner_id),
+            "required_runner_env": str(config.required_runner_env),
+            "status": str(config.status),
+            "tenant_id": str(config.tenant_id),
+        }
+        canonical_json = json.dumps(canonical_data, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+        return cls(
+            repository_id=str(config.repository_id),
+            repository_owner_id=str(config.repository_owner_id),
+            tenant_id=str(config.tenant_id),
+            project_id=str(config.project_id),
+            approved_workflow_repo=str(config.approved_workflow_repo),
+            approved_workflow_path=str(config.approved_workflow_path),
+            approved_workflow_sha=str(config.approved_workflow_sha),
+            permitted_events=sorted_events,
+            permitted_ref_patterns=sorted_patterns,
+            required_runner_env=str(config.required_runner_env),
+            status=config.status,
+            generation=int(config.generation),
+            canonical_digest=digest,
+        )
+
+
 class ConnectorRegistry:
     """Synchronized thread-safe registry interface for GitHub connector configurations."""
 
-    def __init__(self, entries: Mapping[tuple[str, str], GitHubConnectorConfig] | None = None) -> None:
+    def __init__(
+        self,
+        entries: Mapping[tuple[str, str], GitHubConnectorConfig | ConnectorPolicySnapshot] | None = None,
+    ) -> None:
         self._lock = threading.RLock()
-        self._entries: dict[tuple[str, str], GitHubConnectorConfig] = dict(entries or {})
+        self._entries: dict[tuple[str, str], ConnectorPolicySnapshot] = {}
+        if entries:
+            for key, val in entries.items():
+                if isinstance(val, ConnectorPolicySnapshot):
+                    self._entries[key] = val
+                elif isinstance(val, GitHubConnectorConfig):
+                    self._entries[key] = ConnectorPolicySnapshot.from_config(val)
+                else:
+                    raise TypeError(f"Invalid entry type in ConnectorRegistry: {type(val).__name__}")
 
-    def get(self, key: tuple[str, str]) -> GitHubConnectorConfig | None:
+    def get_snapshot(self, key: tuple[str, str]) -> ConnectorPolicySnapshot | None:
         with self._lock:
             return self._entries.get(key)
 
-    def register(self, config: GitHubConnectorConfig) -> None:
+    def get(self, key: tuple[str, str]) -> ConnectorPolicySnapshot | None:
+        with self._lock:
+            return self._entries.get(key)
+
+    def register(self, config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
+        """Register initial connector configuration or update if generation advances."""
         with self._lock:
             key = (config.repository_id, config.repository_owner_id)
-            self._entries[key] = config
+            snapshot = ConnectorPolicySnapshot.from_config(config)
+            existing = self._entries.get(key)
+            if existing is not None and snapshot.generation <= existing.generation:
+                raise ValueError(
+                    f"Monotonically advancing generation required: new generation {snapshot.generation} <= existing generation {existing.generation}"
+                )
+            self._entries[key] = snapshot
 
-    def remove(self, key: tuple[str, str]) -> GitHubConnectorConfig | None:
+    def update(self, config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
+        """Sole supported update API enforcing strictly monotonic generation advancement."""
+        with self._lock:
+            key = (config.repository_id, config.repository_owner_id)
+            existing = self._entries.get(key)
+            if existing is None:
+                raise KeyError(f"Connector for repository {key} is not registered; use register() for initial admission")
+            snapshot = ConnectorPolicySnapshot.from_config(config)
+            if snapshot.generation <= existing.generation:
+                raise ValueError(
+                    f"Monotonically advancing generation required for connector policy updates: "
+                    f"new generation {snapshot.generation} <= existing generation {existing.generation}"
+                )
+            self._entries[key] = snapshot
+
+    def remove(self, key: tuple[str, str]) -> ConnectorPolicySnapshot | None:
         with self._lock:
             return self._entries.pop(key, None)
 
-    def snapshot(self) -> dict[tuple[str, str], GitHubConnectorConfig]:
+    def pop(self, key: tuple[str, str], default: Any = None) -> Any:
+        with self._lock:
+            return self._entries.pop(key, default)
+
+    def snapshot(self) -> dict[tuple[str, str], ConnectorPolicySnapshot]:
         with self._lock:
             return dict(self._entries)
 
-    def __getitem__(self, key: tuple[str, str]) -> GitHubConnectorConfig:
+    def __getitem__(self, key: tuple[str, str]) -> ConnectorPolicySnapshot:
         with self._lock:
             return self._entries[key]
 
-    def __setitem__(self, key: tuple[str, str], config: GitHubConnectorConfig) -> None:
+    def __setitem__(self, key: tuple[str, str], config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
         with self._lock:
-            self._entries[key] = config
+            snapshot = ConnectorPolicySnapshot.from_config(config)
+            existing = self._entries.get(key)
+            if existing is not None and snapshot.generation <= existing.generation:
+                raise ValueError(
+                    f"Monotonically advancing generation required for connector policy updates: "
+                    f"new generation {snapshot.generation} <= existing generation {existing.generation}"
+                )
+            self._entries[key] = snapshot
 
     def __delitem__(self, key: tuple[str, str]) -> None:
         with self._lock:
@@ -175,6 +308,38 @@ class ConnectorRegistry:
     def __len__(self) -> int:
         with self._lock:
             return len(self._entries)
+
+
+def sanitize_validation_error(exc: ValidationError) -> str:
+    """Format Pydantic ValidationError into safe, input-free diagnostics containing only field locations and error types."""
+    items: list[str] = []
+    try:
+        errors = exc.errors()
+    except Exception:
+        return "validation_error"
+
+    for err in errors[:8]:
+        err_type = str(err.get("type", "invalid"))[:32]
+        if err_type == "extra_forbidden":
+            items.append("field=extra_field, error=extra_forbidden")
+            continue
+
+        raw_loc = err.get("loc", ())
+        loc_parts = [
+            str(p)[:32]
+            for p in raw_loc
+            if (isinstance(p, int) or (isinstance(p, str) and (p.isidentifier() or p.isdigit())))
+        ]
+        loc = ".".join(loc_parts) or "root"
+        items.append(f"field={loc}, error={err_type}")
+
+    return "; ".join(items) or "validation_error"
+
+
+def sanitize_exception(exc: Exception) -> str:
+    """Return a safe diagnostic category for arbitrary exceptions, strictly excluding raw message text."""
+    cls_name = exc.__class__.__name__[:64]
+    return f"{cls_name}: error_occurred"
 
 
 class WitnessObservationSubmissionRequest(StrictModel):

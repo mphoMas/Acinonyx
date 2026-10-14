@@ -1720,3 +1720,301 @@ def test_connector_registry_thread_safe_operations():
     assert reg.get(("111", "222")) is None
 
 
+def test_rework2_b1_event_and_ref_mutation_rejected_same_generation(gateway_setup):
+    """B1: Replace connector entry during artifact validation with permitted_events=[] and permitted_ref_patterns={}
+    preserving generation (1). Must be rejected with 403 CONNECTOR_AUTHORITY_CHANGED.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    cfg = gateway_setup["connector_config"]
+    reg = gateway_setup["connector_registry"]
+    now = gateway_setup["get_time"]()
+
+    zip_bytes = make_zip_bytes({"test_report.txt": b"test content"})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+    report_digest = hashlib.sha256(b"test content").hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+
+    # 1. Mutate permitted_events to empty list preserving generation 1
+    def hook_events(stage: str):
+        if stage == "artifact_validation":
+            mutated_cfg = cfg.model_copy(update={"permitted_events": [], "permitted_ref_patterns": {}})
+            reg[repo_coord] = mutated_cfg
+
+    v.on_validation_stage = hook_events
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 403
+    assert exc.value.code == "CONNECTOR_AUTHORITY_CHANGED"
+    env = exc.value.to_envelope()
+    assert env["code"] == "CONNECTOR_AUTHORITY_CHANGED"
+
+    # Reset registry to original config before running part 2
+    reg[repo_coord] = cfg
+
+    # 2. Mutate permitted_ref_patterns preserving generation 1
+    def hook_refs(stage: str):
+        if stage == "artifact_validation":
+            mutated_cfg = cfg.model_copy(
+                update={"permitted_ref_patterns": {"pull_request": r"^refs/heads/strictly_main$"}}
+            )
+            reg[repo_coord] = mutated_cfg
+
+    v.on_validation_stage = hook_refs
+
+    with pytest.raises(GatewayError) as exc2:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc2.value.status_code == 403
+    assert exc2.value.code == "CONNECTOR_AUTHORITY_CHANGED"
+
+
+def test_rework2_b1_monotonic_generation_enforced_on_registry_update():
+    """B1: Monotonically advancing generation is strictly enforced on ConnectorRegistry.update() and __setitem__."""
+    from mas.pm.gateway.models import ConnectorRegistry, GitHubConnectorConfig
+
+    cfg1 = GitHubConnectorConfig(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        repository_id="111",
+        repository_owner_id="222",
+        approved_workflow_repo="org/repo",
+        approved_workflow_path=".github/workflows/gate.yml",
+        approved_workflow_sha=HEX40_DEFAULT,
+        generation=1,
+    )
+    repo_coord = (cfg1.repository_id, cfg1.repository_owner_id)
+    reg = ConnectorRegistry({repo_coord: cfg1})
+
+    # Same generation update rejected
+    cfg_same = cfg1.model_copy(update={"status": "REVOKED", "generation": 1})
+    with pytest.raises(ValueError, match="Monotonically advancing generation required"):
+        reg.update(cfg_same)
+
+    # Subscript assignment also rejected for same generation
+    with pytest.raises(ValueError, match="Monotonically advancing generation required"):
+        reg[repo_coord] = cfg_same
+
+    # Existing policy strictly preserved
+    snap = reg.get_snapshot(repo_coord)
+    assert snap is not None
+    assert snap.generation == 1
+    assert snap.status == "ACTIVE"
+
+    # Lower generation update rejected
+    cfg_lower = cfg1.model_copy(update={"generation": 0})
+    with pytest.raises(ValueError, match="Monotonically advancing generation required"):
+        reg.update(cfg_lower)
+
+    # Monotonically advancing generation (generation=2) accepted
+    cfg_adv = cfg1.model_copy(update={"generation": 2, "status": "REVOKED"})
+    reg.update(cfg_adv)
+    snap2 = reg.get_snapshot(repo_coord)
+    assert snap2 is not None
+    assert snap2.generation == 2
+    assert snap2.status == "REVOKED"
+
+
+def test_rework2_b1_caller_in_place_mutation_isolated_from_registry():
+    """B1: In-place mutation of caller configuration objects does not alter stored registry snapshots."""
+    from mas.pm.gateway.models import ConnectorRegistry, GitHubConnectorConfig
+
+    cfg = GitHubConnectorConfig(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        repository_id="333",
+        repository_owner_id="444",
+        approved_workflow_repo="org/repo",
+        approved_workflow_path=".github/workflows/gate.yml",
+        approved_workflow_sha=HEX40_DEFAULT,
+        generation=1,
+    )
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+    reg = ConnectorRegistry()
+    reg.register(cfg)
+
+    initial_digest = reg.get_snapshot(repo_coord).canonical_digest
+
+    # In-place mutations on caller objects
+    cfg.permitted_events.append("unapproved_event")
+    cfg.permitted_ref_patterns["unapproved_event"] = ".*"
+
+    stored_snap = reg.get_snapshot(repo_coord)
+    assert "unapproved_event" not in stored_snap.permitted_events
+    assert "unapproved_event" not in stored_snap.permitted_ref_patterns_dict
+    assert stored_snap.canonical_digest == initial_digest
+
+    # Stored snapshot is immutable
+    with pytest.raises(Exception):
+        stored_snap.status = "REVOKED"  # FrozenInstanceError
+
+
+def test_rework2_b2_sensitive_input_sentinel_in_validation_errors_excluded_from_diagnostics_and_audit(gateway_setup):
+    """B2: Supply github_run_attempt='RAW_PAYLOAD_SECRET_SENTINEL'.
+    Request must be rejected with 422 INVALID_MANIFEST_STRUCTURE.
+    Neither the diagnostic nor the audit log must contain the raw sentinel.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    audit_events: list[dict[str, Any]] = []
+
+    v.audit_logger = lambda evt: audit_events.append(evt)
+
+    sentinel = "RAW_PAYLOAD_SECRET_SENTINEL"
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": sentinel,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 422
+    assert exc.value.code == "INVALID_MANIFEST_STRUCTURE"
+
+    # 1. Private diagnostic must NOT contain raw input sentinel
+    assert sentinel not in (exc.value.diagnostic or "")
+    assert "field=github_run_attempt" in (exc.value.diagnostic or "")
+    assert "error=" in (exc.value.diagnostic or "")
+
+    # 2. Public error envelope must NOT contain raw sentinel
+    env = exc.value.to_envelope()
+    assert sentinel not in str(env)
+    assert sentinel not in exc.value.message
+
+    # 3. Audit logger callback must NEVER receive the raw sentinel
+    assert len(audit_events) == 1
+    audit_log_str = str(audit_events)
+    assert sentinel not in audit_log_str
+
+
+def test_rework2_b2_sensitive_input_in_nested_manifest_fields_excluded_from_diagnostics_and_audit(gateway_setup):
+    """B2: Supply invalid nested manifest field containing a secret sentinel.
+    Verify neither diagnostic nor audit log leaks the secret.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    audit_events: list[dict[str, Any]] = []
+
+    v.audit_logger = lambda evt: audit_events.append(evt)
+
+    sentinel = "SECRET_NESTED_SENTINEL_OUTCOME"
+    manifest_dict = make_valid_manifest().model_dump()
+    manifest_dict["observations"][0]["outcome"] = sentinel
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest_dict,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 422
+    assert exc.value.code == "INVALID_MANIFEST_STRUCTURE"
+    assert sentinel not in (exc.value.diagnostic or "")
+    assert sentinel not in str(exc.value.to_envelope())
+    assert sentinel not in str(audit_events)
+
+
+def test_rework2_b2_audit_callback_exception_logging_does_not_echo_secret(gateway_setup, caplog):
+    """B2: Configured audit callback raises an exception with a secret message.
+    Logging must NOT echo the exception message text.
+    """
+    import logging
+
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+
+    secret = "TOP_SECRET_AUDIT_CALLBACK_FAIL"
+
+    def exploding_logger(_evt):
+        raise RuntimeError(f"Audit backend down: {secret}")
+
+    v.audit_logger = exploding_logger
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    # Valid request
+    req = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with caplog.at_level(logging.WARNING):
+        resp = v.validate_submission(f"Bearer {t}", req)
+
+    assert resp.status == "VALIDATED_UNTRUSTED_OBSERVATION"
+    # Ensure secret is NOT in caplog
+    assert secret not in caplog.text
+    assert "Audit logging callback failed: RuntimeError" in caplog.text
+
+
+def test_rework2_b2_dependency_exception_diagnostic_is_input_free(gateway_setup):
+    """B2: Dependency exception details (database/system paths/sentinels) are excluded from diagnostics."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    audit_events: list[dict[str, Any]] = []
+    v.audit_logger = lambda evt: audit_events.append(evt)
+
+    secret = "/var/secrets/creds.json TOP_SECRET_DB_KEY"
+
+    def exploding_iam(_tenant_id):
+        raise ConnectionError(f"Connection failed to {secret}")
+
+    v.iam.get_tenant = exploding_iam
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 500
+    assert exc.value.code == "INTERNAL_ERROR"
+    assert exc.value.diagnostic == "ConnectionError: error_occurred"
+    assert secret not in (exc.value.diagnostic or "")
+    assert secret not in str(exc.value.to_envelope())
+    assert secret not in str(audit_events)
+
+
+

@@ -29,11 +29,14 @@ from mas.pm.gateway.models import (
     MAX_BASE64_ARCHIVE_SIZE,
     MAX_MANIFEST_JSON_SIZE,
     MAX_REQUEST_BODY_SIZE,
+    ConnectorPolicySnapshot,
     ConnectorRegistry,
     GatewayError,
     GitHubConnectorConfig,
     WitnessObservationSubmissionRequest,
     WitnessObservationValidationResponse,
+    sanitize_exception,
+    sanitize_validation_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,12 +46,23 @@ def redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     """Return a sanitized copy of audit data redacting authorization tokens, JWTs, and payloads."""
     sanitized: dict[str, Any] = {}
     for key, val in data.items():
-        if key in ("authorization", "bearer_token", "token", "artifact_archive_base64", "raw_body"):
+        if key in ("authorization", "bearer_token", "token", "artifact_archive_base64", "raw_body", "jwt"):
             sanitized[key] = "[REDACTED]"
         elif isinstance(val, str):
             clean = re.sub(r"Bearer\s+[A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", val)
             clean = re.sub(r"eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+", "[REDACTED_JWT]", clean)
             sanitized[key] = clean
+        elif isinstance(val, dict):
+            sanitized[key] = redact_sensitive(val)
+        elif isinstance(val, list):
+            sanitized[key] = [
+                redact_sensitive(item) if isinstance(item, dict)
+                else (
+                    re.sub(r"Bearer\s+[A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", re.sub(r"eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+", "[REDACTED_JWT]", item))
+                    if isinstance(item, str) else item
+                )
+                for item in val
+            ]
         else:
             sanitized[key] = val
     return sanitized
@@ -59,7 +73,7 @@ class GatewayObservationValidator:
 
     def __init__(
         self,
-        connector_registry: ConnectorRegistry | Mapping[tuple[str, str], GitHubConnectorConfig],
+        connector_registry: ConnectorRegistry | Mapping[tuple[str, str], GitHubConnectorConfig | ConnectorPolicySnapshot],
         iam: MultiTenantIAM,
         jwks_cache: JWKSCache,
         *,
@@ -75,14 +89,26 @@ class GatewayObservationValidator:
         self.on_validation_stage = on_validation_stage
         self.token_verifier = TokenVerifier(jwks_cache, clock=clock)
 
-    def _lookup_connector(self, coord: tuple[str, str]) -> GitHubConnectorConfig | None:
-        """Resolve current connector entry from registry interface."""
-        if hasattr(self.connector_registry, "get"):
-            return self.connector_registry.get(coord)
-        try:
-            return self.connector_registry[coord]
-        except (KeyError, TypeError):
+    def _lookup_connector(self, coord: tuple[str, str]) -> ConnectorPolicySnapshot | None:
+        """Resolve current connector entry from registry interface as an immutable policy snapshot."""
+        entry = None
+        if hasattr(self.connector_registry, "get_snapshot"):
+            entry = self.connector_registry.get_snapshot(coord)
+        elif hasattr(self.connector_registry, "get"):
+            entry = self.connector_registry.get(coord)
+        else:
+            try:
+                entry = self.connector_registry[coord]
+            except (KeyError, TypeError):
+                entry = None
+
+        if entry is None:
             return None
+        if isinstance(entry, ConnectorPolicySnapshot):
+            return entry
+        if isinstance(entry, GitHubConnectorConfig):
+            return ConnectorPolicySnapshot.from_config(entry)
+        return None
 
     def _notify_stage(self, stage: str) -> None:
         """Notify stage hook if registered (used for testing mid-validation concurrency and updates)."""
@@ -113,6 +139,7 @@ class GatewayObservationValidator:
             )
             raise exc
         except Exception as exc:
+            safe_diag = sanitize_exception(exc)
             self._log_audit(
                 {
                     "request_id": request_id,
@@ -120,14 +147,14 @@ class GatewayObservationValidator:
                     "status_code": 500,
                     "code": "INTERNAL_ERROR",
                     "message": "Internal gateway validation error",
-                    "diagnostic": str(exc),
+                    "diagnostic": safe_diag,
                 }
             )
             raise GatewayError(
                 status_code=500,
                 code="INTERNAL_ERROR",
                 request_id=request_id,
-                diagnostic=str(exc),
+                diagnostic=safe_diag,
             ) from exc
 
     def _execute_validation(
@@ -153,26 +180,35 @@ class GatewayObservationValidator:
         try:
             request = WitnessObservationSubmissionRequest.model_validate(request_data)
         except ValidationError as exc:
-            exc_str = str(exc)
-            if "exceeds limit" in exc_str or "PAYLOAD_TOO_LARGE" in exc_str:
+            safe_diag = sanitize_validation_error(exc)
+            is_oversized = False
+            for err in exc.errors():
+                msg = str(err.get("msg", ""))
+                err_type = str(err.get("type", ""))
+                if "exceeds limit" in msg or "PAYLOAD_TOO_LARGE" in msg or "too_large" in err_type:
+                    is_oversized = True
+                    break
+            if is_oversized:
                 raise GatewayError(
                     status_code=413,
                     code="PAYLOAD_TOO_LARGE",
                     request_id=request_id,
-                    diagnostic=exc_str,
+                    diagnostic=safe_diag,
                 ) from exc
-            if "extra_forbidden" in exc_str or "Extra inputs are not permitted" in exc_str:
+
+            error_types = {err.get("type") for err in exc.errors()}
+            if "extra_forbidden" in error_types:
                 raise GatewayError(
                     status_code=422,
                     code="EXTRA_FIELDS_FORBIDDEN",
                     request_id=request_id,
-                    diagnostic=exc_str,
+                    diagnostic=safe_diag,
                 ) from exc
             raise GatewayError(
                 status_code=422,
                 code="INVALID_MANIFEST_STRUCTURE",
                 request_id=request_id,
-                diagnostic=exc_str,
+                diagnostic=safe_diag,
             ) from exc
 
         # 3. Cryptographically Verify OIDC Token
@@ -180,8 +216,8 @@ class GatewayObservationValidator:
 
         # 4. Resolve Server-Owned Connector Policy & Snapshot Authority Coordinates
         repo_coord = (token_claims["repository_id"], token_claims["repository_owner_id"])
-        initial_config = self._lookup_connector(repo_coord)
-        if initial_config is None:
+        initial_snapshot = self._lookup_connector(repo_coord)
+        if initial_snapshot is None:
             raise GatewayError(
                 status_code=403,
                 code="REPOSITORY_NOT_ENROLLED",
@@ -189,7 +225,7 @@ class GatewayObservationValidator:
                 diagnostic=f"Repository ID {repo_coord[0]!r} (owner {repo_coord[1]!r}) is not enrolled",
             )
 
-        if initial_config.status != "ACTIVE":
+        if initial_snapshot.status != "ACTIVE":
             raise GatewayError(
                 status_code=403,
                 code="CONNECTOR_REVOKED",
@@ -197,14 +233,13 @@ class GatewayObservationValidator:
                 diagnostic=f"GitHub connector for repository {repo_coord[0]} is revoked",
             )
 
-        # Retain initial identity & generation snapshot for completion verification
-        snap_generation = initial_config.generation
-        snap_tenant_id = initial_config.tenant_id
-        snap_project_id = initial_config.project_id
-        snap_approved_wf_sha = initial_config.approved_workflow_sha
-        snap_approved_wf_path = initial_config.approved_workflow_path
-        snap_approved_wf_repo = initial_config.approved_workflow_repo
-        snap_required_runner = initial_config.required_runner_env
+        # Retain initial identity snapshot for completion verification
+        snap_tenant_id = initial_snapshot.tenant_id
+        snap_project_id = initial_snapshot.project_id
+        snap_approved_wf_sha = initial_snapshot.approved_workflow_sha
+        snap_approved_wf_path = initial_snapshot.approved_workflow_path
+        snap_approved_wf_repo = initial_snapshot.approved_workflow_repo
+        snap_required_runner = initial_snapshot.required_runner_env
 
         # 5. Check Initial Tenant Active Status in MultiTenantIAM
         tenant = self.iam.get_tenant(snap_tenant_id)
@@ -245,7 +280,7 @@ class GatewayObservationValidator:
 
         # 7. Check Execution Conditions
         event_name = token_claims["event_name"]
-        if event_name not in initial_config.permitted_events:
+        if event_name not in initial_snapshot.permitted_events:
             raise GatewayError(
                 status_code=403,
                 code="CONDITION_DISALLOWED",
@@ -253,7 +288,7 @@ class GatewayObservationValidator:
                 diagnostic=f"GitHub event {event_name!r} is not permitted for delivery gates",
             )
 
-        ref_pattern = initial_config.permitted_ref_patterns.get(event_name)
+        ref_pattern = initial_snapshot.get_ref_pattern(event_name)
         if not ref_pattern or not re.fullmatch(ref_pattern, token_claims["ref"]):
             raise GatewayError(
                 status_code=403,
@@ -368,13 +403,13 @@ class GatewayObservationValidator:
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",
                         request_id=request_id,
-                        diagnostic=exc_str,
+                        diagnostic="Artifact archive size exceeds limit",
                     ) from exc
                 raise GatewayError(
                     status_code=400,
                     code="INVALID_ARTIFACT_ARCHIVE",
                     request_id=request_id,
-                    diagnostic=exc_str,
+                    diagnostic=f"Artifact archive validation failed: {exc.__class__.__name__}",
                 ) from exc
 
             artifact_digest = hashlib.sha256(decoded_bytes).hexdigest()
@@ -397,8 +432,8 @@ class GatewayObservationValidator:
                 diagnostic=f"Tenant {snap_tenant_id} is inactive or revoked",
             )
 
-        current_config = self._lookup_connector(repo_coord)
-        if current_config is None:
+        current_snapshot = self._lookup_connector(repo_coord)
+        if current_snapshot is None:
             raise GatewayError(
                 status_code=403,
                 code="CONNECTOR_REMOVED",
@@ -406,7 +441,7 @@ class GatewayObservationValidator:
                 diagnostic=f"Connector for repository {repo_coord} was removed during processing",
             )
 
-        if current_config.status != "ACTIVE":
+        if current_snapshot.status != "ACTIVE":
             raise GatewayError(
                 status_code=403,
                 code="CONNECTOR_REVOKED",
@@ -414,22 +449,15 @@ class GatewayObservationValidator:
                 diagnostic=f"Connector for repository {repo_coord} was revoked during processing",
             )
 
-        if current_config.generation != snap_generation:
+        if current_snapshot.generation != initial_snapshot.generation:
             raise GatewayError(
                 status_code=403,
                 code="CONNECTOR_GENERATION_CHANGED",
                 request_id=request_id,
-                diagnostic=f"Connector generation changed from {snap_generation} to {current_config.generation}",
+                diagnostic=f"Connector generation changed from {initial_snapshot.generation} to {current_snapshot.generation}",
             )
 
-        if (
-            current_config.tenant_id != snap_tenant_id
-            or current_config.project_id != snap_project_id
-            or current_config.approved_workflow_sha != snap_approved_wf_sha
-            or current_config.approved_workflow_path != snap_approved_wf_path
-            or current_config.approved_workflow_repo != snap_approved_wf_repo
-            or current_config.required_runner_env != snap_required_runner
-        ):
+        if current_snapshot.canonical_digest != initial_snapshot.canonical_digest:
             raise GatewayError(
                 status_code=403,
                 code="CONNECTOR_AUTHORITY_CHANGED",
@@ -441,7 +469,7 @@ class GatewayObservationValidator:
         # Note: TenantContext is an internal ephemeral structure only; not an IAM bearer, session, or credential.
         _ = TenantContext(
             tenant_id=snap_tenant_id,
-            principal_id=f"gha-witness:{initial_config.repository_id}:{request.github_run_id}",
+            principal_id=f"gha-witness:{initial_snapshot.repository_id}:{request.github_run_id}",
             roles={"witness"},
             scopes={"delivery:witness_observe"},
             token_id="",
@@ -521,7 +549,7 @@ class GatewayObservationValidator:
                     status_code=400,
                     code="INVALID_REQUEST_BODY",
                     request_id=request_id,
-                    diagnostic=f"Malformed request JSON body: {exc}",
+                    diagnostic="Malformed request JSON body or invalid characters",
                 ) from exc
             if not isinstance(data, dict):
                 raise GatewayError(
@@ -570,4 +598,4 @@ class GatewayObservationValidator:
             try:
                 self.audit_logger(redact_sensitive(event))
             except Exception as exc:
-                logger.warning("Audit logging callback failed: %s", exc)
+                logger.warning("Audit logging callback failed: %s", exc.__class__.__name__)
