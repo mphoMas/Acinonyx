@@ -9,7 +9,7 @@ description = "ACINONYX Multi-Agent Operating Runtime"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Acinonyx" }]
-dependencies = ["PyYAML>=6,<7", "pydantic>=2,<3", "Pillow>=10"]
+dependencies = ["PyYAML>=6,<7", "pydantic>=2,<3", "Pillow>=10", "cryptography>=42"]
 
 [project.optional-dependencies]
 http = []

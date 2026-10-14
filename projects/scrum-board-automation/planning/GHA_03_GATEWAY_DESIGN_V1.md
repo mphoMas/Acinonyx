@@ -200,7 +200,12 @@ class GitHubConnectorConfig(StrictModel):
     approved_workflow_path: str = Field(min_length=1, max_length=256)
     approved_workflow_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     permitted_events: list[str] = Field(default=["pull_request", "workflow_dispatch"])
-    permitted_ref_pattern: str = Field(default=r"^refs/pull/\d+/merge$")
+    permitted_ref_patterns: dict[str, str] = Field(
+        default_factory=lambda: {
+            "pull_request": r"^refs/pull/\d+/merge$",
+            "workflow_dispatch": r"^refs/heads/main$",
+        }
+    )
     required_runner_env: str = Field(default="github-hosted")
     status: Literal["ACTIVE", "REVOKED"] = "ACTIVE"
     generation: int = Field(default=1, ge=1)
@@ -217,8 +222,9 @@ class GitHubConnectorConfig(StrictModel):
 The gateway integrates with actual, existing `MultiTenantIAM` APIs (`mas/iam.py`):
 1. **Tenant Active Status**: Calls `iam.get_tenant(config.tenant_id)`.
    - If tenant is not found or `tenant.status != TenantStatus.ACTIVE` $\rightarrow$ 403 `TENANT_REVOKED`.
-2. **No Fictitious APIs**: The gateway does **not** call or invent non-existent APIs (e.g. project archival or connector revocation methods in `MultiTenantIAM`). Connector status is owned by the connector registry; tenant status is verified via `iam.get_tenant()`.
-3. **Per-Request Ephemeral Witness Context**:
+2. **Revocation Recheck at Validation Completion**: The gateway rechecks both `iam.get_tenant(config.tenant_id)` and `config.status` at validation completion to detect revocation occurring during slow JWKS or artifact processing.
+3. **No Fictitious APIs**: The gateway does **not** call or invent non-existent APIs (e.g. project archival or connector revocation methods in `MultiTenantIAM`). Connector status is owned by the connector registry; tenant status is verified via `iam.get_tenant()`.
+4. **Per-Request Ephemeral Witness Context**:
    - The gateway constructs an ephemeral, in-memory `TenantContext`:
      ```python
      TenantContext(
@@ -230,7 +236,7 @@ The gateway integrates with actual, existing `MultiTenantIAM` APIs (`mas/iam.py`
          expires_at=token_exp,
      )
      ```
-   - No persistent session, database user, or bearer token is minted or written to the IAM identity store.
+   - No persistent session, database user, or bearer token is minted or written to the IAM identity store. The context is strictly an internal restricted validation context, never granting access to privileged tenant storage or admin tools.
 
 ### 4.3 Exact Delivery Service Role & Action Alignment
 
@@ -239,9 +245,11 @@ Delivery action ownership is strictly aligned with the existing `DeliveryService
 | Principal / Role | Permitted Delivery Actions | Forbidden Actions | Service Alignment (`mas/pm/delivery.py`) |
 |---|---|---|---|
 | **`witness`** (GHA CI) | `delivery:witness_observe` | `delivery:submit`<br>`delivery:accept`<br>`delivery:reject`<br>`delivery:challenge`<br>`delivery:coordinate` | Read-only observation submission. Cannot call any state-changing method on `DeliveryService`. |
-| **`builder`** (Developer / Supervised Agent) | `delivery:submit`<br>`delivery:challenge`<br>`delivery:request_scope_change` | `delivery:accept`<br>`delivery:reject`<br>`delivery:resolve_challenge`<br>`delivery:coordinate` | Calls `submit()`, calls `challenge()` to dispute reviewer findings, requests scope changes. |
-| **`reviewer`** (Architect / Independent Verifier) | `delivery:agree`<br>`delivery:reject`<br>`delivery:resolve_challenge`<br>`delivery:accept`<br>`delivery:resume_review` | `delivery:submit`<br>`delivery:challenge`<br>`delivery:coordinate` | Calls `agree()`, `reject()`, `resolve_challenge()` (upholds/overturns challenges), and `accept()`. |
-| **`coordinator_admin`** | `delivery:enroll`<br>`delivery:establish`<br>`delivery:reconcile_execution` | `delivery:witness_observe` | Manages project enrollment, task briefs, and execution reconciliation. |
+| **`builder`** (Developer / Supervised Agent) | `delivery:submit`<br>`delivery:submit` (for `challenge`)<br>`delivery:submit` (for `request_scope_change`) | `delivery:accept`<br>`delivery:reject`<br>`delivery:coordinate` | Calls `submit()`, calls `challenge()` to dispute reviewer findings, requests scope changes. |
+| **`reviewer`** (Architect / Independent Verifier) | `delivery:agree`<br>`delivery:reject`<br>`delivery:accept`<br>`delivery:review` (for `resume_review`) | `delivery:submit`<br>`delivery:coordinate`<br>`delivery:resolve_challenge` | Calls `agree()`, `reject()`, and `accept()`. Reviewer cannot resolve disputes. |
+| **`coordinator_admin`** | `delivery:enroll`<br>`delivery:establish`<br>`delivery:coordinate` (for `resolve_challenge`)<br>`delivery:reconcile_execution` | `delivery:witness_observe` | Manages project enrollment, task briefs, execution reconciliation, and resolves challenges via `resolve_challenge()`. |
+
+*Note on Challenge Ownership*: In `DeliveryService`, `challenge()` is owned by `builder` with action `delivery:submit`, whereas `resolve_challenge()` is owned by `coordinator` with action `delivery:coordinate`. The gateway has no challenge or resolution authority.
 
 **Strict Rejection of Client Spoofing**:
 Request bodies use `StrictModel(extra="forbid")`. If a client passes `role`, `tenant_id`, `actor`, or any extraneous field in the request body, Pydantic validation fails immediately with 422/400 `EXTRA_FIELDS_FORBIDDEN`. The gateway **never** silently filters or ignores client-supplied privilege fields.
@@ -253,6 +261,12 @@ Request bodies use `StrictModel(extra="forbid")`. If a client passes `role`, `te
 ### 5.1 Single Request Format: Bounded JSON Schema
 
 The gateway accepts a single, unambiguous request format: `application/json`. Multipart parsing is excluded from this slice.
+
+**Independent Resource Caps**:
+- `MAX_REQUEST_BODY_SIZE`: `18 * 1024 * 1024` bytes (18 MiB total encoded request allowance).
+- `MAX_BASE64_ARCHIVE_SIZE`: `16 * 1024 * 1024` bytes (16 MiB maximum base64-encoded string).
+- `MAX_MANIFEST_JSON_SIZE`: `1 * 1024 * 1024` bytes (1 MiB maximum manifest JSON).
+- `MAX_ARCHIVE_COMPRESSED_SIZE`: `12 * 1024 * 1024` bytes (12 MiB maximum decoded compressed archive bytes).
 
 ```python
 class WitnessObservationSubmissionRequest(StrictModel):
@@ -268,15 +282,20 @@ class WitnessObservationSubmissionRequest(StrictModel):
     github_run_attempt: int = Field(ge=1, le=100)
 ```
 
-**Full Coordinate Binding Rules**:
+**Full Coordinate Binding & Artifact Rules**:
 1. `manifest.tenant_id` must match `config.tenant_id`.
 2. `manifest.project_id` must match `config.project_id`.
 3. `manifest.fencing_token` must match `request.fencing_token`.
-4. `manifest` must satisfy all `DeliveryManifest` structural constraints (non-blank IDs, unique `check_id`, bounded relative closure paths).
-5. If `artifact_archive_base64` is provided, the decoded bytes must pass GHA-02 `validate_artifact_zip()`:
-   - Maximum 64 members, max 2 MiB per member, max 10 MiB uncompressed total, max 12 MiB compressed.
-   - Rejects path traversal (`..`), absolute paths, control characters, backslashes, symlinks, hardlinks.
-   - Rejects structural ZIP64 records.
+4. `request.github_run_id` must match token claim `run_id`.
+5. `request.github_run_attempt` must match integer conversion of token claim `run_attempt`.
+6. `manifest` must satisfy all `DeliveryManifest` structural constraints (non-blank IDs, unique `check_id`, bounded relative closure paths).
+7. If any observation declares an `evidence_ref` or digest referencing artifact files, `artifact_archive_base64` is **strictly required**.
+8. If `artifact_archive_base64` is provided:
+   - Decode using strict base64 decoding (`validate=True`).
+   - Decoded bytes must be $\le 12$ MiB (`MAX_ARCHIVE_COMPRESSED_SIZE`).
+   - Must pass `validate_artifact_archive(decoded_bytes, observations=manifest.observations)` from `mas/pm/delivery_validator.py`.
+   - Every observation reference and digest is verified against the archive.
+9. If `artifact_archive_base64` is omitted and observations do not require artifacts, the response records `artifacts_validated: false` and `artifact_digest: None`.
 
 ### 5.2 Structured Validation Response
 
@@ -286,11 +305,12 @@ class WitnessObservationValidationResponse(StrictModel):
     status: Literal["VALIDATED_UNTRUSTED_OBSERVATION"] = "VALIDATED_UNTRUSTED_OBSERVATION"
     transport_authenticated: bool = True
     authority_verified: bool = False  # Untrusted observation; not trusted verifier/reviewer evidence
+    artifacts_validated: bool = False  # True only if artifact archive was provided and fully matched
     tenant_id: str
     project_id: str
     issue_id: str
     manifest_digest: str  # SHA-256 hex digest of canonical manifest JSON
-    artifact_digest: str | None  # SHA-256 hex digest of artifact zip if present
+    artifact_digest: str | None  # SHA-256 hex digest of artifact zip if provided and validated
     observation_count: int
     github_run_id: str
     github_run_attempt: int
@@ -375,7 +395,7 @@ The following 22 test scenarios specify the **formal pre-implementation test pla
 | **TC-07** | Future Token (`nbf` in future) | `nbf: now + 120s` | 401 Unauthorized | `TOKEN_FUTURE` | Zero DB mutation; task phase unchanged |
 | **TC-08** | Token Issued in Future (`iat`) | `iat: now + 120s` | 401 Unauthorized | `TOKEN_ISSUED_IN_FUTURE` | Zero DB mutation; task phase unchanged |
 | **TC-09** | Negative or Excessive Lifetime | `exp <= iat` or `exp - iat = 3600s` (> 900s) | 401 Unauthorized | `INVALID_TOKEN_LIFETIME` | Zero DB mutation; task phase unchanged |
-| **TC-10** | Token Age Exceeded | `now - iat = 1200s` (> 900s) with valid future exp | 401 Unauthorized | `TOKEN_AGE_EXCEEDED` | Zero DB mutation; task phase unchanged |
+| **TC-10** | Token Age Exceeded | Issued 950s ago with lifetime 1000s (`exp = iat + 1000s = now + 50s`), unexpired but `now - iat = 950s > 900s` | 401 Unauthorized | `TOKEN_AGE_EXCEEDED` | Zero DB mutation; task phase unchanged |
 | **TC-11** | JWKS Unknown `kid` Throttling | Rapid burst of tokens with random `kid` | 401 Unauthorized | `UNKNOWN_KEY_THROTTLED` | Outbound HTTP calls throttled to $\ge 5$ min |
 | **TC-12** | JWKS Endpoint Outage / Refusal | Network timeout, 500, or 3xx redirect from JWKS | 503 Service Unavailable | `JWKS_UNAVAILABLE` | Fails closed; zero DB mutation |
 | **TC-13** | Unenrolled Repository ID | `repository_id: "99999999"` | 403 Forbidden | `REPOSITORY_NOT_ENROLLED` | Zero DB mutation; task phase unchanged |
