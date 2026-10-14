@@ -267,9 +267,31 @@ def validate_artifact_archive(
             raise DeliveryValidatorError("Archive is empty but observations were declared")
         return {}
 
-    # Reject ZIP64 archive signatures explicitly
-    if b"PK\x06\x06" in raw_bytes or b"PK\x06\x07" in raw_bytes:
-        raise DeliveryValidatorError("ZIP64 format is not supported")
+    # Locate central directory offset
+    eocd_idx = raw_bytes.rfind(b"PK\x05\x06")
+    if eocd_idx == -1:
+        raise DeliveryValidatorError("End of central directory record not found in archive")
+    if eocd_idx + 22 > len(raw_bytes):
+        raise DeliveryValidatorError("Truncated end of central directory record")
+
+    # Check for structural ZIP64 locator immediately preceding EOCD (20 bytes: PK\x06\x07)
+    if eocd_idx >= 20 and raw_bytes[eocd_idx-20 : eocd_idx-16] == b"PK\x06\x07":
+        raise DeliveryValidatorError("ZIP64 format is not supported: ZIP64 locator detected")
+
+    _, _, _, _, _, cd_size, cd_offset, comment_len = struct.unpack("<4sHHHHIIH", raw_bytes[eocd_idx:eocd_idx+22])
+    if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF:
+        raise DeliveryValidatorError("ZIP64 format is not supported: 64-bit central directory")
+    if eocd_idx + 22 + comment_len != len(raw_bytes):
+        raise DeliveryValidatorError("Trailing unmapped bytes after zip archive comment")
+
+    # Check for structural ZIP64 records between central directory end and EOCD
+    cd_end = cd_offset + cd_size
+    if cd_end > eocd_idx:
+        raise DeliveryValidatorError("Archive layout corruption: central directory extends beyond EOCD start")
+    if cd_end < eocd_idx:
+        gap = raw_bytes[cd_end:eocd_idx]
+        if b"PK\x06\x06" in gap or b"PK\x06\x07" in gap:
+            raise DeliveryValidatorError("ZIP64 format is not supported: ZIP64 structural record between CD and EOCD")
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw_bytes), "r")
@@ -280,19 +302,6 @@ def validate_artifact_archive(
         infolist = zf.infolist()
         if len(infolist) > MAX_MEMBER_COUNT:
             raise DeliveryValidatorError(f"Member count {len(infolist)} exceeds maximum of {MAX_MEMBER_COUNT}")
-
-        # Locate central directory offset
-        eocd_idx = raw_bytes.rfind(b"PK\x05\x06")
-        if eocd_idx == -1:
-            raise DeliveryValidatorError("End of central directory record not found in archive")
-        if eocd_idx + 22 > len(raw_bytes):
-            raise DeliveryValidatorError("Truncated end of central directory record")
-
-        _, _, _, _, _, cd_size, cd_offset, comment_len = struct.unpack("<4sHHHHIIH", raw_bytes[eocd_idx:eocd_idx+22])
-        if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF:
-            raise DeliveryValidatorError("ZIP64 format is not supported: 64-bit central directory")
-        if eocd_idx + 22 + comment_len != len(raw_bytes):
-            raise DeliveryValidatorError("Trailing unmapped bytes after zip archive comment")
 
         members: dict[str, ValidatedArtifactMember] = {}
         seen_canonical: set[str] = set()

@@ -1208,46 +1208,60 @@ def test_rework3_b1_unsigned_descriptor_support_and_corruption():
 
 
 def test_rework3_b1_zip64_variants_explicitly_rejected():
-    """Rework 3 B1: ZIP64 formats, signatures, and extra tags are explicitly rejected."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("test.txt", b"zip64 rejection test")
-    valid_zip = buf.getvalue()
+    """Rework 3 B1: Structural ZIP64 formats are rejected while ordinary payload markers pass."""
+    # 1. Ordinary STORED member containing PK\x06\x06 and PK\x06\x07 in its payload is accepted
+    buf_stored = io.BytesIO()
+    with zipfile.ZipFile(buf_stored, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("test.log", b"ordinary evidence PK\x06\x06 and PK\x06\x07 bytes here")
+    res_stored = validate_artifact_archive(buf_stored.getvalue())
+    assert "test.log" in res_stored
+    assert res_stored["test.log"].data == b"ordinary evidence PK\x06\x06 and PK\x06\x07 bytes here"
 
-    # 1. Archive containing PK\x06\x06 (ZIP64 EOCD)
-    z_pk66 = valid_zip + b"PK\x06\x06dummy"
-    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported"):
-        validate_artifact_archive(z_pk66)
+    # 2. Ordinary DEFLATED member containing PK\x06\x06 and PK\x06\x07 in its payload is accepted
+    buf_deflated = io.BytesIO()
+    with zipfile.ZipFile(buf_deflated, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("test.log", b"ordinary deflated evidence PK\x06\x06 and PK\x06\x07 bytes here")
+    res_deflated = validate_artifact_archive(buf_deflated.getvalue())
+    assert "test.log" in res_deflated
+    assert res_deflated["test.log"].data == b"ordinary deflated evidence PK\x06\x06 and PK\x06\x07 bytes here"
 
-    # 2. Archive containing PK\x06\x07 (ZIP64 EOCD Locator)
-    z_pk67 = valid_zip + b"PK\x06\x07dummy"
-    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported"):
-        validate_artifact_archive(z_pk67)
+    valid_zip = buf_deflated.getvalue()
+    eocd_idx = valid_zip.rfind(b"PK\x05\x06")
 
-    # 3. Central directory version >= 45
+    # 3. Archive containing structural ZIP64 locator immediately preceding EOCD (PK\x06\x07)
+    zip64_locator = b"PK\x06\x07" + b"\x00" * 16
+    z_locator = valid_zip[:eocd_idx] + zip64_locator + valid_zip[eocd_idx:]
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: ZIP64 locator detected"):
+        validate_artifact_archive(z_locator)
+
+    # 4. Archive containing structural ZIP64 record between CD end and EOCD (PK\x06\x06)
+    zip64_record = b"PK\x06\x06" + b"\x00" * 52
+    z_record = valid_zip[:eocd_idx] + zip64_record + valid_zip[eocd_idx:]
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: ZIP64 structural record"):
+        validate_artifact_archive(z_record)
+
+    # 5. Central directory version >= 45
     z_ver45 = bytearray(valid_zip)
     cd_idx = z_ver45.find(b"PK\x01\x02")
     struct.pack_into("<H", z_ver45, cd_idx + 6, 45)
     with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: version >= 45"):
         validate_artifact_archive(bytes(z_ver45))
 
-    # 4. Central directory extra field with tag 0x0001 (ZIP64 extended info)
+    # 6. Central directory extra field with tag 0x0001 (ZIP64 extended info)
     z_extra = bytearray(valid_zip)
     cd_idx = z_extra.find(b"PK\x01\x02")
-    # CD format: ... 28: H fn_len, 30: H ex_len
     fn_len, ex_len = struct.unpack_from("<HH", z_extra, cd_idx + 28)
     zip64_tag = struct.pack("<HH8s", 0x0001, 8, b"\x00" * 8)
     insert_pos = cd_idx + 46 + fn_len
     z_extra = z_extra[:insert_pos] + zip64_tag + z_extra[insert_pos:]
     struct.pack_into("<H", z_extra, cd_idx + 30, ex_len + len(zip64_tag))
-    # Update EOCD cd_size
-    eocd_idx = z_extra.rfind(b"PK\x05\x06")
-    sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset, c_len = struct.unpack("<4sHHHHIIH", z_extra[eocd_idx:eocd_idx+22])
-    z_extra[eocd_idx:eocd_idx+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size + len(zip64_tag), cd_offset, c_len)
+    eocd_idx_extra = z_extra.rfind(b"PK\x05\x06")
+    sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset, c_len = struct.unpack("<4sHHHHIIH", z_extra[eocd_idx_extra:eocd_idx_extra+22])
+    z_extra[eocd_idx_extra:eocd_idx_extra+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size + len(zip64_tag), cd_offset, c_len)
     with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: extra field"):
         validate_artifact_archive(bytes(z_extra))
 
-    # 5. Local header 64-bit size placeholder 0xFFFFFFFF
+    # 7. Local header 64-bit size placeholder 0xFFFFFFFF
     z_64bit = bytearray(valid_zip)
     loc_idx = z_64bit.find(b"PK\x03\x04")
     struct.pack_into("<I", z_64bit, loc_idx + 18, 0xFFFFFFFF)  # loc_csz
