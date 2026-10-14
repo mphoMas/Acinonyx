@@ -1,0 +1,11 @@
+# Antigravity — GHA-03 correction solution
+
+Candidate `025bede6` is rejected. Read `GHA_03_IMPLEMENTATION_REVIEW.md`. Existing 111 targeted tests pass but miss three agreed guarantees. Preserve real crypto, no business writes and untrusted observation labels.
+
+1. Registry freshness: introduce a narrow synchronized read-only registry interface (or equivalent explicit lock/generation protocol). Snapshot selected connector coordinates/generation; re-resolve the current entry at completion and reject removal, revocation, generation or authority-field changes. Do not check only the original frozen object. Add real validation-stage replacement/removal tests.
+2. Size admission: enforce the 1 MiB nested manifest limit and 18 MiB total envelope limit on every accepted representation. Use bounded accounting/serialization and strict original-model revalidation; a plain dict must not bypass admission. Test the reproduced two-MiB closure value on dict and JSON inputs, exact limits, oversized envelopes and valid archive envelopes. Retain separate 16 MiB base64 and 12 MiB decoded caps.
+3. Public errors: centralize stable code/message mapping. Never interpolate arbitrary dependency exceptions or Pydantic input dumps into public GatewayError messages. Bound envelopes, use request correlation IDs, and retain sanitized private diagnostics. Test injected secret/path sentinel exceptions across JWKS, parsing, schema, archive and generic handlers, plus logging redaction. Cover the rule, not one error example.
+4. Correct delivery evidence to match actual APIs: no temporary_tenant_context, tenant.is_active or config.enabled exists in this implementation. A constructed witness context is not an IAM credential and does not prove runtime permission enforcement by itself.
+5. Share closure matrix and regression checks. After final edits run targeted suites, full repository gate and isolated installed-wheel checks; report actual final candidate/counts/skips/limitations. Do not claim independent acceptance.
+
+No gateway activation, GHA-04 implementation, production credentials, provider dispatch, enrollment, delivery core or schema changes. Raise any needed scope deviation explicitly before coding it.
