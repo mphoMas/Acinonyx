@@ -150,16 +150,21 @@ python3 -m compileall -q mas scripts (Clean exit code 0)
 ### 5. Clean Installed-Wheel Check Outside Repository
 Command sequence:
 ```bash
-python3 -m build --wheel --outdir /tmp/test_wheel_rework
-python3 -m venv /tmp/test_venv_rework
-/tmp/test_venv_rework/bin/pip install /tmp/test_wheel_rework/mas_core-0.2.0-py3-none-any.whl pytest
-/tmp/test_venv_rework/bin/pytest /home/acinonyx/Desktop/MAS/tests/test_gha_gateway_integration.py -q
+python3 -m build --wheel --outdir /tmp/test_wheel_isolated
+python3 -m venv /tmp/test_venv_isolated
+/tmp/test_venv_isolated/bin/pip install /tmp/test_wheel_isolated/mas_core-0.2.0-py3-none-any.whl pytest
+mkdir -p /tmp/isolated_tests && cp tests/test_gha_gateway_integration.py /tmp/isolated_tests/
+cd /tmp/isolated_tests
+/tmp/test_venv_isolated/bin/python -c "import mas.pm.gateway; print('RESOLVED_GATEWAY_FILE:', mas.pm.gateway.__file__)"
+/tmp/test_venv_isolated/bin/pytest test_gha_gateway_integration.py -q
 ```
 Receipt:
 ```text
 Successfully built mas_core-0.2.0-py3-none-any.whl
-Successfully installed ... cryptography-50.0.2 mas-core-0.2.0 ...
-45 passed in 2.82s
+Successfully installed Pillow-12.3.0 PyYAML-6.0.3 annotated-types-0.8.0 cffi-2.1.1 cryptography-50.0.2 iniconfig-2.3.1 mas-core-0.2.0 packaging-26.3 pluggy-1.6.0 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pygments-2.21.0 pytest-9.1.1 typing-extensions-4.16.0 typing-inspection-0.4.4
+RESOLVED_GATEWAY_FILE: /tmp/test_venv_isolated/lib/python3.14/site-packages/mas/pm/gateway/__init__.py
+.............................................                            [100%]
+45 passed in 2.93s
 ```
 
 ---
