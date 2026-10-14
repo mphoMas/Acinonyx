@@ -40,7 +40,12 @@ def observation(outcome="PASSED"):
 def store_example(conn, tenant, action_id, observation_id, action, payload):
     """Reference SQL flow only. Deliberately has no authentication/runtime API."""
     owner = (tenant, "p", "i")
-    action_hash, payload_hash = digest(action), digest(payload)
+    checks = action["check_ids"]
+    item_checks = [item["check_id"] for item in payload["items"]]
+    if checks != sorted(set(checks)) or item_checks != sorted(set(item_checks)) or not set(item_checks).issubset(checks):
+        raise ValueError("INVALID_PAYLOAD")
+    action_hash = digest({"owner": owner, "contract": action})
+    payload_hash = digest(payload)
     conn.execute("BEGIN IMMEDIATE")
     try:
         prior = conn.execute("SELECT contract_digest FROM proposed_actions WHERE tenant_id=? AND project_id=? AND issue_id=? AND action_id=?", (*owner, action_id)).fetchone()
@@ -128,6 +133,36 @@ class ContractFixtures(unittest.TestCase):
             store_example(self.conn, "A", "action1", "obs1", contract(), bad)
         self.assertEqual(self.conn.execute("SELECT count(*) FROM proposed_actions").fetchone()[0], 0)
         self.assertEqual(self.conn.execute("SELECT count(*) FROM proposed_receipts").fetchone()[0], 0)
+
+    def test_replace_upsert_and_ignore_cannot_overwrite_or_hide_conflicts(self):
+        receipt, _ = store_example(self.conn, "A", "action1", "obs1", contract(), observation())
+        before = {table: self.conn.execute(f"SELECT * FROM {table}").fetchall() for table in ["proposed_actions", "proposed_receipts", "proposed_items"]}
+        for mode in ["REPLACE", "IGNORE"]:
+            for table in before:
+                row = before[table][0]
+                placeholders = ",".join("?" for _ in row)
+                with self.assertRaises(sqlite3.IntegrityError):
+                    self.conn.execute(f"INSERT OR {mode} INTO {table} VALUES({placeholders})", row)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.conn.execute("INSERT INTO proposed_receipts SELECT * FROM proposed_receipts WHERE receipt_id=? ON CONFLICT(receipt_id) DO UPDATE SET payload_json='tampered'", (receipt,))
+        # A different receipt ID must not replace the same logical observation.
+        row = list(before["proposed_receipts"][0])
+        row[0] = "rcpt_" + "0" * 64
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.conn.execute("INSERT OR REPLACE INTO proposed_receipts VALUES(?,?,?,?,?,?,?,?,?,?)", row)
+        for table, rows in before.items():
+            self.assertEqual(self.conn.execute(f"SELECT * FROM {table}").fetchall(), rows)
+
+    def test_check_scope_and_order_are_validated_before_transaction(self):
+        for checks, items in [(["test-b", "test-a"], ["test-a"]), (["test-a", "test-a"], ["test-a"]), (["test-a"], ["unknown"]), (["test-a", "test-b"], ["test-b", "test-a"]), (["test-a"], ["test-a", "test-a"])]:
+            a, p = contract(), observation()
+            a["check_ids"] = checks
+            p["items"] = [{"check_id": k, "claimed_outcome": "PASSED"} for k in items]
+            with self.assertRaisesRegex(ValueError, "INVALID_PAYLOAD"):
+                store_example(self.conn, "A", "action1", "obs1", a, p)
+            self.assertFalse(self.conn.in_transaction)
+        # Equality is allowed: report every check, not only a proper subset.
+        store_example(self.conn, "A", "action1", "obs1", contract(), observation())
 
     def test_canonical_order_and_nonfinite(self):
         self.assertEqual(digest({"a": 1, "b": 2}), digest({"b": 2, "a": 1}))

@@ -14,9 +14,9 @@ Allowed: persist/query quarantined metadata and bounded inline JSON claims in th
 
 - Ownership: tenant/project/issue resolved against configured binding and actual parent task ownership. Caller claims cannot select another database/tenant. Never accept a naked caller-supplied TenantContext as proof of IAM authentication or grant privileged storage access.
 - `action_id`: caller-supplied opaque correlation ID scoped to tenant/project/issue. It is NOT authority or inferred from candidate GitHub state. Maximum128 ASCII identifier characters. Same ID binds one immutable contract digest.
-- Contract: schema_version1; claimed candidate/base SHA, suite digest, brief/policy versions, optional claimed source generation, and sorted unique check IDs. All execution/source/policy associations are claims only until separately qualified. Canonical JSON hashes the entire contract including explicit ownership; key order normalized, nonfinite numbers forbidden. No concatenation hashing.
+- Contract: schema_version1; claimed candidate/base SHA, suite digest, brief/policy versions, optional claimed source generation, and sorted unique check IDs. All execution/source/policy associations are claims only until separately qualified. Canonical JSON hashes the structured map `{owner: [authenticated tenant, configured project, validated issue], contract: validated contract}`; ownership is never taken from caller contract fields; key order normalized, nonfinite numbers forbidden. No concatenation hashing.
 - `observation_id`: caller-supplied opaque stable retry ID, scoped to action. Maximum128 ASCII identifier characters; NOT guessed solely from GitHub run ID. Distinct checks/tasks/attempts can share one GitHub invocation without collision.
-- Payload: schema_version1; claimed GitHub repository/run/attempt, claimed MAS run/intent/attempt/fence, items sorted by unique check ID, artifact digest claims (no bytes or trusted URLs), bounded limitations. Payload check IDs must belong to the action contract. Outcomes are `PASSED|FAILED|SKIPPED|UNAVAILABLE` and remain claims. Changed outcome requires a NEW observation_id. Unknown fields refused; stable canonical normalization is defined before hashing.
+- Payload: schema_version1; claimed GitHub repository/run/attempt, claimed MAS run/intent/attempt/fence, items sorted by unique check ID, artifact digest claims (no bytes or trusted URLs), bounded limitations. Payload check IDs must form a subset **including equality** of the contract's sorted unique check IDs. Reject unsorted/duplicate check IDs and items before hashing/transaction; reporting every agreed check is valid. Outcomes are `PASSED|FAILED|SKIPPED|UNAVAILABLE` and remain claims. Changed outcome requires a NEW observation_id. Unknown fields refused; stable canonical normalization is defined before hashing.
 - Limits: action+payload encoded canonical JSON <=1 MiB combined; <=128 items, <=64 artifact digest claims, limits on individual identifiers/limitations; <=10,000 receipts per project in this pilot (duplicates can still retrieve when full). No writes or archival blobs to external paths. Admission is atomic relative to this count under BEGIN IMMEDIATE.
 
 Receipt ID: `rcpt_` plus full SHA256 of structured ownership/action_id/observation_id/payload_digest map. Immutable stored receipt includes canonical contract/payload, admitted time, claimed identity labels and fixed false authority flags. Production adapter must use exact canonical bytes once; fixture hashing is the example, not an independent verification signature.
@@ -35,7 +35,7 @@ For the first local pilot, require one service process to own receipt operations
 2. Acquire the supported authority guard; recheck current session/tenant/connector status and ownership; begin IMMEDIATE on the scoped PM DB.
 3. Find `(owner,action_id)`. If existing contract_digest differs: ACTION_CONTRACT_CONFLICT; rollback.
 4. Find `(owner,action_id,observation_id)`. If existing payload_digest differs: OBSERVATION_CONFLICT; rollback. If equal: return EXISTING same receipt; no receipt/action/item or budget changes. No source currentness check, artifact staging or authentication bypass.
-5. Check project receipt quota for new records. Insert missing immutable action, receipt and all item rows in ONE transaction. Composite parent/receipt ownership FKs are mandatory.
+5. Check project receipt quota for new records. Insert missing immutable action, receipt and all item rows in ONE transaction. Composite parent/receipt ownership FKs are mandatory; BEFORE INSERT duplicate-identity guards also refuse REPLACE/UPSERT/IGNORE paths on immutable rows.
 6. Commit, release guard, return CREATED. Sending response may fail after commit; that does not imply rollback.
 7. Fresh authentication with identical owner/action/observation/contract/payload after lost response returns EXISTING, including after original token expiry or claimed PR head changes.
 
@@ -52,7 +52,7 @@ Rollback before commit leaves no new action/receipt/items. Crash after commit is
 Runnable reference command:
 `python3 projects/scrum-board-automation/planning/gha04-receipt-contract/check_fixtures.py`
 
-Observed: **8 reference checks passed**. This only checks proposed SQL/canonical identities and sample transaction outcomes. It does not test runtime IAM, supported API, process kill, true concurrent admission or production migration.
+Observed after independent challenge corrections: **10 reference checks passed**. This only checks proposed SQL/canonical identities and sample transaction outcomes. It does not test runtime IAM, supported API, process kill, true concurrent admission or production migration.
 
 Antigravity implementation acceptance must additionally prove through the supported interface:
 - real subprocess kill after commit before response, reopen and freshly authenticated recovery;
@@ -66,3 +66,16 @@ Antigravity implementation acceptance must additionally prove through the suppor
 ## Next gate
 
 Antigravity independently challenges this reference contract, including the local authority profile and deferred guarantees. Record agreed changes and freeze exact inputs, outputs and acceptance evidence. If the profile cannot meet the actual deployment, stop and name that mismatch rather than expand silently. No backend implementation is authorized until that design challenge is resolved.
+
+
+## Independent challenge resolution (Antigravity's supplied review)
+
+The CEO supplied Antigravity's APPROVED WITH CONDITIONS challenge of `5f83e250`. Codex accepts the REPLACE bypass finding and closes it with BEFORE INSERT conflict guards on actions, receipts and items, independent of recursive_triggers. Fixtures now test REPLACE/IGNORE/UPSERT, physical and logical receipt conflicts, scope/order validation, and unchanged original rows. This corrects Codex-authored reference material; it is not production implementation acceptance.
+
+Production parent mapping is **pm_delivery_tasks**, not pm_issues: tasks already carry tenant_id/project_id/issue_id. Add an additive UNIQUE index on that exact tuple; bind actions to it. Receipts bind to scoped actions and items bind to scoped receipts. This slice requires an existing enrolled delivery task; enrollment and legacy task backfill are excluded. No tenant column is added to pm_issues. Fixture-owned parents are only structural models, not deployable replacements.
+
+Quota count is performed inside the receipt transaction after EXISTING lookups. Conflict-before-quota and duplicate-before-quota semantics are frozen. Strict check ID subset means equality is allowed; reject unknown/duplicate/unsorted IDs. Owner-wrapped contract digest above resolves the fixture/prose mismatch without trusting caller ownership. It also domain-scopes the digest.
+
+The named authentication/session/registry APIs identified by Antigravity must use the one shared authority guard for this supported local host profile, including principal/session invalidation, tenant suspension and connector register/update/remove/pop/item mutation. Fresh token authentication uses existing IAM/tenant binding; constructed witness contexts are not bearer credentials. Guard integrations are a scoped implementation requirement, not an already implemented feature. External-process IAM changes and multi-process service writers remain unsupported; do not silently enable them.
+
+Authorization to implement this bounded local slice follows existing CEO direction and the independent conditional design challenge, after these corrections. No additional CEO confirmation is needed. Antigravity owns runtime implementation; Codex independently reviews. Later scope additions remain separately agreed.
