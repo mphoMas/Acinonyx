@@ -95,12 +95,12 @@ The GitHub Actions integration will be delivered in 6 sequential work packages w
 
 | Package ID | Package Name | Delivery Owner | Dependencies | Description |
 |---|---|---|---|---|
-| **GHA-02** | Offline Manifest & Artifact Validator | **Antigravity** | GHA-01 accepted | Build `mas.pm.delivery.validator` and CLI to validate artifact bundles and manifests against completed fixture runs, calling `submit()` and reporting phase. |
+| **GHA-02** | Offline Manifest & Artifact Validator | **Antigravity** | GHA-01 accepted | Build `mas/pm/delivery_validator.py` and CLI to validate artifact bundles and manifests against completed fixture runs, calling `submit()` and reporting phase. |
 | **GHA-03** | Authentication Gateway & Ingestion API | **Antigravity** | GHA-02 | Implement OIDC token validation, server-side repository/workflow mapping, and ephemeral scoped coordinator session issuance. |
 | **GHA-04** | Source Registry & Event Idempotency Ledger | **Antigravity** | GHA-03 | Implement `pm_source_events` table, idempotency checks (`action_id`, `payload_digest`), PR-head freshness checks, and rerun tracking. |
-| **GHA-05** | Trusted Check Publisher | **Codex** | GHA-03 | Implement privileged publisher service mapping coordinator delivery phases to GitHub Checks API `status` and `conclusion` enums. |
+| **GHA-05** | Trusted Check Publisher | **Antigravity** (Codex review) | GHA-04 | Implement privileged publisher service mapping coordinator delivery phases to GitHub Checks API `status` and `conclusion` enums. |
 | **GHA-06** | Qualified Container Execution Harness | **Antigravity** | GHA-02 | Standardize rootless, networkless container check runner reusing `ContainerBoundary` and recovery journal for CI execution. |
-| **GHA-07** | End-to-End Recovery & Rehearsal | **Joint** | GHA-04, GHA-05, GHA-06 | Multi-attempt rehearsal on a private test project exercising readiness returns, recurrence pauses, challenge resolutions, and final acceptance. |
+| **GHA-07** | End-to-End Recovery & Rehearsal | **Antigravity** (Codex acceptance) | GHA-04, GHA-05, GHA-06 | Multi-attempt rehearsal on a private test project exercising readiness returns, recurrence pauses, challenge resolutions, and final acceptance. |
 
 ---
 

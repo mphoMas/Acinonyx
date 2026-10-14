@@ -97,15 +97,18 @@ Workflows must execute a strict two-checkout pattern:
 3. **Zero Git push credentials [Existing]**: Runners execute with `contents: read` permissions only.
 4. **Zero provider API keys [Existing]**: Untrusted candidate execution receives no LLM provider credentials (OpenAI, Anthropic, Gemini, etc.).
 
-### 4.2 Qualified container boundary reuse [Existing]
+### 4.2 Qualified container boundary reuse [Existing & Proposed]
 Candidate check execution does not invoke raw, uncontrolled Docker commands. It reuses the qualified `ContainerBoundary` (`mas/pm/adapters/boundary.py`):
-1. **Rootless & unprivileged**: Container executes as a non-root user (`uid > 0`), with `--cap-drop=ALL` and `--security-opt=no-new-privileges:true`.
-2. **Network denial**: Container executes with `--network=none`.
-3. **Filesystem isolation**: Root filesystem is mounted read-only (`--read-only`). Writable areas are limited to an isolated `tmpfs` at `/tmp` (flags: `noexec,nosuid,nodev`, size limit: 64 MiB).
-4. **Socket denial**: The host Docker socket (`/var/run/docker.sock`) is **never** mounted.
-5. **Resource and deadline limits**: Bounded CPU (`--cpus=1.0`), bounded memory (`--memory=512m`), and bounded execution deadline (default 30s per check, hard process timeout at 45s).
-6. **Output bounds**: Standard output and standard error are captured with a hard limit of 1 MiB. Output exceeding 1 MiB is truncated and marked with an `OUTPUT_TRUNCATED` flag.
-7. **Recovery journal**: All container creations register in the container recovery journal before start, ensuring delayed-creation cleanup on client timeout or crash.
+1. **Existing container limits [Existing]**:
+   - Container executes as non-root user `uid 65534:65534` with `--cap-drop=ALL` and `--security-opt=no-new-privileges:true`.
+   - Network denial: `--network=none`.
+   - Filesystem isolation: rootfs mounted read-only (`--read-only`), writable area limited to isolated `tmpfs` at `/tmp:rw,nosuid,nodev,size=32m`.
+   - Socket denial: host Docker socket (`/var/run/docker.sock`) is never mounted.
+   - Resource bounds: `--memory=128m --memory-swap=128m --cpus=0.5 --pids-limit=32 --ulimit=nofile=64:64 --ulimit=core=0:0`.
+   - Output limit: configurable between 1024 and 65536 bytes (default 64 KiB); overflow raises `OutputLimitError` rather than silent truncation.
+   - Recovery journal: all container creations register in `ContainerJournal` before start, ensuring delayed-creation cleanup on client timeout or crash.
+2. **Proposed extended CI profile [Proposed]**:
+   - For broader repository CI tasks, an extended profile (e.g. 512 MiB memory, 1.0 CPU, 64 MiB tmpfs with `noexec`, and output capture with 1 MiB truncation flag) is proposed for qualification under GHA-06. The existing 128m/0.5cpu/64KiB boundary remains the active baseline.
 
 ---
 
@@ -146,11 +149,12 @@ The MAS Coordinator is a private Python service, not a public web server. GitHub
 
 ### 5.1 Gateway validation requirements [Proposed]
 The Authentication Gateway performs strict server-side validation:
-1. **Issuer verification**: `iss == "https://token.actions.githubusercontent.com"`.
-2. **Audience verification**: `aud == "mas-coordinator-delivery"`.
-3. **Repository binding**: `repository_id` and `repository_owner_id` must match the server-side configuration for the tenant's enrolled project.
-4. **Workflow provenance**: `job_workflow_ref` must match the pinned trusted workflow ref on the protected default branch (e.g. `octocat/repo/.github/workflows/delivery-gate.yml@refs/heads/main`).
-5. **Role mapping**: The gateway maps the authenticated workflow to the assigned `builder` principal and issues an ephemeral `delivery:submit` session token. Verifier observation collection uses a dedicated verifier ingestion channel, preventing builder impersonation.
+1. **Cryptographic JWT & JWKS verification**: Validates token signature against GitHub's official OIDC JWKS (`https://token.actions.githubusercontent.com/.well-known/jwks`), verifying allowed asymmetric algorithms (e.g. RS256) and key rotation.
+2. **Issuer & audience verification**: `iss == "https://token.actions.githubusercontent.com"` and `aud == "mas-coordinator-delivery"`.
+3. **Temporal validity**: Rejects tokens with `exp` in the past, `nbf` in the future, or token age (`iat` to now) exceeding bounded lifetime (max 15 minutes).
+4. **Repository & owner binding**: `repository_id` and `repository_owner_id` must match the server-side configuration for the tenant's enrolled project. Tokens from external forks or untrusted repos are rejected.
+5. **Exact workflow provenance**: `job_workflow_ref` must match the pinned reusable workflow or direct workflow by immutable 40-character commit SHA on the protected branch (e.g. `octocat/repo/.github/workflows/delivery-gate.yml@15e9f763...`).
+6. **Server-owned role & action mapping**: The gateway maps the authenticated repository and workflow to the assigned principal and permitted action (`delivery:submit`) server-side. Request payload fields cannot select or elevate caller roles. Verifier observation collection uses a separate dedicated coordinator ingestion path, preventing builder impersonation.
 
 ---
 
@@ -211,8 +215,9 @@ A critical distinction required by the architectural audit:
    - When a candidate has code defects requiring edits, the builder produces a new candidate commit `C'`.
    - In the current service implementation, dispatching a new run requires the task to be in `READY`. However, `DeliveryService` currently lacks an authorized transition from `READINESS_RETURNED` back to `READY` without coordinator re-establishment.
    - **Proposed Lifecycle Transition**: Add `DeliveryService.retry_readiness(issue_id, revision, new_attempt_intent)`:
-     - Allows an assigned builder to transition a task from `READINESS_RETURNED` back to `READY` for a new attempt sequence under the same brief version.
-     - Increments attempt sequence and generation.
+     - Must be strictly coordinator-controlled and funded: requires coordinator authority (`delivery:coordinate`), valid budget reservation, bounded attempt ceiling, and absence of unresolved intents, holds, disputes, scope changes, or recurrence pauses.
+     - Builder may request retry; it cannot self-authorize new execution, create funding, or erase uncertainty.
+     - Increments attempt sequence and generation atomically while revoking prior worker leases.
      - Preserves all historical readiness return records in `pm_delivery_submissions`.
      - **Constraint**: This transition must be implemented in code before live multi-candidate loops can execute. For GHA-02, execution is strictly offline validation against an already completed fixture run.
 
@@ -299,11 +304,13 @@ All external GitHub Actions must be pinned by immutable 40-character commit SHA:
 - `actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3` # v4.3.1
 
 ### 9.3 Trusted Check Publisher separation [Proposed]
-To preserve the security boundary:
-1. **Candidate runner authority**: The runner executing candidate checks has **no** GitHub Checks write permissions. It outputs only structured evidence artifacts.
-2. **Authorized Check Publisher**: A separate, privileged service or workflow job running in an isolated environment receives the coordinator's verified state and publishes Check Runs using GitHub App credentials.
-3. **Checks API state mapping**:
-   The GitHub Checks API uses `status` and `conclusion`. The publisher maps coordinator states strictly:
+Under `company/DELIVERY_OWNERSHIP.md`, backend APIs, engine, and CI/CD infrastructure belong to the Antigravity development team; Codex reviews architecture and user-facing contracts. Therefore:
+1. **Delivery ownership**: Implementation of the Trusted Check Publisher belongs to Antigravity; architecture critique and acceptance criteria belong to Codex.
+2. **Candidate runner authority**: The runner executing candidate checks has **no** GitHub Checks write permissions. It outputs only structured evidence artifacts.
+3. **Authorized Check Publisher**: A separate, privileged service or workflow job running in an isolated environment receives the coordinator's verified state and publishes Check Runs using GitHub App credentials. Requires qualified source freshness (GHA-04) before mutating check state.
+4. **Checks API state mapping & required check protection**:
+   The GitHub Checks API uses `status` and `conclusion`. The publisher maps coordinator states strictly.
+   **Crucial Required-Check Invariant**: Because GitHub treats `neutral` and `skipped` conclusions as satisfying required branch protection checks, the required acceptance check (`mas/delivery/acceptance`) MUST NEVER emit `neutral` or `skipped`. Only currently verified `ACCEPTED` tasks emit `success`. All other terminal states emit `failure`, `action_required`, or `timed_out`, or remain `in_progress`. `neutral` may only be emitted for non-required, purely informational checks.
 
 | Coordinator Delivery Phase | Checks API `status` | Checks API `conclusion` | Human-Readable Check Description |
 |---|---|---|---|
@@ -316,12 +323,13 @@ To preserve the security boundary:
 | `DISPUTED` | `in_progress` | *none* | Disputed: builder challenge pending coordinator resolution |
 | `ACCEPTED` | `completed` | `success` | Accepted: independent verification and review receipts admitted |
 | `UNCERTAIN` / Timeout | `completed` | `timed_out` | Uncertain: execution timed out or interrupted; holds retained |
-| `CANDIDATE_SUPERSEDED` | `completed` | `neutral` | Superseded: newer commit pushed to pull request branch |
+| `CANDIDATE_SUPERSEDED` (Required Check) | `completed` | `failure` | Superseded: newer commit pushed to PR branch (not merge eligible) |
+| `CANDIDATE_SUPERSEDED` (Informational) | `completed` | `neutral` | Informational: commit superseded by newer PR head |
 
 ### 9.4 Branch protection and merge requirements [Proposed]
 1. The repository branch protection rule requires the Check Run `mas/delivery/acceptance` to have conclusion `success`.
 2. Because Check Runs are bound to exact commit SHAs (`head_sha`), pushing a new commit automatically leaves the new commit without a successful check run.
-3. Merge is strictly blocked until the new candidate commit completes execution, passes readiness, and receives independent acceptance.
+3. Merge is strictly blocked until the new candidate commit completes execution, passes readiness, and receives independent acceptance. Required checks must never emit `neutral` or `skipped`.
 
 ---
 
