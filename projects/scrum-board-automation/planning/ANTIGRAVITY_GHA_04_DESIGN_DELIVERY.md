@@ -1,88 +1,90 @@
-# Antigravity — GHA-04 Design Checkpoint Delivery (Revised)
+# Antigravity — GHA-04 Design Checkpoint Delivery (Revised Checkpoint 2)
 
-**Task:** GHA-04 — Durable Ingestion, Replay Protection & Source-Event Synchronization (Design Checkpoint Rework)  
-**Branch:** `feat/scrum-board-automation`  
-**Implementation Owner:** Antigravity Development Team  
-**Architecture Reviewer:** Codex  
-**Date:** 14 October 2026  
-**Status:** **SUBMITTED FOR INDEPENDENT CODEX REVIEW**  
-**Design Specification:** [`projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md)  
+**Task:** GHA-04 — Durable Ingestion, Replay Protection & Source-Event Synchronization (Design Checkpoint Rework 2)
+**Branch:** `feat/scrum-board-automation`
+**Implementation Owner:** Antigravity Development Team
+**Architecture Reviewer:** Codex
+**Date:** 14 October 2026
+**Status:** **SUBMITTED FOR INDEPENDENT CODEX REVIEW** (Design agreement pending)
+**Design Specification:** [`projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md)
 **Review Documents Addressed:**
-- [`projects/scrum-board-automation/planning/GHA_04_DESIGN_REVIEW.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_DESIGN_REVIEW.md) (`6099b8ae`)
+- [`projects/scrum-board-automation/planning/GHA_04_DESIGN_REVIEW.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_DESIGN_REVIEW.md) (`a193e1af`)
 - [`projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_REWORK_BRIEF.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_REWORK_BRIEF.md) (`a193e1af`)
 - [`projects/scrum-board-automation/planning/GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md) (`a629ba4b`)
 - [`projects/scrum-board-automation/planning/GHA_04_REVIEW_READINESS_CHECKLIST.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_REVIEW_READINESS_CHECKLIST.md) (`a629ba4b`)
+- [`projects/scrum-board-automation/planning/GHA_04_REVISED_DESIGN_REVIEW.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_REVISED_DESIGN_REVIEW.md) (`fe0e9899`)
+- [`projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_REVISED_DESIGN_REWORK.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_REVISED_DESIGN_REWORK.md) (`fe0e9899`)
 **Accepted GHA-03 Baseline:** Commit `82407210f97eb41500f2a4d671d71d38175b685e` (Approved in `3ca8fc4d`, Recorded in `GHA_03_ACCEPTANCE_RECORD.md`)
 
 ---
 
-## 1. Executive Summary & Review Response
+## 1. Executive Summary & Review Rework Alignment
 
-Antigravity has revised the GHA-04 architectural design specification in direct response to Codex's design review (`GHA_04_DESIGN_REVIEW.md`), explicit rework instructions (`ANTIGRAVITY_GHA_04_DESIGN_REWORK_BRIEF.md`), and shared acceptance scenarios (`GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md`).
+In response to Codex's second design review (`GHA_04_REVISED_DESIGN_REVIEW.md`) and action directive (`ANTIGRAVITY_GHA_04_REVISED_DESIGN_REWORK.md`), Antigravity has revised the architectural design specification (`ANTIGRAVITY_GHA_04_DESIGN_SPEC.md`).
 
-All six critical review findings (B1 through B6) have been resolved within a bounded, mathematically consistent, and operationally realistic architecture:
-1. **Quarantined Witness Authority:** Witness ingestion functions strictly as an untrusted, unverified observation recorder (`admission_status = 'ADMITTED_OBSERVATION'`, `authority_verified = False`). Direct SQL updates to `pm_delivery_tasks.phase`, submissions, verdicts, and budgets are completely eliminated (§ 1, § 2.2, § 3.1).
-2. **Composite Identity & Idempotency Keying:** Defined generation-specific `action_key` incorporating source generation and suite digest. Scoped receipts to `(tenant_id, issue_id, action_key, github_run_id, github_run_attempt)`, natively supporting multiple checks per workflow run while enforcing strict composite foreign key integrity on `(tenant_id, project_id, issue_id)` (§ 2.1, § 3.1).
-3. **Tripartite Retry & Retrieval Protocol:** Deterministic three-way resolution ensures:
-   - Same token, same payload: `200 OK` (cached receipt).
-   - Same token, altered payload: `409 IDEMPOTENCY_CONFLICT`.
-   - Fresh token, same action: `200 OK` (cached receipt, token unconsumed).
-   - Fresh token, altered payload: `409 CONFLICTING_ACTION_PAYLOAD`.
-   - Read-only historical receipt query: permits authenticated inspection of past receipts without re-admission, token replay, or current-head claims (§ 5.1, § 5.2).
-4. **Authoritative Source Freshness:** Single-row CAS projection (`pm_source_current_heads`) coupled with append-only notification logs (`pm_source_notifications`). Monotonic `source_generation` advances on authenticated refresh tickets, cleanly decoupling authority from git commit ancestry/timestamps during force pushes or rebases, and failing closed (`503 SOURCE_FRESHNESS_UNKNOWN`) on network degradation (§ 3.1, § 4.3).
-5. **Authority Linearization Across Independent Stores:** Two-phase filesystem staging (quota check, temp file write, fsync, atomic rename promotion, dir fsync) precedes database locking. Followed by `BEGIN IMMEDIATE` lock with double-checked verification of IAM tenant active status, connector snapshot generation/digest, and PR head generation before commit (§ 4.1, § 4.2).
-6. **Clean Local Durability & Retention:** Eliminated the redundant external side-effect journal (`pm_delivery_intents`) from this local slice. Local transaction rollback leaves zero committed rows; token retention is bounded by `expires_at + clock_skew`; receipts and observation records are permanently immutable (§ 1, § 2.2, § 3.1).
-
-**Strict Governance Guarantees:**
-- **Zero implementation code, database migrations, or live endpoints have been created.**
-- All proposed models, interfaces, and schemas are explicitly labeled as **PROPOSED**.
-- GHA-04 implementation remains strictly gated pending Codex design agreement.
+All four blocking corrections have been resolved with concrete relational DDL, linearization epochs, lookup decision trees, and filesystem protocols:
+1. **Executable Relational Proposal:**
+   - Explicit parent unique indexes added on `pm_delivery_projects(tenant_id, project_id)` and `pm_delivery_tasks(tenant_id, project_id, issue_id)`.
+   - Complete separation of entities: `pm_delivery_logical_actions` (immutable semantic action digest), `pm_delivery_receipts` (attempt receipt with full 256-bit ID `rec_` + 64 hex characters), and `pm_delivery_observation_records` (individual checks).
+   - Separation of expiring anti-replay table (`pm_token_replay_cache`) from permanent receipt token provenance, allowing clean cleanup under `PRAGMA foreign_keys = ON;`.
+   - Structured canonical action hashing using deterministic $\text{JSON}_{\text{canonical}}$ serialization.
+2. **Cross-Store Authority Linearization & Source Protocol:**
+   - Established `pm_tenant_authority_epochs` in `PMDatabase` as the single serialization point for IAM tenant status and connector updates. Mutators and admission synchronize on the identical `BEGIN IMMEDIATE` lock.
+   - Durable refresh tickets (`pm_source_refresh_tickets`) with CAS acquisition, lease timeouts, and failed/stalled status.
+   - Source generation advances on any change to `head_sha`, `base_sha`, or `state` (`OPEN` $\leftrightarrow$ `CLOSED` / `MERGED`). Ancestry ordering is 100% eliminated. Stalled freshness fails closed (`503 SOURCE_FRESHNESS_UNKNOWN`).
+3. **Lookup Decision Protocol & Historical Recovery:**
+   - Authenticates caller context first.
+   - Evaluates historical receipt lookup (token replay cache or logical action attempt) **before** evaluating current PR head freshness.
+   - Legitimate replays after PR head advance or closure return historical cached receipts (`200 OK`, `historical=True`) without re-admission or phase transition.
+4. **Local Artifact Durability & CAS Protocol:**
+   - Scoped server-owned paths (`/var/mas/pm/cas/<tenant_id>/` and `/var/mas/pm/staging/<tenant_id>/`).
+   - Atomic no-replace promotion using POSIX `link(staging_tmp, cas_dest)`. If destination exists, byte-for-byte SHA-256 verification is performed; corrupt destinations raise `CAS_INTEGRITY_VIOLATION`.
+   - Quota reservation lifecycle managed in `pm_tenant_artifact_quotas`.
+   - Safe orphan cleanup with 24-hour grace window and committed reference recheck.
 
 ---
 
-## 2. Review Finding Closure Matrix (B1–B6)
+## 2. Review Finding Closure Matrix (Revised Review)
 
-| Review Finding | Issue Identified in Review | Architectural Correction in Revised Design | Location in Revised Spec |
+| Review Finding | Issue Identified | Concrete Architectural Correction | Spec Location |
 |---|---|---|---|
-| **B1: Witness ingestion takes builder submission authority** | Proposed design directly updated `pm_delivery_tasks.phase` to `IN_REVIEW`/`READINESS_RETURNED` on witness observation outcome, bypassing `DeliveryService.submit`. | Direct phase mutation removed. Ingestion strictly quarantines untrusted observations and receipts (`admission_status = 'ADMITTED_OBSERVATION'`). Delivery tasks remain in existing phases. Submissions must occur via separate authenticated builder services (`DeliveryService.submit`). | § 1, § 2.2 (INV-01), § 3.1 |
-| **B2: Identity/idempotency schema cannot express contract** | Omitted generation from logical identity, lacked action digest, prohibited multiple checks per GitHub run, omitted composite ownership constraints. | Defined generation-specific `action_key` and `semantic_action_digest`. Scoped receipts to permit multiple checks per run `(tenant_id, issue_id, action_key, github_run_id, github_run_attempt)`. Added composite foreign keys on `(tenant_id, project_id, issue_id)`. Scoped token replay to `(tenant_id, iss, jti)`. | § 2.1, § 3.1 |
-| **B3: Contradictory retry semantics & lost recovery after expiry** | Claimed tokens single-use but permitted replays; fresh-token retries returned 409; cached lookups blocked if head advanced; expired tokens unrecoverable. | Formalized tripartite retry protocol: at-most-once mutation per token; same-token identical replay returns historical receipt (`200 OK`); fresh-token identical action returns existing receipt (`200 OK`); conflicting payloads return `409`; authenticated read query allows inspecting historical receipts even after token expiration or head advancement. | § 5.1, § 5.2 |
-| **B4: Non-authoritative freshness ordering** | Relied on ambiguous commit ancestry / timestamps; lacked force-push / base update handling; permitted multiple current rows. | Established append-only notification history (`pm_source_notifications`) and single-row current projection (`pm_source_current_heads`). Monotonic `source_generation` advances on accepted refresh tickets. Force-pushes increment generation and invalidate prior submissions. Fails closed on unknown freshness. | § 3.1, § 4.3 |
-| **B5: SQLite lock does not serialize IAM/connector/filesystem** | `BEGIN IMMEDIATE` cannot lock independent IAM DB, connector registry, or filesystem; staging inside lock causes lock contention; chmod 0440 is not immutability. | Out-of-transaction filesystem staging: verify caps (12MB comp, 2MB/member, 10MB uncomp), fsync temp file, atomic promotion via rename, fsync directory. Followed by `BEGIN IMMEDIATE` lock with double-checked verification of IAM active status, connector generation, and PR head generation before commit. | § 4.1, § 4.2 |
-| **B6: Contradictory recovery & retention records** | Side-effect journal contradicted local rollback; token deletion conflicted with audit immutability triggers. | Eliminated redundant `pm_delivery_intents` journal from this local slice. Rollback leaves zero rows. Response loss handled by action/token store. Token purge permitted only after `expires_at + clock_skew`; receipts and audit records strictly immutable with abort triggers. | § 1, § 2.2 (INV-10), § 3.1 |
+| **1. DDL does not enforce claimed ownership or token retention** | FKs referenced only `issue_id`; no parent unique indexes; token cleanup broke FKs; logical actions lacked separate record to enforce immutable semantic digest. | Added parent unique indexes `uq_idx_delivery_projects_tenant` and `uq_idx_delivery_tasks_tenant_issue`. Added composite FKs referencing `(tenant_id, project_id, issue_id)`. Created `pm_delivery_logical_actions` table. Separated expiring `pm_token_replay_cache` from permanent receipt token provenance. Replaced truncated ID with full 256-bit `rec_` ID. Used deterministic $\text{JSON}_{\text{canonical}}$ action serialization. | § 2.1, § 2.2, § 3.1, § 3.2 |
+| **2. Authority and freshness ordering still lack enforcement** | Separate stores acknowledged but no cross-store linearization mechanism; refresh tickets had no schema/protocol; ancestry ordering contradicted force-push; open/closed transitions omitted generation bump. | Established `pm_tenant_authority_epochs` in `PMDatabase` locked under `BEGIN IMMEDIATE`. Created `pm_source_refresh_tickets` with atomic CAS and lease timeouts. Monotonic generation advances on any change to `head_sha`, `base_sha`, or `state` (`OPEN`/`CLOSED`). Removed ancestry ordering. Stalled freshness fails closed with `503`. | § 4.2, § 4.3 |
+| **3. Logical action vs attempt and historical recovery conflict** | Admission validated current source before token/receipt lookup, blocking historical cached responses after PR head advance or closure; new-attempt/new-token contradicted action cache. | Structured lookup decision order: Step 1 Authenticate context $\to$ Step 2 Check token replay cache $\to$ Step 3 Check logical action attempt cache (returns `200 OK`, `historical=True`) $\to$ Step 4 Validate current source freshness only for new admissions. | § 5.1, § 5.2 |
+| **4. Artifact durability remains a promise rather than a safe protocol** | Rename overwrote existing files; orphan cleanup raced paused admissions; quota reservation had no lifecycle; chmod did not prove immutability. | Specified server-owned scoped paths. Atomic no-replace promotion via POSIX `link()`; existing file verified by SHA-256 (corrupt raises `CAS_INTEGRITY_VIOLATION`). Quota lifecycle tracked in `pm_tenant_artifact_quotas`. Orphan cleanup enforces 24h grace window and queries committed receipts under read transaction before unlinking. | § 4.1 |
 
 ---
 
 ## 3. Review Readiness Checklist Compliance
 
-In accordance with [`GHA_04_REVIEW_READINESS_CHECKLIST.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_REVIEW_READINESS_CHECKLIST.md), each checklist item is verified below:
+In accordance with [`GHA_04_REVIEW_READINESS_CHECKLIST.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_REVIEW_READINESS_CHECKLIST.md):
 
-- [x] **Revised design addresses B1–B6 in `GHA_04_DESIGN_REVIEW.md`:**  
-  Fully resolved in § 1, § 2.1, § 2.2, § 3.1, § 4.1–4.3, § 5.1–5.2, and mapped in the closure matrix above.
-- [x] **Witness cannot mutate delivery phase, budgets, dispatch or trusted evidence:**  
+- [x] **Revised design addresses B1–B6 in `GHA_04_DESIGN_REVIEW.md` and findings 1–4 in `GHA_04_REVISED_DESIGN_REVIEW.md`:**
+  Fully resolved in § 1, § 2.1–2.3, § 3.1–3.2, § 4.1–4.3, § 5.1–5.2, and mapped in the closure matrix above.
+- [x] **Witness cannot mutate delivery phase, budgets, dispatch or trusted evidence:**
   Formalized in INV-01, INV-02, and INV-08. Observation records are quarantined (`authority_verified = False`). Phase changes remain exclusive to `DeliveryService.submit`. Zero task mutations occur during witness ingestion.
-- [x] **Token/action/attempt/source/MAS identities and relational constraints are explicit:**  
-  Formalized in § 2.1 and § 3.1. Token identity is `(tenant_id, iss, jti)`. Logical action identity is `action_key`. Execution attempt is `github_run_attempt`. Source state is tracked via `(tenant_id, project_id, pr_number)` with monotonic `source_generation`. Composite FKs enforce cross-tenant separation on `(tenant_id, project_id, issue_id)`.
-- [x] **Same/fresh/expired-token retry and historical receipt retrieval outcomes are unambiguous:**  
-  Formalized in § 5.1 (tripartite retry resolution table) and § 5.2 (`DeliveryReceiptService` query contract). Same-token retry returns `200 OK (CACHED_RECEIPT)`; fresh-token retry returns `200 OK (CACHED_RECEIPT)`; expired tokens can be queried read-only with `is_current_head` flag.
-- [x] **Source freshness protocol handles force push, base changes and delayed responses:**  
-  Formalized in § 4.3 and § 3.1. Single-row projection `pm_source_current_heads` increments `source_generation` on refresh tickets. Force pushes advance generation and invalidate prior submissions without relying on commit graph ancestry. Degraded/stale refresh windows fail closed with `503 SOURCE_FRESHNESS_UNKNOWN`.
-- [x] **Authorization linearization covers IAM and connector update boundaries:**  
-  Formalized in § 4.2. Pre-flight reads connector generation snapshot $G_{conn}$. Double-checked locking under `BEGIN IMMEDIATE` re-validates `iam.get_tenant()` is active and connector generation equals $G_{conn}$ immediately prior to commit.
-- [x] **Artifact durability/quota/orphan cleanup and local rollback versus remote uncertainty are distinguished:**  
-  Formalized in § 4.1. Staging occurs outside transaction; promotion via atomic rename and directory fsync; DB commit follows. Local transaction aborts roll back 100% of rows (no uncertain state for local writes). Unreferenced CAS artifacts are reaped after 24 hours.
-- [x] **Immutable history, mutable projections, retention and migration compatibility are specified:**  
-  Formalized in § 3.1, § 3.2, and § 9. `pm_delivery_receipts`, `pm_delivery_observation_records`, and `pm_source_notifications` are append-only with SQLite `ABORT` triggers. `pm_source_current_heads` is a mutable projection without delete triggers. Migration `2026101401` is additive and idempotent.
-- [x] **Shared scenarios in `GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md` are mapped to proposed mechanisms before coding:**  
-  All 33 scenarios (A01–A07, R01–R09, S01–S06, C01–C06, D01–D05) are explicitly mapped in § 8.
-- [x] **Codex design agreement recorded before implementation/schema changes:**  
-  Strictly observed. Implementation is 100% gated on Codex's written approval of this revised design specification.
+- [x] **Token/action/attempt/source/MAS identities and relational constraints are explicit:**
+  Formalized in § 2.1 and § 3.1. Parent unique indexes added; composite FKs on `(tenant_id, project_id, issue_id)` enforced; separate `pm_delivery_logical_actions` and `pm_delivery_receipts` tables defined.
+- [x] **Same/fresh/expired-token retry and historical receipt retrieval outcomes are unambiguous:**
+  Formalized in § 5.1 (lookup decision table) and § 5.2 (`DeliveryReceiptService` query contract). Historical lookups execute *before* source freshness checks, allowing retrieval after PR head advances or closes.
+- [x] **Source freshness protocol handles force push, base changes and delayed responses:**
+  Formalized in § 4.3 and § 3.1. Durable refresh tickets with CAS; generation increments on any change to head, base, or open/closed state; ancestry ordering 100% eliminated; fails closed with `503` on stale refresh.
+- [x] **Authorization linearization covers IAM and connector update boundaries:**
+  Formalized in § 4.2. Cross-store mutators update `pm_tenant_authority_epochs` under `BEGIN IMMEDIATE` lock in `PMDatabase`, establishing a single, provable linearization point.
+- [x] **Artifact durability/quota/orphan cleanup and local rollback versus remote uncertainty are distinguished:**
+  Formalized in § 4.1. Server-owned paths; POSIX `link()` atomic no-replace promotion; byte verification on collision; quota reservation lifecycle; orphan cleanup with 24h grace window and committed reference recheck.
+- [x] **Immutable history, mutable projections, retention and migration compatibility are specified:**
+  Formalized in § 3.1, § 3.2, and § 9. `pm_delivery_receipts`, `pm_delivery_observation_records`, `pm_delivery_logical_actions`, and `pm_source_notifications` have abort triggers. `pm_source_current_heads` is a mutable projection. Additive migration `2026101401`.
+- [x] **Shared scenarios in `GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md` are mapped to proposed mechanisms before coding:**
+  All 33 scenarios (A01–A07, R01–R09, S01–S06, C01–C06, D01–D05) mapped with all 5 required dimensions in § 8.
+- [ ] **Codex design agreement recorded before implementation/schema changes:**
+  **Status: PENDING CODEX REVIEW.** Strict gate preserved; zero implementation code written.
 
 ---
 
 ## 4. Shared Acceptance Scenario Mapping Summary (33 Scenarios)
 
-The revised specification (§ 8) maps every shared scenario from [`GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md) to an accountable component, database constraint, and verified outcome:
+The revised specification (§ 8) maps every shared scenario from [`GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/GHA_04_INDEPENDENT_ACCEPTANCE_SCENARIOS.md) with all five required dimensions (Invariant Checked, Component & Boundary, Input/Fault, Response & State, Evidence Needed):
 
 1. **Admission and Authority (A01 – A07):**
    - **A01 (Valid observation):** Records untrusted observation; leaves delivery phase and budgets unchanged.
@@ -90,7 +92,7 @@ The revised specification (§ 8) maps every shared scenario from [`GHA_04_INDEPE
    - **A03 (Cross-tenant separation):** Composite FK on `(tenant_id, project_id, issue_id)` blocks foreign tenant insertion.
    - **A04 (Multi-check per run):** Composite receipt key allows distinct checks/tasks in same workflow run attempt.
    - **A05 (Revision change):** Changed generation/suite creates new `action_key`; rejects conflicting rerun.
-   - **A06 (Authority race):** Double-checked lock verifies IAM and connector generation immediately before commit.
+   - **A06 (Authority race):** Double-checked lock verifies `pm_tenant_authority_epochs` immediately before commit.
    - **A07 (Binding mismatch):** Coordinates matching token claims enforced before transaction.
 2. **Replay, Idempotency, and Retrieval (R01 – R09):**
    - **R01 (Concurrent same-token):** Serialized `BEGIN IMMEDIATE` commits one row; second request returns `200 OK (Cached)`.
@@ -99,27 +101,27 @@ The revised specification (§ 8) maps every shared scenario from [`GHA_04_INDEPE
    - **R04 (Formatting invariance):** Canonical JSON serialization prevents false conflicts on dictionary ordering.
    - **R05 (Workflow rerun):** Distinct `github_run_attempt` creates separate observation receipt.
    - **R06 (Expired token recovery):** Authenticated historical query recovers receipt after token expiry.
-   - **R07 (Historical read on advanced PR):** Returns past receipt with explicit `is_current_head = False`.
+   - **R07 (Historical read on advanced PR):** Returns past receipt with explicit `is_current_head = False`, `historical = True`.
    - **R08 (Tenant isolation on query):** Tenant context derived from authentication; foreign receipt query returns 404.
-   - **R09 (Token purge vs immutable receipt):** Token purged only after `expires_at + skew`; receipts permanently retained.
+   - **R09 (Token purge vs immutable receipt):** Ephemeral replay cache cleaned safely without breaking foreign keys.
 3. **Source Currentness and Ordering (S01 – S06):**
    - **S01 (Delayed notification):** Out-of-order notification logged without regressing current head.
    - **S02 (Force-push / rebase):** Authoritative refresh ticket increments `source_generation`, invalidating stale commits.
    - **S03 (Base change / closed PR):** Mismatched candidate SHA returns 409; closed PR returns 409.
    - **S04 (Webhook authenticity):** HMAC-SHA256 signature verified before processing; delivery ID logged.
    - **S05 (GitHub outage / stale window):** Stale refresh window fails closed with `503 SOURCE_FRESHNESS_UNKNOWN`.
-   - **S06 (Concurrent source updates):** Serialized projection updates prevent split-brain or duplicate current rows.
+   - **S06 (Concurrent source updates):** Serialized refresh tickets prevent split-brain or duplicate current rows.
 4. **Artifact and Crash Durability (C01 – C06):**
    - **C01 (Crash recovery lifecycle):** Two-phase promotion ensures atomic promotion; orphan temp files reaped safely.
    - **C02 (Storage failure / disk full):** Unlinks staging file; rolls back 100% of SQLite rows; returns `500 INTERNAL_ERROR`.
-   - **C03 (CAS integrity & collision):** Verifies byte SHA-256 before promotion; rejects symlinks and corrupt overwrite.
+   - **C03 (CAS integrity & collision):** POSIX `link()` atomic no-replace; verified existing bytes; corrupt file raises 500.
    - **C04 (Caps & quota enforcement):** Enforces 12MB/2MB/10MB limits; quota overflow returns `413 QUOTA_EXCEEDED`.
    - **C05 (Clean restart & WAL recovery):** SQLite WAL guarantees zero phantom rows and zero lost committed receipts.
-   - **C06 (External side-effect separation):** Outbox/intents journal excluded from local ingestion slice.
+   - **C06 (External side-effect separation):** Outbox/intents journal excluded from local ingestion slice (deferred).
 5. **Schema, Evidence, and Operability (D01 – D05):**
-   - **D01 (Additive migration):** Migration `2026101401` runs atomically under ledger check without data corruption.
+   - **D01 (Additive migration):** Migration `2026101401` runs atomically under ledger check with parent unique indexes.
    - **D02 (Schema integrity check):** Startup executes `PRAGMA foreign_key_check` and `PRAGMA integrity_check`.
-   - **D03 (Immutable triggers):** Triggers prevent `UPDATE` or `DELETE` on receipts and audit logs.
+   - **D03 (Immutable triggers):** Triggers prevent `UPDATE` or `DELETE` on receipts, observations, and actions.
    - **D04 (Error redaction):** Static category diagnostics prevent sentinel or secret leakage in responses and logs.
    - **D05 (Isolated wheel verification):** Test suite passes against wheel installed outside repository checkout.
 
