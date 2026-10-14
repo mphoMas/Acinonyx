@@ -125,15 +125,25 @@ The revised specification (§ 8) maps every shared scenario from [`GHA_04_INDEPE
 
 ---
 
-## 5. Scope Boundaries & Implementation Gating
+## 5. Explicit Exclusions & Unresolved Decisions
 
-The following operational constraints are strictly preserved:
-- **No Delivery Phase Mutation:** Witness observations do not approve work, transition task phases to `IN_REVIEW`, or create builder delivery submissions.
-- **No External Side Effects in Witness Slice:** Coordinator dispatch, PR commenting, external webhook callbacks, and outbox queues are explicitly excluded from this slice.
-- **Strictly Gated:** No Python code, migration DDL files, or endpoints will be created until Codex provides written design approval.
+### 5.1. Explicit Exclusions from Milestone Scope
+In accordance with bounded delivery gates, the following capabilities are explicitly excluded from this milestone:
+1. **No Delivery Phase Mutation:** Witness observations do not approve work, transition task phases to `IN_REVIEW`/`ACCEPTED`, or create builder delivery submissions. Delivery tasks remain in their pre-existing phases.
+2. **No External Side-Effect Coordination:** Distributed outbox journals (`pm_delivery_intents`), asynchronous PR commenting, external webhook relays, and coordinator dispatch are excluded from this local witness ingestion slice.
+3. **No Live Workflow Execution / Provider Dispatch:** Witness ingestion only admits completed, authenticated runs; it does not trigger GitHub workflow runs or dispatch external agents.
+4. **No Production Credentials or Repository Enrollment:** All testing and verification remain confined to disposable databases, mock filesystems, and signed JWT test fixtures without production credentials.
+
+### 5.2. Unresolved Decisions & Open Questions for Codex
+1. **Historical Artifact Retention Horizon:**
+   The proposed design permanently retains historical observation receipts while reaping unreferenced staging blobs after 24 hours. Does Codex prefer retaining referenced CAS artifacts indefinitely (governed strictly by tenant quota), or should a tenant-configurable retention horizon (e.g., 90 days) be introduced for raw zip archives?
+2. **Synchronous Fallback on Stale Source Refresh:**
+   The proposed freshness protocol fails closed with `503 SOURCE_FRESHNESS_UNKNOWN` if the local projection is older than `MAX_FRESHNESS_TTL` (15 minutes). Does Codex recommend attempting a synchronous GitHub API pull during pre-flight if the window is expired, or strictly enforcing fail-closed behavior to prevent webhook queue blocking?
 
 ---
 
 ## 6. Review Hand-off Request
 
-Antigravity formally requests Codex's independent review of [`ANTIGRAVITY_GHA_04_DESIGN_SPEC.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md). Upon design acceptance, Antigravity will proceed with the implementation plan under the established delivery process gates.
+Antigravity formally marks this delivery **SUBMITTED FOR INDEPENDENT CODEX REVIEW** and requests Codex's architecture agreement on [`ANTIGRAVITY_GHA_04_DESIGN_SPEC.md`](file:///home/acinonyx/Desktop/MAS/projects/scrum-board-automation/planning/ANTIGRAVITY_GHA_04_DESIGN_SPEC.md).
+
+All implementation code, database migrations, and live endpoints remain strictly gated pending Codex's formal sign-off.
