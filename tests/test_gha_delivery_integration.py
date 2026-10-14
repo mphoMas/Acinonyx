@@ -1086,3 +1086,170 @@ def test_rework2_manifest_dict_and_model_size_bounds():
     huge_dict = {"schema_version": "mas-delivery-manifest-v1", "big_junk": "x" * (1024 * 1024 + 10)}
     with pytest.raises(DeliveryValidatorError, match="exceeds 1048576 byte limit"):
         validate_manifest_input(huge_dict)
+
+
+def test_rework3_b1_data_descriptor_corruption_and_integrity():
+    """Rework 3 B1: Signed data descriptors on unseekable streams are strictly validated."""
+    class UnseekableBuffer(io.RawIOBase):
+        def __init__(self):
+            self.buf = bytearray()
+        def write(self, b):
+            self.buf.extend(b)
+            return len(b)
+        def writable(self):
+            return True
+        def seekable(self):
+            return False
+
+    # 1. Valid unseekable ZIP with DEFLATED member produces a signed data descriptor
+    sink = UnseekableBuffer()
+    with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("result.log", b"ok\n")
+    valid_signed_data = bytes(sink.buf)
+    assert b"PK\x07\x08" in valid_signed_data
+
+    # Valid archive passes validation
+    validated = validate_artifact_archive(valid_signed_data)
+    assert "result.log" in validated
+    assert validated["result.log"].data == b"ok\n"
+
+    # 2. Overwrite all three 32-bit fields of descriptor with zero (exact B1 reproduction)
+    idx = valid_signed_data.find(b"PK\x07\x08")
+    zeroed_data = bytearray(valid_signed_data)
+    zeroed_data[idx+4:idx+16] = b"\x00" * 12
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor CRC32 mismatch for result.log"):
+        validate_artifact_archive(bytes(zeroed_data))
+
+    # 3. Corrupt CRC32 field alone
+    corrupt_crc = bytearray(valid_signed_data)
+    corrupt_crc[idx+4:idx+8] = b"\xde\xad\xbe\xef"
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor CRC32 mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_crc))
+
+    # 4. Corrupt compressed size field alone
+    corrupt_csz = bytearray(valid_signed_data)
+    corrupt_csz[idx+8:idx+12] = struct.pack("<I", 9999)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor compressed size mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_csz))
+
+    # 5. Corrupt uncompressed size field alone
+    corrupt_usz = bytearray(valid_signed_data)
+    corrupt_usz[idx+12:idx+16] = struct.pack("<I", 9999)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor uncompressed size mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_usz))
+
+    # 6. Truncated signed descriptor before boundary
+    # Shift CD offset in EOCD to simulate descriptor truncated right after signature
+    trunc_signed = bytearray(valid_signed_data)
+    trunc_signed = trunc_signed[:idx+4] + trunc_signed[idx+16:]
+    eocd_idx = trunc_signed.rfind(b"PK\x05\x06")
+    sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset, c_len = struct.unpack("<4sHHHHIIH", trunc_signed[eocd_idx:eocd_idx+22])
+    trunc_signed[eocd_idx:eocd_idx+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset - 12, c_len)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor extends beyond boundary for result.log"):
+        validate_artifact_archive(bytes(trunc_signed))
+
+
+def test_rework3_b1_unsigned_descriptor_support_and_corruption():
+    """Rework 3 B1: Unsigned data descriptors (12 bytes without PK0708) are strictly validated."""
+    class UnseekableBuffer(io.RawIOBase):
+        def __init__(self):
+            self.buf = bytearray()
+        def write(self, b):
+            self.buf.extend(b)
+            return len(b)
+        def writable(self):
+            return True
+        def seekable(self):
+            return False
+
+    sink = UnseekableBuffer()
+    with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("result.log", b"test content for unsigned descriptor\n")
+    signed_data = bytearray(sink.buf)
+
+    # Convert signed descriptor to unsigned descriptor by stripping b"PK\x07\x08" (4 bytes)
+    idx = signed_data.find(b"PK\x07\x08")
+    unsigned_data = signed_data[:idx] + signed_data[idx+4:]
+    # Adjust CD offset in EOCD (-4)
+    eocd_idx = unsigned_data.rfind(b"PK\x05\x06")
+    sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset, c_len = struct.unpack("<4sHHHHIIH", unsigned_data[eocd_idx:eocd_idx+22])
+    unsigned_data[eocd_idx:eocd_idx+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset - 4, c_len)
+
+    # 1. Valid unsigned descriptor passes
+    validated = validate_artifact_archive(bytes(unsigned_data))
+    assert "result.log" in validated
+    assert validated["result.log"].data == b"test content for unsigned descriptor\n"
+
+    # 2. Corrupt unsigned CRC32
+    corrupt_crc = bytearray(unsigned_data)
+    corrupt_crc[idx:idx+4] = b"\x00" * 4
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor CRC32 mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_crc))
+
+    # 3. Corrupt unsigned compressed size
+    corrupt_csz = bytearray(unsigned_data)
+    corrupt_csz[idx+4:idx+8] = struct.pack("<I", 0)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor compressed size mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_csz))
+
+    # 4. Corrupt unsigned uncompressed size
+    corrupt_usz = bytearray(unsigned_data)
+    corrupt_usz[idx+8:idx+12] = struct.pack("<I", 0)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor uncompressed size mismatch for result.log"):
+        validate_artifact_archive(bytes(corrupt_usz))
+
+    # 5. Truncated unsigned descriptor
+    trunc_unsigned = bytearray(unsigned_data)
+    trunc_unsigned = trunc_unsigned[:idx+6] + trunc_unsigned[idx+12:]
+    eocd_idx2 = trunc_unsigned.rfind(b"PK\x05\x06")
+    trunc_unsigned[eocd_idx2:eocd_idx2+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset - 4 - 6, c_len)
+    with pytest.raises(DeliveryValidatorError, match="Data descriptor extends beyond boundary for result.log"):
+        validate_artifact_archive(bytes(trunc_unsigned))
+
+
+def test_rework3_b1_zip64_variants_explicitly_rejected():
+    """Rework 3 B1: ZIP64 formats, signatures, and extra tags are explicitly rejected."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("test.txt", b"zip64 rejection test")
+    valid_zip = buf.getvalue()
+
+    # 1. Archive containing PK\x06\x06 (ZIP64 EOCD)
+    z_pk66 = valid_zip + b"PK\x06\x06dummy"
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported"):
+        validate_artifact_archive(z_pk66)
+
+    # 2. Archive containing PK\x06\x07 (ZIP64 EOCD Locator)
+    z_pk67 = valid_zip + b"PK\x06\x07dummy"
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported"):
+        validate_artifact_archive(z_pk67)
+
+    # 3. Central directory version >= 45
+    z_ver45 = bytearray(valid_zip)
+    cd_idx = z_ver45.find(b"PK\x01\x02")
+    struct.pack_into("<H", z_ver45, cd_idx + 6, 45)
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: version >= 45"):
+        validate_artifact_archive(bytes(z_ver45))
+
+    # 4. Central directory extra field with tag 0x0001 (ZIP64 extended info)
+    z_extra = bytearray(valid_zip)
+    cd_idx = z_extra.find(b"PK\x01\x02")
+    # CD format: ... 28: H fn_len, 30: H ex_len
+    fn_len, ex_len = struct.unpack_from("<HH", z_extra, cd_idx + 28)
+    zip64_tag = struct.pack("<HH8s", 0x0001, 8, b"\x00" * 8)
+    insert_pos = cd_idx + 46 + fn_len
+    z_extra = z_extra[:insert_pos] + zip64_tag + z_extra[insert_pos:]
+    struct.pack_into("<H", z_extra, cd_idx + 30, ex_len + len(zip64_tag))
+    # Update EOCD cd_size
+    eocd_idx = z_extra.rfind(b"PK\x05\x06")
+    sig, disk, cd_disk, d_entries, t_entries, cd_size, cd_offset, c_len = struct.unpack("<4sHHHHIIH", z_extra[eocd_idx:eocd_idx+22])
+    z_extra[eocd_idx:eocd_idx+22] = struct.pack("<4sHHHHIIH", sig, disk, cd_disk, d_entries, t_entries, cd_size + len(zip64_tag), cd_offset, c_len)
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: extra field"):
+        validate_artifact_archive(bytes(z_extra))
+
+    # 5. Local header 64-bit size placeholder 0xFFFFFFFF
+    z_64bit = bytearray(valid_zip)
+    loc_idx = z_64bit.find(b"PK\x03\x04")
+    struct.pack_into("<I", z_64bit, loc_idx + 18, 0xFFFFFFFF)  # loc_csz
+    with pytest.raises(DeliveryValidatorError, match="ZIP64 format is not supported: 64-bit local size"):
+        validate_artifact_archive(bytes(z_64bit))

@@ -215,6 +215,20 @@ class ValidatedArtifactMember:
     data: bytes
 
 
+def _has_zip64_extra(extra_data: bytes) -> bool:
+    """Return True if ZIP64 extended information extra field (tag 0x0001) is present."""
+    offset = 0
+    length = len(extra_data)
+    while offset + 4 <= length:
+        header_id, data_size = struct.unpack_from("<HH", extra_data, offset)
+        if header_id == 0x0001:
+            return True
+        if data_size < 0 or offset + 4 + data_size > length:
+            break
+        offset += 4 + data_size
+    return False
+
+
 def _validate_safe_member_path(name: str) -> str:
     if not name or "\x00" in name or "\\" in name:
         raise DeliveryValidatorError(f"Unsafe member path: {name!r}")
@@ -253,6 +267,10 @@ def validate_artifact_archive(
             raise DeliveryValidatorError("Archive is empty but observations were declared")
         return {}
 
+    # Reject ZIP64 archive signatures explicitly
+    if b"PK\x06\x06" in raw_bytes or b"PK\x06\x07" in raw_bytes:
+        raise DeliveryValidatorError("ZIP64 format is not supported")
+
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw_bytes), "r")
     except Exception as exc:
@@ -271,6 +289,8 @@ def validate_artifact_archive(
             raise DeliveryValidatorError("Truncated end of central directory record")
 
         _, _, _, _, _, cd_size, cd_offset, comment_len = struct.unpack("<4sHHHHIIH", raw_bytes[eocd_idx:eocd_idx+22])
+        if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF:
+            raise DeliveryValidatorError("ZIP64 format is not supported: 64-bit central directory")
         if eocd_idx + 22 + comment_len != len(raw_bytes):
             raise DeliveryValidatorError("Trailing unmapped bytes after zip archive comment")
 
@@ -282,7 +302,7 @@ def validate_artifact_archive(
         sorted_infos = sorted(infolist, key=lambda x: x.header_offset)
         expected_next_offset = 0
 
-        for info in sorted_infos:
+        for idx, info in enumerate(sorted_infos):
             # Inspect original member name for NUL or truncation
             orig_name = getattr(info, "orig_filename", info.filename)
             if "\x00" in orig_name:
@@ -291,6 +311,14 @@ def validate_artifact_archive(
                 raise DeliveryValidatorError(f"NUL character in archive member name: {info.filename!r}")
             if orig_name != info.filename:
                 raise DeliveryValidatorError(f"Member name truncated or modified by zipinfo: orig={orig_name!r}, norm={info.filename!r}")
+
+            # Reject ZIP64 member version, size, or extra fields
+            if info.extract_version >= 45 or info.create_version >= 45:
+                raise DeliveryValidatorError(f"ZIP64 format is not supported: version >= 45 for {info.filename}")
+            if info.compress_size == 0xFFFFFFFF or info.file_size == 0xFFFFFFFF or info.header_offset == 0xFFFFFFFF:
+                raise DeliveryValidatorError(f"ZIP64 format is not supported: 64-bit size or offset for {info.filename}")
+            if _has_zip64_extra(info.extra):
+                raise DeliveryValidatorError(f"ZIP64 format is not supported: extra field in central directory for {info.filename}")
 
             # Check for encryption flag (bit 0)
             if info.flag_bits & 0x1:
@@ -333,20 +361,36 @@ def validate_artifact_archive(
             if local_sig != b"PK\x03\x04":
                 raise DeliveryValidatorError(f"Corrupt local header signature for member: {info.filename}")
 
+            if loc_csz == 0xFFFFFFFF or loc_usz == 0xFFFFFFFF:
+                raise DeliveryValidatorError(f"ZIP64 format is not supported: 64-bit local size for {info.filename}")
+
             raw_fn = raw_bytes[header_offset+30 : header_offset+30+fn_len]
             if b"\x00" in raw_fn:
                 raise DeliveryValidatorError(f"NUL byte in local header filename: {raw_fn!r}")
 
+            raw_extra = raw_bytes[header_offset+30+fn_len : header_offset+30+fn_len+ex_len]
+            if _has_zip64_extra(raw_extra):
+                raise DeliveryValidatorError(f"ZIP64 format is not supported: extra field in local header for {info.filename}")
+
+            if meth != info.compress_type:
+                raise DeliveryValidatorError(f"Compression method mismatch between local and central headers for {info.filename}")
+
             # If streaming data descriptor bit (bit 3) is NOT set, local sizes must match central directory
             if (flag & 0x8) == 0:
-                if meth != info.compress_type:
-                    raise DeliveryValidatorError(f"Compression method mismatch between local and central headers for {info.filename}")
                 if loc_csz != info.compress_size:
                     raise DeliveryValidatorError(f"Compressed size mismatch between local and central headers for {info.filename}")
                 if loc_usz != info.file_size:
                     raise DeliveryValidatorError(f"Uncompressed size mismatch between local and central headers for {info.filename}")
                 if loc_crc != info.CRC:
                     raise DeliveryValidatorError(f"CRC mismatch between local and central headers for {info.filename}")
+            else:
+                # Streaming data descriptor bit set: local fields may be 0, but if non-zero, must match
+                if loc_crc != 0 and loc_crc != info.CRC:
+                    raise DeliveryValidatorError(f"Local header CRC mismatch with central directory for {info.filename}")
+                if loc_csz != 0 and loc_csz != info.compress_size:
+                    raise DeliveryValidatorError(f"Local header compressed size mismatch with central directory for {info.filename}")
+                if loc_usz != 0 and loc_usz != info.file_size:
+                    raise DeliveryValidatorError(f"Local header uncompressed size mismatch with central directory for {info.filename}")
 
             data_start = header_offset + 30 + fn_len + ex_len
             data_end = data_start + info.compress_size
@@ -442,10 +486,48 @@ def validate_artifact_archive(
             # Advance expected_next_offset past data (and data descriptor if bit 3 set)
             expected_next_offset = data_end
             if (flag & 0x8) != 0:
+                limit_offset = sorted_infos[idx + 1].header_offset if idx + 1 < len(sorted_infos) else cd_offset
                 if raw_bytes[expected_next_offset:expected_next_offset+4] == b"PK\x07\x08":
-                    expected_next_offset += 16
+                    descriptor_size = 16
+                    if expected_next_offset + descriptor_size > len(raw_bytes):
+                        raise DeliveryValidatorError(f"Truncated signed data descriptor for {info.filename}")
+                    if expected_next_offset + descriptor_size > limit_offset:
+                        raise DeliveryValidatorError(f"Data descriptor extends beyond boundary for {info.filename}")
+                    sig, desc_crc, desc_csz, desc_usz = struct.unpack(
+                        "<4sIII", raw_bytes[expected_next_offset:expected_next_offset+16]
+                    )
                 else:
-                    expected_next_offset += 12
+                    descriptor_size = 12
+                    if expected_next_offset + descriptor_size > len(raw_bytes):
+                        raise DeliveryValidatorError(f"Truncated unsigned data descriptor for {info.filename}")
+                    if expected_next_offset + descriptor_size > limit_offset:
+                        raise DeliveryValidatorError(f"Data descriptor extends beyond boundary for {info.filename}")
+                    desc_crc, desc_csz, desc_usz = struct.unpack(
+                        "<III", raw_bytes[expected_next_offset:expected_next_offset+12]
+                    )
+
+                if desc_crc != computed_crc:
+                    raise DeliveryValidatorError(
+                        f"Data descriptor CRC32 mismatch for {info.filename}: descriptor={desc_crc:#x}, computed={computed_crc:#x}"
+                    )
+                if desc_crc != info.CRC:
+                    raise DeliveryValidatorError(
+                        f"Data descriptor CRC32 mismatch with central directory for {info.filename}: descriptor={desc_crc:#x}, central={info.CRC:#x}"
+                    )
+                if desc_csz != info.compress_size:
+                    raise DeliveryValidatorError(
+                        f"Data descriptor compressed size mismatch for {info.filename}: descriptor={desc_csz}, actual={info.compress_size}"
+                    )
+                if desc_usz != len(member_uncompressed):
+                    raise DeliveryValidatorError(
+                        f"Data descriptor uncompressed size mismatch for {info.filename}: descriptor={desc_usz}, actual={len(member_uncompressed)}"
+                    )
+                if desc_usz != info.file_size:
+                    raise DeliveryValidatorError(
+                        f"Data descriptor uncompressed size mismatch with central directory for {info.filename}: descriptor={desc_usz}, central={info.file_size}"
+                    )
+
+                expected_next_offset += descriptor_size
 
         # Verify that central directory starts immediately after the last member
         if sorted_infos and expected_next_offset != cd_offset:
