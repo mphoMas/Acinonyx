@@ -12,9 +12,11 @@ import hashlib
 import io
 import json
 import os
+import selectors
 import stat
 import struct
 import subprocess
+import time
 import zipfile
 import zlib
 from dataclasses import dataclass
@@ -33,6 +35,8 @@ MAX_ARCHIVE_COMPRESSED_SIZE = 12 * 1024 * 1024  # 12 MiB
 MAX_MEMBER_COUNT = 64
 MAX_MEMBER_UNCOMPRESSED_SIZE = 2 * 1024 * 1024  # 2 MiB
 MAX_TOTAL_UNCOMPRESSED_SIZE = 10 * 1024 * 1024  # 10 MiB
+DECOMPRESS_CHUNK_SIZE = 64 * 1024  # 64 KiB
+DECOMPRESS_OVERFLOW_SENTINEL = 1  # 1 byte sentinel for producer-side exact boundary detection
 
 
 class DeliveryValidatorError(ValueError):
@@ -66,9 +70,9 @@ class DeliveryManifest(StrictModel):
     policy_version: int = Field(default=1, ge=1)
     revision: int = Field(ge=1)
     run_id: str = Field(min_length=1, max_length=128)
-    intent_id: str = Field(default="intent_1", min_length=1, max_length=128)
-    attempt_id: str = Field(default="attempt_1", min_length=1, max_length=128)
-    fencing_token: int = Field(default=1, ge=1)
+    intent_id: str = Field(min_length=1, max_length=128)
+    attempt_id: str = Field(min_length=1, max_length=128)
+    fencing_token: int = Field(ge=1)
     candidate_sha: str = Field(pattern=SHA)
     base_sha: str = Field(pattern=SHA)
     suite_digest: str = Field(pattern=SHA256)
@@ -135,8 +139,19 @@ def parse_manifest_json(content: str | bytes) -> DeliveryManifest:
         raise DeliveryValidatorError(f"Manifest schema validation failed: {exc}") from exc
 
 
+def _check_manifest_dict_size(data: dict[str, Any]) -> None:
+    if len(data) > 64:
+        raise DeliveryValidatorError("Manifest dictionary contains excessive keys")
+    try:
+        encoded = json.dumps(data)
+    except Exception as exc:
+        raise DeliveryValidatorError(f"Manifest dictionary not JSON serializable: {exc}") from exc
+    if len(encoded.encode("utf-8")) > MAX_MANIFEST_JSON_SIZE:
+        raise DeliveryValidatorError(f"Manifest data exceeds {MAX_MANIFEST_JSON_SIZE} byte limit")
+
+
 def validate_manifest_input(manifest_input: Any) -> DeliveryManifest:
-    """Strictly revalidate manifest input across all routes.
+    """Strictly revalidate manifest input across all routes with equivalent size bounds.
 
     Prevents preconstructed model bypasses (e.g. via model_construct or model_copy).
     """
@@ -145,11 +160,13 @@ def validate_manifest_input(manifest_input: Any) -> DeliveryManifest:
     elif isinstance(manifest_input, DeliveryManifest):
         # Force strict serialization and revalidation to catch model_construct / model_copy mutations
         raw = manifest_input.model_dump()
+        _check_manifest_dict_size(raw)
         try:
             return DeliveryManifest.model_validate(raw, strict=True)
         except Exception as exc:
             raise DeliveryValidatorError(f"Manifest revalidation failed: {exc}") from exc
     elif isinstance(manifest_input, dict):
+        _check_manifest_dict_size(manifest_input)
         try:
             return DeliveryManifest.model_validate(manifest_input, strict=True)
         except Exception as exc:
@@ -159,9 +176,9 @@ def validate_manifest_input(manifest_input: Any) -> DeliveryManifest:
 
 
 def read_file_bounded(path: Path | str, max_bytes: int) -> bytes:
-    """Read a regular file safely via file descriptor with size bounds."""
+    """Read a regular file safely via nonblocking, no-follow descriptor with size bounds."""
     p = Path(path)
-    flags = os.O_RDONLY
+    flags = os.O_RDONLY | os.O_NONBLOCK
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
 
@@ -337,56 +354,79 @@ def validate_artifact_archive(
                 raise DeliveryValidatorError(f"Payload for {info.filename} extends beyond archive boundary")
 
             # Validate physical member payload and decompress
-            member_uncompressed = bytearray()
+            member_uncompressed: bytes
             if info.compress_type == zipfile.ZIP_STORED:
                 if info.compress_size != info.file_size:
                     raise DeliveryValidatorError(f"STORED member {info.filename} compress_size != file_size")
                 if info.file_size > MAX_MEMBER_UNCOMPRESSED_SIZE:
                     raise DeliveryValidatorError(f"STORED member {info.filename} exceeds {MAX_MEMBER_UNCOMPRESSED_SIZE} byte limit")
+                if total_uncompressed + info.file_size > MAX_TOTAL_UNCOMPRESSED_SIZE:
+                    raise DeliveryValidatorError(f"Archive exceeds {MAX_TOTAL_UNCOMPRESSED_SIZE} total uncompressed limit")
                 raw_payload = raw_bytes[data_start:data_end]
                 if len(raw_payload) != info.file_size:
                     raise DeliveryValidatorError(f"Physical STORED payload length {len(raw_payload)} != {info.file_size}")
                 if (zlib.crc32(raw_payload) & 0xFFFFFFFF) != info.CRC:
                     raise DeliveryValidatorError(f"CRC32 mismatch for STORED member: {info.filename}")
                 member_uncompressed = raw_payload
-                if total_uncompressed + len(member_uncompressed) > MAX_TOTAL_UNCOMPRESSED_SIZE:
-                    raise DeliveryValidatorError(f"Archive exceeds {MAX_TOTAL_UNCOMPRESSED_SIZE} total uncompressed limit")
                 total_uncompressed += len(member_uncompressed)
             else:
                 # ZIP_DEFLATED
+                if info.file_size > MAX_MEMBER_UNCOMPRESSED_SIZE:
+                    raise DeliveryValidatorError(f"Member {info.filename} declared uncompressed size exceeds {MAX_MEMBER_UNCOMPRESSED_SIZE} byte limit")
+                if total_uncompressed + info.file_size > MAX_TOTAL_UNCOMPRESSED_SIZE:
+                    raise DeliveryValidatorError(f"Archive exceeds {MAX_TOTAL_UNCOMPRESSED_SIZE} total uncompressed limit")
+
                 comp_payload = raw_bytes[data_start:data_end]
                 if len(comp_payload) != info.compress_size:
                     raise DeliveryValidatorError(f"Physical compressed payload length != {info.compress_size}")
 
                 dobj = zlib.decompressobj(-15)
-                chunk_size = 64 * 1024
+                buf_member = bytearray()
                 offset = 0
-                while offset < len(comp_payload):
-                    chunk = comp_payload[offset:offset+chunk_size]
-                    offset += len(chunk)
-                    decomp = dobj.decompress(chunk)
-                    member_uncompressed.extend(decomp)
-                    if len(member_uncompressed) > MAX_MEMBER_UNCOMPRESSED_SIZE:
-                        raise DeliveryValidatorError(f"Member {info.filename} uncompressed size exceeds {MAX_MEMBER_UNCOMPRESSED_SIZE} bytes")
-                    if total_uncompressed + len(decomp) > MAX_TOTAL_UNCOMPRESSED_SIZE:
-                        raise DeliveryValidatorError(f"Archive exceeds {MAX_TOTAL_UNCOMPRESSED_SIZE} total uncompressed limit")
-                    total_uncompressed += len(decomp)
 
-                tail = dobj.flush()
-                if tail:
-                    member_uncompressed.extend(tail)
-                    if len(member_uncompressed) > MAX_MEMBER_UNCOMPRESSED_SIZE:
-                        raise DeliveryValidatorError(f"Member {info.filename} exceeds {MAX_MEMBER_UNCOMPRESSED_SIZE} byte limit")
-                    total_uncompressed += len(tail)
+                while True:
+                    if dobj.unconsumed_tail:
+                        in_data = dobj.unconsumed_tail
+                    elif offset < len(comp_payload):
+                        in_data = comp_payload[offset : offset + DECOMPRESS_CHUNK_SIZE]
+                        offset += len(in_data)
+                    else:
+                        break
 
-                if dobj.unused_data:
+                    rem_member = MAX_MEMBER_UNCOMPRESSED_SIZE - len(buf_member)
+                    rem_total = MAX_TOTAL_UNCOMPRESSED_SIZE - total_uncompressed
+                    rem_allowance = min(rem_member, rem_total)
+
+                    if rem_allowance < 0:
+                        raise DeliveryValidatorError(f"Member {info.filename} uncompressed size exceeds limit at producer boundary")
+
+                    # Producer-side bounded decompress: allow at most rem_allowance + sentinel
+                    budget = min(DECOMPRESS_CHUNK_SIZE, rem_allowance + DECOMPRESS_OVERFLOW_SENTINEL)
+                    decomp = dobj.decompress(in_data, budget)
+
+                    if len(decomp) > rem_allowance:
+                        raise DeliveryValidatorError(
+                            f"Member {info.filename} uncompressed size exceeds limit at producer boundary: "
+                            f"produced {len(decomp)} bytes with allowance {rem_allowance}"
+                        )
+
+                    if decomp:
+                        buf_member.extend(decomp)
+                        total_uncompressed += len(decomp)
+
+                    if dobj.eof:
+                        break
+
+                if dobj.unused_data or (dobj.eof and offset < len(comp_payload)):
                     raise DeliveryValidatorError(f"Trailing unused compressed data in DEFLATE stream for {info.filename}")
                 if not dobj.eof:
                     raise DeliveryValidatorError(f"Incomplete DEFLATE stream for {info.filename}")
-                if len(member_uncompressed) != info.file_size:
-                    raise DeliveryValidatorError(f"Decompressed size {len(member_uncompressed)} != declared {info.file_size} for {info.filename}")
-                if (zlib.crc32(member_uncompressed) & 0xFFFFFFFF) != info.CRC:
+                if len(buf_member) != info.file_size:
+                    raise DeliveryValidatorError(f"Decompressed size {len(buf_member)} != declared {info.file_size} for {info.filename}")
+                if (zlib.crc32(buf_member) & 0xFFFFFFFF) != info.CRC:
                     raise DeliveryValidatorError(f"CRC32 mismatch for DEFLATED member: {info.filename}")
+
+                member_uncompressed = bytes(buf_member)
 
             computed_crc = zlib.crc32(member_uncompressed) & 0xFFFFFFFF
             digest = hashlib.sha256(member_uncompressed).hexdigest()
@@ -442,6 +482,95 @@ def is_path_in_scope(file_path: str, scope: list[str]) -> bool:
     return False
 
 
+def run_bounded_command(
+    cmd: list[str],
+    cwd: Path | str,
+    max_stdout: int = 1024 * 1024,
+    max_stderr: int = 256 * 1024,
+    timeout: float = 10.0,
+) -> tuple[int, bytes, bytes]:
+    """Execute a subprocess command with streaming byte caps and deadline enforcement.
+
+    Terminates and cleans up the child process immediately if stdout or stderr
+    exceeds byte limits, avoiding unbounded memory buffering.
+    """
+    start = time.monotonic()
+    deadline = start + timeout
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    sel = selectors.DefaultSelector()
+    if proc.stdout:
+        os.set_blocking(proc.stdout.fileno(), False)
+        sel.register(proc.stdout, selectors.EVENT_READ, data="stdout")
+    if proc.stderr:
+        os.set_blocking(proc.stderr.fileno(), False)
+        sel.register(proc.stderr, selectors.EVENT_READ, data="stderr")
+
+    stdout_buf = bytearray()
+    stderr_buf = bytearray()
+    exceeded_stream: str | None = None
+    timed_out = False
+
+    try:
+        while sel.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            events = sel.select(timeout=max(0.01, min(remaining, 0.5)))
+            for key, _ in events:
+                stream_type = key.data
+                stream = key.fileobj
+                chunk = stream.read(65536)
+                if not chunk:
+                    sel.unregister(stream)
+                    continue
+                if stream_type == "stdout":
+                    stdout_buf.extend(chunk)
+                    if len(stdout_buf) > max_stdout:
+                        exceeded_stream = "stdout"
+                        break
+                else:
+                    stderr_buf.extend(chunk)
+                    if len(stderr_buf) > max_stderr:
+                        exceeded_stream = "stderr"
+                        break
+            if exceeded_stream:
+                break
+    finally:
+        sel.close()
+        if exceeded_stream or timed_out:
+            proc.terminate()
+            try:
+                proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=1.0)
+        else:
+            try:
+                proc.wait(timeout=max(0.1, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=1.0)
+        if proc.stdout:
+            proc.stdout.close()
+        if proc.stderr:
+            proc.stderr.close()
+
+    if timed_out:
+        raise DeliveryValidatorError(f"Command '{cmd[0]}' execution timed out")
+    if exceeded_stream == "stdout":
+        raise DeliveryValidatorError(f"Git command stdout exceeded {max_stdout} byte limit during collection")
+    if exceeded_stream == "stderr":
+        raise DeliveryValidatorError(f"Git command stderr exceeded {max_stderr} byte limit during collection")
+
+    return proc.returncode, bytes(stdout_buf), bytes(stderr_buf)
+
+
 def validate_git_candidate(repo_path: Path | str, base_sha: str, candidate_sha: str, allowed_scope: list[str]) -> list[str]:
     """Validate Git commit objects and diff scope using NUL-safe parsing.
 
@@ -454,26 +583,16 @@ def validate_git_candidate(repo_path: Path | str, base_sha: str, candidate_sha: 
     # Validate that base_sha and candidate_sha resolve to commits
     for name, sha in (("base", base_sha), ("candidate", candidate_sha)):
         cmd = ["git", "-C", str(repo), "rev-parse", "--verify", f"{sha}^{{commit}}"]
-        try:
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10.0)
-        except subprocess.TimeoutExpired:
-            raise DeliveryValidatorError(f"Git rev-parse timed out verifying {name} commit: {sha}")
-        if proc.returncode != 0:
+        rc, _, _ = run_bounded_command(cmd, cwd=repo, max_stdout=64 * 1024, max_stderr=64 * 1024, timeout=10.0)
+        if rc != 0:
             raise DeliveryValidatorError(f"Invalid or missing {name} commit in repository: {sha}")
 
     # Inspect diff-tree with NUL separation
     diff_cmd = ["git", "-C", str(repo), "diff-tree", "-z", "-r", "-M", "--no-commit-id", base_sha, candidate_sha, "--"]
-    try:
-        proc = subprocess.run(diff_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10.0)
-    except subprocess.TimeoutExpired:
-        raise DeliveryValidatorError("Git diff-tree execution timed out")
+    rc, raw_output, err = run_bounded_command(diff_cmd, cwd=repo, max_stdout=1024 * 1024, max_stderr=256 * 1024, timeout=10.0)
+    if rc != 0:
+        raise DeliveryValidatorError(f"Git diff-tree execution failed: {err.decode(errors='replace')}")
 
-    if proc.returncode != 0:
-        raise DeliveryValidatorError(f"Git diff-tree execution failed: {proc.stderr.decode(errors='replace')}")
-
-    raw_output = proc.stdout
-    if len(raw_output) > 1024 * 1024:
-        raise DeliveryValidatorError("Git diff output exceeds 1 MiB limit")
     if not raw_output:
         return []
 
@@ -604,29 +723,50 @@ def validate_db_binding(
     if set(json.loads(issue["path_whitelist"])) != set(brief.scope):
         raise DeliveryValidatorError("Issue path_whitelist does not match brief scope")
 
-    # 4. Completed run binding
+    # 4. Completed run binding and identity verification
     run = conn.execute(
-        """SELECT a.candidate_commit_sha, a.status AS attempt_status, r.status AS run_status,
-                  r.exit_code, d.version AS dispatch_version, i.status AS intent_status,
-                  i.fencing_token, r.fencing_token AS run_fence
+        """SELECT r.run_id, r.intent_id AS run_intent_id, r.attempt_id AS run_attempt_id,
+                  r.status AS run_status, r.exit_code, r.fencing_token AS run_fencing_token,
+                  a.attempt_id AS attempt_id, a.issue_id AS attempt_issue_id, a.project_id AS attempt_project_id,
+                  a.tenant_id AS attempt_tenant_id, a.candidate_commit_sha, a.status AS attempt_status,
+                  i.intent_id AS intent_id, i.issue_id AS intent_issue_id, i.status AS intent_status,
+                  i.fencing_token AS intent_fencing_token,
+                  d.version AS dispatch_version, d.issue_id AS dispatch_issue_id
            FROM pm_coordinator_runs r
-           JOIN pm_coordinator_attempts a ON a.attempt_id=r.attempt_id
-           JOIN pm_delivery_dispatches d ON d.intent_id=r.intent_id
-           JOIN pm_coordinator_intents i ON i.intent_id=r.intent_id
-           WHERE r.run_id=? AND a.issue_id=? AND a.tenant_id=?""",
-        (manifest.run_id, manifest.issue_id, manifest.tenant_id),
+           LEFT JOIN pm_coordinator_attempts a ON a.attempt_id = r.attempt_id
+           LEFT JOIN pm_coordinator_intents i ON i.intent_id = r.intent_id
+           LEFT JOIN pm_delivery_dispatches d ON d.intent_id = r.intent_id
+           WHERE r.run_id = ?""",
+        (manifest.run_id,),
     ).fetchone()
 
     if not run:
-        raise DeliveryValidatorError("Run is not bound to task attempt, dispatch, and intent")
+        raise DeliveryValidatorError(f"Run '{manifest.run_id}' not found in coordinator database")
+    if not run["attempt_id"] or not run["intent_id"] or not run["dispatch_version"]:
+        raise DeliveryValidatorError(f"Run '{manifest.run_id}' is not fully bound to attempt, intent, and dispatch")
+
+    # Authority and identity binding checks
+    if run["attempt_tenant_id"] != manifest.tenant_id:
+        raise DeliveryValidatorError(f"Run tenant mismatch: DB has '{run['attempt_tenant_id']}', manifest has '{manifest.tenant_id}'")
+    if run["attempt_issue_id"] != manifest.issue_id or run["intent_issue_id"] != manifest.issue_id or run["dispatch_issue_id"] != manifest.issue_id:
+        raise DeliveryValidatorError(f"Run '{manifest.run_id}' is bound to issue '{run['attempt_issue_id']}', not '{manifest.issue_id}'")
+    if run["attempt_project_id"] != manifest.project_id:
+        raise DeliveryValidatorError(f"Run '{manifest.run_id}' is bound to project '{run['attempt_project_id']}', not '{manifest.project_id}'")
+
+    # Authoritative intent and attempt identity comparison
+    if manifest.intent_id != run["run_intent_id"] or manifest.intent_id != run["intent_id"]:
+        raise DeliveryValidatorError(f"Intent ID mismatch: manifest declared '{manifest.intent_id}', but run is bound to intent '{run['run_intent_id']}'")
+    if manifest.attempt_id != run["run_attempt_id"] or manifest.attempt_id != run["attempt_id"]:
+        raise DeliveryValidatorError(f"Attempt ID mismatch: manifest declared '{manifest.attempt_id}', but run is bound to attempt '{run['run_attempt_id']}'")
+
     if run["dispatch_version"] != task["version"]:
         raise DeliveryValidatorError("Dispatch version does not match task brief version")
     if run["intent_status"] != "COMPLETED":
         raise DeliveryValidatorError(f"Intent status '{run['intent_status']}' is not COMPLETED")
-    if run["fencing_token"] != run["run_fence"]:
+    if run["intent_fencing_token"] != run["run_fencing_token"]:
         raise DeliveryValidatorError("Intent and run fencing tokens do not match")
-    if manifest.fencing_token != run["fencing_token"]:
-        raise DeliveryValidatorError(f"Manifest fencing token {manifest.fencing_token} != DB fencing token {run['fencing_token']}")
+    if manifest.fencing_token != run["run_fencing_token"]:
+        raise DeliveryValidatorError(f"Manifest fencing token {manifest.fencing_token} != DB fencing token {run['run_fencing_token']}")
     if run["attempt_status"] != "SUCCEEDED":
         raise DeliveryValidatorError(f"Attempt status '{run['attempt_status']}' is not SUCCEEDED")
     if run["run_status"] != "EXITED" or run["exit_code"] != 0:

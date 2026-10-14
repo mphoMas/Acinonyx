@@ -11,6 +11,7 @@ import concurrent.futures
 import hashlib
 import io
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -165,12 +166,15 @@ def build_valid_manifest(
     run_id: str,
     observations: list[ManifestObservation],
     revision: int | None = None,
-    intent_id: str = "intent_1",
-    attempt_id: str = "attempt_1",
+    intent_id: str | None = None,
+    attempt_id: str | None = None,
     fencing_token: int = 2,
     closures: dict[str, list[str]] | None = None,
 ) -> DeliveryManifest:
     task = state(env["service"], env["issue_id"])
+    suffix = run_id.removeprefix("run_") if run_id.startswith("run_") else "1"
+    resolved_intent = intent_id if intent_id is not None else f"intent_{suffix}"
+    resolved_attempt = attempt_id if attempt_id is not None else f"attempt_{suffix}"
     return DeliveryManifest(
         schema_version="mas-delivery-manifest-v1",
         tenant_id=env["tenant_id"],
@@ -180,8 +184,8 @@ def build_valid_manifest(
         policy_version=1,
         revision=revision if revision is not None else task["revision"],
         run_id=run_id,
-        intent_id=intent_id,
-        attempt_id=attempt_id,
+        intent_id=resolved_intent,
+        attempt_id=resolved_attempt,
         fencing_token=fencing_token,
         candidate_sha=env["candidate_sha"],
         base_sha=env["base_sha"],
@@ -735,3 +739,350 @@ def test_fresh_real_tenant_binding_wrong_actor_and_revocation(fixture_env):
             publish_submission(env["service"], manifest, archive, env["repo_dir"])
 
     assert state(env["service"], env["issue_id"])["phase"] == "AWAITING_SUBMISSION"
+
+
+# ---------------------------------------------------------------------------
+# Rework 2 Reproduction & Regression Tests: B1, B2, B3, Git Streaming, Input Bounds
+# ---------------------------------------------------------------------------
+
+def test_rework2_b1_intent_and_attempt_identities_authoritatively_bound(fixture_env):
+    """Rework 2 B1: Authoritative binding of intent_id and attempt_id against joined coordinator records.
+
+    Verifies:
+    1. Valid run with matching IDs transitions to IN_REVIEW.
+    2. Wrong intent_id alone fails with DeliveryValidatorError; zero mutation (revision, submissions, events unchanged).
+    3. Wrong attempt_id alone fails with DeliveryValidatorError; zero mutation.
+    4. Both wrong fails with DeliveryValidatorError; zero mutation.
+    5. Omitted fields fail with DeliveryValidatorError; zero mutation.
+    6. Other-task IDs fail with DeliveryValidatorError; zero mutation.
+    """
+    env = fixture_env
+    db = env["db"]
+    service = env["service"]
+    run_id = complete_fixture_run(env, "rw2_b1")
+    log_pos = b"rw2_b1 test output pos"
+    log_neg = b"rw2_b1 test output neg"
+    archive = make_zip({"pos.log": log_pos, "neg.log": log_neg})
+    obs = [
+        ManifestObservation(
+            check_id="check_pos",
+            outcome="PASSED",
+            evidence_ref="pos.log",
+            digest=hashlib.sha256(log_pos).hexdigest(),
+            size=len(log_pos),
+        ),
+        ManifestObservation(
+            check_id="check_neg",
+            outcome="PASSED",
+            evidence_ref="neg.log",
+            digest=hashlib.sha256(log_neg).hexdigest(),
+            size=len(log_neg),
+        ),
+    ]
+
+    initial_task = state(service, env["issue_id"])
+    initial_rev = initial_task["revision"]
+    with db.atomic_transaction() as c:
+        initial_events_count = c.execute(
+            "SELECT COUNT(*) as cnt FROM pm_delivery_events WHERE issue_id=?", (env["issue_id"],)
+        ).fetchone()["cnt"]
+        initial_submissions_count = c.execute(
+            "SELECT COUNT(*) as cnt FROM pm_delivery_submissions WHERE issue_id=?", (env["issue_id"],)
+        ).fetchone()["cnt"]
+
+    # 1. Wrong intent_id alone
+    manifest_bad_intent = build_valid_manifest(
+        env, run_id, obs, intent_id="nonexistent_intent", attempt_id="attempt_rw2_b1"
+    )
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="Intent ID mismatch"):
+            publish_submission(service, manifest_bad_intent, archive, env["repo_dir"])
+
+    cur_task = state(service, env["issue_id"])
+    assert cur_task["revision"] == initial_rev
+    assert cur_task["phase"] == "AWAITING_SUBMISSION"
+    with db.atomic_transaction() as c:
+        assert c.execute("SELECT COUNT(*) as cnt FROM pm_delivery_submissions WHERE issue_id=?", (env["issue_id"],)).fetchone()["cnt"] == initial_submissions_count
+        assert c.execute("SELECT COUNT(*) as cnt FROM pm_delivery_events WHERE issue_id=?", (env["issue_id"],)).fetchone()["cnt"] == initial_events_count
+
+    # 2. Wrong attempt_id alone
+    manifest_bad_attempt = build_valid_manifest(
+        env, run_id, obs, intent_id="intent_rw2_b1", attempt_id="nonexistent_attempt"
+    )
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="Attempt ID mismatch"):
+            publish_submission(service, manifest_bad_attempt, archive, env["repo_dir"])
+
+    cur_task = state(service, env["issue_id"])
+    assert cur_task["revision"] == initial_rev
+    assert cur_task["phase"] == "AWAITING_SUBMISSION"
+
+    # 3. Both wrong
+    manifest_both_bad = build_valid_manifest(
+        env, run_id, obs, intent_id="nonexistent_intent", attempt_id="nonexistent_attempt"
+    )
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="Intent ID mismatch|Attempt ID mismatch"):
+            publish_submission(service, manifest_both_bad, archive, env["repo_dir"])
+
+    cur_task = state(service, env["issue_id"])
+    assert cur_task["revision"] == initial_rev
+    assert cur_task["phase"] == "AWAITING_SUBMISSION"
+
+    # 4. Omitted intent_id or attempt_id in raw dict
+    raw_dict = manifest_both_bad.model_dump()
+    raw_dict.pop("intent_id", None)
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="intent_id"):
+            publish_submission(service, raw_dict, archive, env["repo_dir"])
+
+    raw_dict2 = manifest_both_bad.model_dump()
+    raw_dict2.pop("attempt_id", None)
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="attempt_id"):
+            publish_submission(service, raw_dict2, archive, env["repo_dir"])
+
+    # 5. Other-task IDs
+    # Setup another issue i2 and admit a run
+    db.create_issue(Issue(id="i2", project_id="p1", key="P1-2", title="Task 2", appetite_tokens=1000, path_whitelist=["mas/"]))
+    with db.atomic_transaction() as c:
+        c.execute("INSERT INTO pm_task_mappings(project_id,planning_reference,task_id,local_issue_id,local_issue_key) VALUES('p1','P1-2','task2','i2','P1-2')")
+    brief_data2 = {
+        "base_sha": env["base_sha"],
+        "suite_digest": env["suite_digest"],
+        "policy_version": 1,
+        "coordinator": "coordinator",
+        "builder": "builder",
+        "verifier": "verifier",
+        "reviewer": "reviewer",
+        "scope": ["mas/"],
+        "critical": True,
+        "mechanism": "Qualified synthetic boundary; current policy checked atomically",
+        "requirements": [{"id": "R1", "rule": "Rule 1 requirement"}],
+        "checks": [
+            {"id": "check_pos", "requirement_id": "R1", "command": "run check", "expected": "passed", "negative": False},
+            {"id": "check_neg", "requirement_id": "R1", "command": "run adverse", "expected": "rejected", "negative": True},
+        ],
+    }
+    with trusted_coordinator_admin_scope(), actor("coordinator"):
+        service.establish("i2", brief_data2)
+        t2 = service.get("i2")
+    with trusted_coordinator_admin_scope(), actor("reviewer"):
+        service.agree("i2", t2["revision"], role="reviewer", rationale="Mechanism approved")
+    with trusted_coordinator_admin_scope(), actor("coordinator"):
+        t2 = service.get("i2")
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        service.agree("i2", t2["revision"], role="builder", rationale="Scope acknowledged")
+
+    with trusted_coordinator_admin_scope():
+        intent_other = CoordinatorAdmissionEngine(db).admit_task("i2", budget_reservation=100, attempt_id="attempt_other", intent_id="intent_other")
+        assert db.coordinator.claim_intent(intent_other.intent_id, "worker", 1, 100, 30)
+        assert db.coordinator.pre_spawn_intent(intent_other.intent_id, "worker", 2, 101, "run_other")
+        assert db.coordinator.complete_intent(intent_other.intent_id, "worker", 2, 102, env["candidate_sha"], 1, 0)
+
+    # Manifest for i1 using run_other / intent_other / attempt_other
+    manifest_other = build_valid_manifest(
+        env, "run_other", obs, intent_id="intent_other", attempt_id="attempt_other"
+    )
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        with pytest.raises(DeliveryValidatorError, match="Run 'run_other' is bound to issue 'i2', not 'i1'"):
+            publish_submission(service, manifest_other, archive, env["repo_dir"])
+
+    cur_task = state(service, env["issue_id"])
+    assert cur_task["revision"] == initial_rev
+    assert cur_task["phase"] == "AWAITING_SUBMISSION"
+
+    # 6. Valid matching IDs succeeds
+    manifest_valid = build_valid_manifest(
+        env, run_id, obs, intent_id="intent_rw2_b1", attempt_id="attempt_rw2_b1"
+    )
+    with trusted_coordinator_admin_scope(), actor("builder"):
+        res = publish_submission(service, manifest_valid, archive, env["repo_dir"])
+    assert res["phase"] == "IN_REVIEW"
+    assert res["revision"] == initial_rev + 1
+
+
+def test_rework2_b2_producer_bounded_deflate_allocation():
+    """Rework 2 B2: DEFLATE output is bounded at producer side; no large allocation before rejection.
+
+    Recreates the exact review finding:
+    6,291,456 repeated bytes compressed with raw DEFLATE, with declared file_size forged to 1.
+    Instruments zlib.decompressobj to prove:
+    1. DeliveryValidatorError is raised with producer-boundary limit message.
+    2. No single decompress call produces > chunk_size (65536) or > remaining allowance + sentinel.
+    3. Sum of all produced chunks <= 2 MiB + 1 byte sentinel (never 6 MiB).
+    """
+    # 6 MiB repeated bytes
+    raw_content = b"Z" * 6291456
+    # Compress with raw DEFLATE (wbits=-15)
+    comp_stream = zlib.compress(raw_content)[2:-4]
+    comp_size = len(comp_stream)
+    crc = zlib.crc32(raw_content) & 0xFFFFFFFF
+
+    # Forge zip with declared uncompressed size = 1
+    fn = b"bomb.log"
+    local_header = struct.pack(
+        "<4sHHHHHIIIHH",
+        b"PK\x03\x04",
+        20, 0, 8, 0, 0,
+        crc, comp_size, 1,  # forged uncompressed size = 1
+        len(fn), 0
+    ) + fn
+
+    cd_header = struct.pack(
+        "<4sHHHHHHIIIHHHHHII",
+        b"PK\x01\x02",
+        20, 20, 0, 8, 0, 0,
+        crc, comp_size, 1,  # forged uncompressed size = 1
+        len(fn), 0, 0, 0, 0, 0, 0
+    ) + fn
+
+    eocd = struct.pack(
+        "<4sHHHHIIH",
+        b"PK\x05\x06",
+        0, 0, 1, 1,
+        len(cd_header), len(local_header) + comp_size, 0
+    )
+
+    forged_zip = local_header + comp_stream + cd_header + eocd
+
+    # Instrument zlib.decompressobj to capture every chunk returned by decompress
+    decompressed_chunk_sizes: list[int] = []
+    real_decompressobj = zlib.decompressobj
+
+    class InstrumentedDecompressor:
+        def __init__(self, *args, **kwargs):
+            self._real = real_decompressobj(*args, **kwargs)
+
+        def decompress(self, data, max_length=0):
+            res = self._real.decompress(data, max_length)
+            decompressed_chunk_sizes.append(len(res))
+            return res
+
+        def flush(self, *args, **kwargs):
+            res = self._real.flush(*args, **kwargs)
+            decompressed_chunk_sizes.append(len(res))
+            return res
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    import mas.pm.delivery_validator as dv
+    original_decompressobj = dv.zlib.decompressobj
+    dv.zlib.decompressobj = InstrumentedDecompressor
+    try:
+        with pytest.raises(DeliveryValidatorError, match="uncompressed size exceeds limit at producer boundary"):
+            validate_artifact_archive(forged_zip)
+    finally:
+        dv.zlib.decompressobj = original_decompressobj
+
+    # Verification of producer-side bounds
+    assert len(decompressed_chunk_sizes) > 0
+    # No single chunk ever exceeded the 64 KiB chunk size or remaining allowance + 1
+    assert max(decompressed_chunk_sizes) <= 65536
+    # Total bytes decompressed across all calls never exceeded 2 MiB + 1 byte
+    total_decompressed = sum(decompressed_chunk_sizes)
+    assert total_decompressed <= (2 * 1024 * 1024 + 1)
+    # Most importantly: 6 MiB was NEVER decompressed or allocated
+    assert total_decompressed < 6291456
+
+
+def test_rework2_b2_exact_member_and_aggregate_boundaries():
+    """Rework 2 B2: Exact member (2 MiB) and aggregate (10 MiB) boundary tests."""
+    # Exact 2 MiB member passes
+    exact_2mb = b"B" * (2 * 1024 * 1024)
+    zip_2mb = make_zip({"member1.bin": exact_2mb})
+    validated = validate_artifact_archive(zip_2mb)
+    assert "member1.bin" in validated
+    assert validated["member1.bin"].size == 2 * 1024 * 1024
+
+    # 2 MiB + 1 byte member fails at producer boundary
+    over_2mb = b"B" * (2 * 1024 * 1024 + 1)
+    zip_over_2mb = make_zip({"member1.bin": over_2mb})
+    with pytest.raises(DeliveryValidatorError, match="exceeds.*byte limit"):
+        validate_artifact_archive(zip_over_2mb)
+
+    # 5 members of 2 MiB each = exactly 10 MiB aggregate passes
+    exact_5x = {f"m{i}.bin": b"M" * (2 * 1024 * 1024) for i in range(5)}
+    zip_10mb = make_zip(exact_5x)
+    validated_10 = validate_artifact_archive(zip_10mb)
+    assert len(validated_10) == 5
+
+    # 5 members of 2 MiB + 1 extra byte member = 10 MiB + 1 byte fails
+    exact_5x_plus = dict(exact_5x)
+    exact_5x_plus["extra.bin"] = b"X"
+    zip_10mb_plus = make_zip(exact_5x_plus)
+    with pytest.raises(DeliveryValidatorError, match="total uncompressed limit"):
+        validate_artifact_archive(zip_10mb_plus)
+
+
+def test_rework2_b3_fifo_nonblocking_admission(tmp_path):
+    """Rework 2 B3: FIFOs and nonregular files fail immediately without blocking."""
+    fifo_path = tmp_path / "test_unwritten.fifo"
+    os.mkfifo(str(fifo_path))
+
+    try:
+        # Run in a bounded subprocess with a strict 2-second timeout to prove it does not block
+        cmd = [
+            sys.executable,
+            "-c",
+            f"""
+import sys
+from pathlib import Path
+from mas.pm.delivery_validator import read_file_bounded, DeliveryValidatorError
+
+fifo = Path('{fifo_path}')
+try:
+    read_file_bounded(fifo, 1024)
+    sys.exit(1)
+except DeliveryValidatorError as exc:
+    if 'Expected regular file' in str(exc):
+        sys.exit(0)
+    sys.exit(2)
+""",
+        ]
+        proc = subprocess.run(cmd, timeout=2.0)
+        assert proc.returncode == 0, f"FIFO read blocked or returned unexpected exit code: {proc.returncode}"
+
+        # Test validate_artifact_archive on FIFO
+        with pytest.raises(DeliveryValidatorError, match="Expected regular file"):
+            validate_artifact_archive(fifo_path)
+    finally:
+        if fifo_path.exists():
+            os.unlink(str(fifo_path))
+
+
+def test_rework2_git_bounded_streaming_collection(tmp_path):
+    """Rework 2: Git subprocess limits are streaming collection caps, not post-hoc size checks."""
+    from mas.pm.delivery_validator import run_bounded_command
+
+    # Test stdout streaming cap
+    flood_stdout_cmd = [
+        sys.executable,
+        "-c",
+        "import sys, time; sys.stdout.write('X' * 2000000); sys.stdout.flush()",
+    ]
+    with pytest.raises(DeliveryValidatorError, match="stdout exceeded 1048576 byte limit during collection"):
+        run_bounded_command(flood_stdout_cmd, cwd=tmp_path, max_stdout=1024 * 1024, timeout=5.0)
+
+    # Test stderr streaming cap
+    flood_stderr_cmd = [
+        sys.executable,
+        "-c",
+        "import sys, time; sys.stderr.write('E' * 500000); sys.stderr.flush()",
+    ]
+    with pytest.raises(DeliveryValidatorError, match="stderr exceeded 262144 byte limit during collection"):
+        run_bounded_command(flood_stderr_cmd, cwd=tmp_path, max_stderr=256 * 1024, timeout=5.0)
+
+
+def test_rework2_manifest_dict_and_model_size_bounds():
+    """Rework 2: Manifest dict, model and JSON entry routes enforce equivalent size caps."""
+    # Dict with excessive keys (> 64)
+    too_many_keys = {f"k_{i}": i for i in range(100)}
+    with pytest.raises(DeliveryValidatorError, match="Manifest dictionary contains excessive keys"):
+        validate_manifest_input(too_many_keys)
+
+    # Dict with serialized payload > 1 MiB
+    huge_dict = {"schema_version": "mas-delivery-manifest-v1", "big_junk": "x" * (1024 * 1024 + 10)}
+    with pytest.raises(DeliveryValidatorError, match="exceeds 1048576 byte limit"):
+        validate_manifest_input(huge_dict)
