@@ -1,297 +1,327 @@
 # GitHub Actions integration contract v1: delivery process gate enforcement
 
 Contract ID: `mas-gha-integration-v1`
-Status: Proposed specification (GHA-01). Not activated in live workflows.
+Status: Proposed specification (revised following GHA-01 architectural review). Not activated in live workflows.
 Implementation Owner: Antigravity Development Team
 Architecture Reviewer: Codex
 Authority: Project Owner mandate (13 October 2026), `company/DELIVERY_OWNERSHIP.md`, and `DELIVERY_GATE_CONTRACT_V1.md`.
 
 ---
 
-## 1. Scope and boundaries
+## 1. Scope, interface classification and boundaries
 
 This contract defines how GitHub Actions (GHA) CI/CD workflows interface with the MAS Coordinator delivery gates (`mas.pm.delivery.DeliveryService`, `DELIVERY_GATE_CONTRACT_V1.md`, and rules G01–G10) to enforce the remedies identified in `projects/scrum-board-automation/research/Acinonyx_Rework_Case_Study.md`.
 
-### 1.1 In-scope
-- Binding GitHub Actions workflow executions to durable coordinator tasks, tenants, brief versions, base commits, candidate commits, and dispatch identities.
-- Trusted workflow and oracle ownership preventing candidate modifications from altering acceptance criteria or verification code.
-- Strict isolation of untrusted candidate code from coordinator databases, signing secrets, provider credentials, and host resources.
-- Authenticated, role-scoped communication between GitHub Actions runners and the MAS Coordinator.
-- Event deduplication, rerun handling, stale candidate invalidation, and runner crash/timeout recovery.
-- Enforcement of delivery gate phases: `READINESS_RETURNED`, `CHANGES_REQUESTED`, `RECURRENCE_PAUSED`, `DISPUTED`, `IN_REVIEW`, and `ACCEPTED`.
-- Content-addressed artifact schema for test observations (`CheckObservation`), execution logs, and failure evidence.
-- GitHub status checks and Check Run reporting strategy with automatic invalidation upon head commit advancement.
-- Objective measurement of repeat work via `DeliveryService.metrics` without relying on GitHub labels, PR comments, or manual recollection.
-- Exhaustive failure handling and denial specifications for all boundary violation scenarios.
+### 1.1 Interface classification
+To avoid conflating existing capabilities with planned work, all interfaces and controls are explicitly classified into three tiers:
 
-### 1.2 Out-of-scope / strict limits
-- This contract does **not** activate live workflows under `.github/workflows/` or grant live repository webhook dispatch.
-- This contract does **not** enroll operational projects in `pm_delivery_projects` (enrollment remains explicit, idle-only, and irreversible).
-- This contract does **not** replace or duplicate coordinator state, create a secondary scrum board, or bypass existing FSM guards.
-- This contract does **not** grant push, merge, or release authority to GitHub Actions or autonomous agents.
-- The coordinator synthetic-only worker registry remains strictly unchanged.
+- **[Existing]**: Implemented and tested in the current repository code (e.g. `mas.pm.delivery.DeliveryService`, `pm_delivery_*` tables, additive migration `2026101301`, `EvidenceTrust`, and `ContainerBoundary`).
+- **[Proposed]**: Designed in this contract and scheduled for phased implementation in the GHA backlog (e.g. Authentication Gateway, Source Registry / Event Ledger, Trusted Check Publisher, and Offline Runner Bridge).
+- **[Unsupported]**: Explicitly out of scope and rejected by the security model (e.g. public OIDC endpoints on the coordinator, candidate self-approval, direct database access from runners, live provider execution in CI, or general unconstrained repository/browser verification).
+
+### 1.2 Strict boundaries
+1. **No workflow activation**: This contract does not deploy active workflows to `.github/workflows/` or register live webhook dispatchers.
+2. **No operational enrollment**: Projects in `pm_delivery_projects` remain unenrolled until deliberately enrolled while idle.
+3. **No state duplication**: The MAS Coordinator database remains the single source of truth. GitHub PR labels, comments, and commit statuses are downstream reflections, never primary state.
+4. **No authority grant**: GitHub Actions execution does not grant push, merge, release, or financial settlement authority.
+5. **Synthetic worker registry unchanged**: The coordinator worker registry remains strictly synthetic-only.
 
 ---
 
 ## 2. Provenance and identity binding
 
-Every GitHub Actions execution evaluating an enrolled delivery task must bind the following immutable tuple before executing any check:
+Every verification job evaluating an enrolled delivery task must bind an immutable identity tuple:
 
 ```json
 {
-  "tenant_id": "string (min_length=1, max_length=128)",
-  "project_id": "string (min_length=1, max_length=128)",
-  "issue_id": "string (min_length=1, max_length=128)",
-  "brief_version": "integer (ge=1)",
-  "base_commit_sha": "string (pattern=^[0-9a-f]{40}$)",
-  "candidate_commit_sha": "string (pattern=^[0-9a-f]{40}$)",
-  "dispatch_id": "string (UUIDv4 or coordinator intent_id)",
-  "workflow_run_id": "string (GitHub github.run_id)",
-  "workflow_run_attempt": "integer (ge=1)",
-  "suite_digest": "string (pattern=^[0-9a-f]{64}$)",
-  "policy_version": "integer (ge=1)"
+  "tenant_id": "string (min_length=1, max_length=128) [Existing]",
+  "project_id": "string (min_length=1, max_length=128) [Existing]",
+  "issue_id": "string (min_length=1, max_length=128) [Existing]",
+  "brief_version": "integer (ge=1) [Existing]",
+  "base_commit_sha": "string (pattern=^[0-9a-f]{40}$) [Existing]",
+  "candidate_commit_sha": "string (pattern=^[0-9a-f]{40}$) [Existing]",
+  "dispatch_id": "string (UUIDv4 intent_id) [Existing]",
+  "run_id": "string (UUIDv4 coordinator run_id) [Existing]",
+  "action_id": "string (UUIDv4 logical action ID) [Proposed]",
+  "workflow_run_id": "integer (ge=1) [Proposed]",
+  "workflow_run_attempt": "integer (ge=1) [Proposed]",
+  "suite_digest": "string (pattern=^[0-9a-f]{64}$) [Existing]",
+  "oracle_digest": "string (pattern=^[0-9a-f]{64}$) [Proposed]",
+  "runner_image_digest": "string (pattern=^sha256:[0-9a-f]{64}$) [Existing]",
+  "policy_version": "integer (ge=1) [Existing]"
 }
 ```
 
-### 2.1 Identity rules
-1. **Tenant and project binding**: `tenant_id` and `project_id` must match the enrolled `pm_delivery_projects` record. Cross-tenant or un-enrolled project dispatches are rejected immediately.
-2. **Task and brief version**: `issue_id` must reference an existing `pm_delivery_tasks` record in `READY`, `DISPATCHED`, or `EXECUTING` phase. `brief_version` must match the task's current `version`.
-3. **Commit integrity**:
+### 2.1 Provenance rules
+1. **Tenant and project validation [Existing]**: `tenant_id` and `project_id` must match `pm_delivery_projects`. Cross-tenant dispatch is blocked by database constraints.
+2. **Task and brief version [Existing]**: `issue_id` must reference an existing `pm_delivery_tasks` record. `brief_version` must equal the task's current `version`.
+3. **Commit integrity [Existing]**:
    - `base_commit_sha` must match `DeliveryBrief.base_sha`.
-   - `candidate_commit_sha` must match the exact Git commit SHA of the candidate tree being evaluated.
-   - If the candidate commit has child commits or the PR branch has advanced, the older execution is marked **STALE** and rejected from submission.
-4. **Suite digest**: The acceptance test suite code and harness must be hashed (`SHA-256`) into `suite_digest` matching `DeliveryBrief.suite_digest`. If the test suite files in the runner differ from `suite_digest`, execution fails immediately.
-5. **Durable dispatch linkage**: The dispatch must correspond to an admitted `pm_delivery_dispatches` entry linking `intent_id` and `issue_id`. GHA runs cannot be self-spawned.
+   - `candidate_commit_sha` must match the exact Git commit SHA of the candidate tree under evaluation.
+4. **Digest domain separation [Existing & Proposed]**:
+   - `suite_digest` [Existing]: Canonical hash of `{source_path, cases}` conforming to the existing bounded `VerificationContract`. It is **not** a git tree hash and does not cover general repository pytest suites.
+   - `oracle_digest` [Proposed]: SHA-256 digest of the trusted test harness files, test fixtures, and scripts checked out from `base_commit_sha`.
+   - `runner_image_digest` [Existing]: Pinned immutable digest (e.g. `python@sha256:...`) matching the coordinator's qualified execution image.
 
 ---
 
-## 3. Trusted workflow ownership and tamper prevention
+## 3. Trusted workflow ownership and oracle integrity
 
-To prevent the failure mode identified in the Case Study (where candidates weaken tests, forge outputs, or edit acceptance criteria to manufacture a passing result):
+To prevent candidates from tampering with acceptance tests, forging test output, or weakening assertions:
 
-### 3.1 Immutable workflow and test oracle
-1. **Protected branch baseline**: The workflow definition (`.github/workflows/*.yml`), verification scripts (`scripts/verify_*.py`, `scripts/run_quality_gate.sh`), test definitions (`tests/**`), and coordinator bridge tools MUST be checked out from the protected target branch (`base_commit_sha` or trusted ref), **never** from the candidate commit.
-2. **Two-checkout pattern**:
-   - Checkout 1 (Trusted Oracle): `actions/checkout@v4` with `ref: ${{ github.base_ref }}` (or the exact `base_commit_sha` stamped in the brief) into directory `./trusted-oracle`.
-   - Checkout 2 (Candidate Code): `actions/checkout@v4` with `ref: ${{ candidate_commit_sha }}` into isolated directory `./candidate-source`.
-3. **Scope enforcement during test execution**:
-   - The runner verifies that `git diff --name-only base_commit_sha..candidate_commit_sha` contains only files within `DeliveryBrief.scope`.
-   - Any modification to `.github/workflows/`, `tests/`, `mas/pm/delivery.py`, `mas/pm/adapters/admission.py`, `mas/pm/adapters/verifier.py`, `pyproject.toml`, or other out-of-scope files results in immediate rejection (`READINESS_RETURNED` with finding: unauthorized scope expansion).
-4. **Test execution from trusted tree**:
-   - Tests execute from `./trusted-oracle`, with candidate code installed in an isolated, unprivileged container mount.
-   - The candidate cannot modify pytest fixtures, assertions, or test runners.
+### 3.1 Two-checkout architecture [Proposed]
+Workflows must execute a strict two-checkout pattern:
+1. **Trusted Oracle Checkout**:
+   - Checks out the protected base ref (`ref: base_commit_sha`) into `./trusted-oracle`.
+   - Contains the authoritative test harness, test files, and verification scripts.
+   - Pinned actions are used with exact commit SHAs (e.g. `actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11`).
+2. **Candidate Source Checkout**:
+   - Checks out the untrusted candidate commit (`ref: candidate_commit_sha`) into an isolated `./candidate-tree`.
+   - Evaluated strictly as data/source input.
 
----
-
-## 4. Credential boundaries and runner isolation
-
-### 4.1 Secret distribution rules
-1. **Zero coordinator database exposure**: Untrusted candidate code, PR runners, and external contributors MUST NOT have access to the MAS SQLite database file, database directory, or host filesystem.
-2. **Zero signing secret exposure**: `EvidenceTrust` private issuer keys and coordinator tokens MUST NOT be placed in GitHub Actions repository secrets or passed into runner environment variables. Signing receipts is strictly a service-side operation performed by authorized coordinator components (`mas.pm.adapters.verifier`, `mas.pm.adapters.admission`).
-3. **Zero Git push credentials**: Runners verifying candidates must execute with `GITHUB_TOKEN` having `contents: read` only. No token with `contents: write` or repo administration is provisioned.
-4. **Zero provider API keys in guest**: Untrusted candidate execution must not receive OpenAI, Anthropic, or other foundation model API keys.
-
-### 4.2 Execution isolation
-1. **Container boundary**: Candidate test commands must execute inside an ephemeral rootless container (`docker run --rm --read-only --network=none --cap-drop=ALL`).
-2. **Socket denial**: The host Docker socket (`/var/run/docker.sock`) must **never** be mounted into the candidate execution environment.
-3. **Network denial**: Network access is disabled (`--network=none`) during candidate test execution, except for pre-cached dependencies verified by immutable hash.
-4. **Temporary storage**: Container writes are restricted to an isolated `tmpfs` mounted at `/tmp` with `noexec,nosuid,nodev`.
+### 3.2 Scope enforcement and test modifications [Proposed]
+1. **NUL-safe diff inspection**:
+   - The runner executes `git diff -z --name-status base_commit_sha..candidate_commit_sha`.
+   - Rejects symlinks, hardlinks, submodule changes, mode modifications (executable bits), and file creations/modifications outside `DeliveryBrief.scope`.
+2. **Candidate changes to tests**:
+   - If a task legitimately includes test changes, the affected test files must be listed in `DeliveryBrief.scope`.
+   - Even when authorized, candidate test files **never** modify the running test oracle. Candidate test additions or modifications are evaluated by the trusted oracle as candidate source code under test, preventing the candidate from altering assertions evaluating itself.
 
 ---
 
-## 5. Actions-to-coordinator authentication and transport
+## 4. Credential boundaries and guest isolation
 
-The coordinator is a Python service (`mas.pm.delivery.DeliveryService`), not a public unauthenticated web server. Integration with GitHub Actions follows a secure, authenticated boundary:
+### 4.1 Strict secret boundaries [Existing & Proposed]
+1. **Zero coordinator database access [Existing]**: The coordinator SQLite database file (`mas_pm.db`) is strictly local to the coordinator service host. Runners never receive direct filesystem or network access to the database.
+2. **Zero signing keys in runners [Existing]**: Private keys for `EvidenceTrust` (`IssuerGrant.secret`) reside exclusively within the coordinator service. No runner or CI secret contains evidence signing credentials.
+3. **Zero Git push credentials [Existing]**: Runners execute with `contents: read` permissions only.
+4. **Zero provider API keys [Existing]**: Untrusted candidate execution receives no LLM provider credentials (OpenAI, Anthropic, Gemini, etc.).
+
+### 4.2 Qualified container boundary reuse [Existing]
+Candidate check execution does not invoke raw, uncontrolled Docker commands. It reuses the qualified `ContainerBoundary` (`mas/pm/adapters/boundary.py`):
+1. **Rootless & unprivileged**: Container executes as a non-root user (`uid > 0`), with `--cap-drop=ALL` and `--security-opt=no-new-privileges:true`.
+2. **Network denial**: Container executes with `--network=none`.
+3. **Filesystem isolation**: Root filesystem is mounted read-only (`--read-only`). Writable areas are limited to an isolated `tmpfs` at `/tmp` (flags: `noexec,nosuid,nodev`, size limit: 64 MiB).
+4. **Socket denial**: The host Docker socket (`/var/run/docker.sock`) is **never** mounted.
+5. **Resource and deadline limits**: Bounded CPU (`--cpus=1.0`), bounded memory (`--memory=512m`), and bounded execution deadline (default 30s per check, hard process timeout at 45s).
+6. **Output bounds**: Standard output and standard error are captured with a hard limit of 1 MiB. Output exceeding 1 MiB is truncated and marked with an `OUTPUT_TRUNCATED` flag.
+7. **Recovery journal**: All container creations register in the container recovery journal before start, ensuring delayed-creation cleanup on client timeout or crash.
+
+---
+
+## 5. Proposed authentication gateway and ingestion architecture
+
+The MAS Coordinator is a private Python service, not a public web server. GitHub Actions runners cannot authenticate directly using `MultiTenantIAM`, because `MultiTenantIAM` verifies internal session tokens, not external GitHub OIDC JWTs.
 
 ```
-+-------------------------------------------------------------------------+
-|                         GitHub Actions Runner                           |
-|                                                                         |
-|  [Trusted Oracle] ---> [Isolated Container] ---> [Artifact Collector]  |
-|                                                          |              |
-|                                             Structured JSON Evidence    |
-|                                                          v              |
-|                                                 [mas-delivery-agent]    |
-+----------------------------------------------------------+--------------+
++--------------------------------------------------------------------------+
+|                         GitHub Actions Runner                            |
+|                                                                          |
+|  [Trusted Oracle] ---> [ContainerBoundary] ---> [Artifact Collector]     |
+|         |                     |                          |               |
+|         v                     v                          v               |
+|  (base_commit_sha)     (isolated test)           (signed zip)            |
+|                                                          |               |
+|                                                          v               |
+|                                             [GHA Ingestion Agent]        |
++----------------------------------------------------------+---------------+
                                                            |
-                                    Signed Session Token   | (HTTPS / gRPC)
-                                    Role: delivery:submit  |
+                                      GitHub OIDC JWT      | (mTLS / Internal VPC)
+                                      + Action Manifest    |
                                                            v
-+-------------------------------------------------------------------------+
-|                         MAS Coordinator Service                         |
-|                                                                         |
-|  [Tenant Scope / IAM] ---> [DeliveryService] ---> [CoordinatorStore]    |
-|                                  |                        |             |
-|                          pm_delivery_*           pm_coordinator_*       |
-+-------------------------------------------------------------------------+
++--------------------------------------------------------------------------+
+|              MAS Coordinator Authentication Gateway [Proposed]           |
+|                                                                          |
+|  1. Validate OIDC Token (JWKS, issuer, aud, repo_id, workflow_ref, exp)  |
+|  2. Server-owned mapping: repo + workflow -> tenant_id + permitted role  |
+|  3. Verify Action ID & Payload Digest in Source Event Ledger            |
+|  4. Issue Ephemeral Coordinator Session (role: delivery:submit)          |
+|                                                          |               |
+|                                                          v               |
+|                  [DeliveryService.submit] [Existing]                     |
+|                                                          |               |
+|                       pm_delivery_* SQLite Tables                        |
++--------------------------------------------------------------------------+
 ```
 
-### 5.1 Authentication mechanisms
-1. **OIDC / Service-Token Exchange**:
-   - The GHA runner uses GitHub Actions OpenID Connect (OIDC) token (`actions/core.getIDToken()`) or a scoped ephemeral service token (`mas-session-token`).
-   - The MAS Coordinator validates the token against the configured tenant IAM authority (`mas.iam.MultiTenantIAM`).
-   - The token binds: `principal_id` = assigned `builder` (or `verifier`), `tenant_id` = enrolled tenant, and requires permissions `storage:write`, `delivery:read`, and `delivery:submit`.
-2. **CLI Bridge on Secure Runner**:
-   - In environments where GitHub Actions runs on self-hosted infrastructure with direct Coordinator access, the runner executes a trusted wrapper (`mas-delivery-cli`) within `tenant_scope(iam, session, tenant_id, root)`.
-   - The wrapper uses the current process session binding. It rejects any attempt to pass custom actor overrides or bypass IAM.
+### 5.1 Gateway validation requirements [Proposed]
+The Authentication Gateway performs strict server-side validation:
+1. **Issuer verification**: `iss == "https://token.actions.githubusercontent.com"`.
+2. **Audience verification**: `aud == "mas-coordinator-delivery"`.
+3. **Repository binding**: `repository_id` and `repository_owner_id` must match the server-side configuration for the tenant's enrolled project.
+4. **Workflow provenance**: `job_workflow_ref` must match the pinned trusted workflow ref on the protected default branch (e.g. `octocat/repo/.github/workflows/delivery-gate.yml@refs/heads/main`).
+5. **Role mapping**: The gateway maps the authenticated workflow to the assigned `builder` principal and issues an ephemeral `delivery:submit` session token. Verifier observation collection uses a dedicated verifier ingestion channel, preventing builder impersonation.
 
 ---
 
-## 6. Event handling, deduplication, and failure recovery
+## 6. Proposed source registry, event idempotency and freshness ledger
 
-### 6.1 Event matrix and behavior
+To prevent duplicate runs, race conditions, and evaluating stale candidates, the coordinator implements a server-owned **Source Registry and Event Idempotency Ledger** [Proposed].
 
-| GitHub Event | Context | Action / Coordinator Call | Concurrency & Deduplication |
-|---|---|---|---|
-| `workflow_dispatch` | Manual / scheduled trigger | Verifies brief `version`, checks out trusted base and candidate; executes suite. | Deduplicated by `(issue_id, version, candidate_sha)`. |
-| `pull_request.synchronize` | New commit pushed to PR | Marks any pending execution for previous `candidate_sha` as `STALE`. Dispatches check for new commit. | Only latest `candidate_commit_sha` can submit. |
-| `workflow_run.rerun` | User requests rerun in GHA UI | Idempotent replay: if an identical submission already exists, returns existing receipt; if prior run was `READINESS_RETURNED`, requires new run ID. | Does not overwrite existing `pm_delivery_submissions`. |
-| Runner crash / timeout | Runner terminates before reporting | Execution remains `UNCERTAIN` or `EXECUTING` until timeout. Coordinator reconciles via `reconcile_execution`. | Funding hold preserved; no automatic retry without coordinator decision. |
+### 6.1 Ledger schema and record fields [Proposed]
+Before executing any side-effects, the gateway persists a record in `pm_source_events`:
+- `action_id`: UUIDv4 uniquely identifying the logical dispatch action.
+- `payload_digest`: SHA-256 of the canonical request payload.
+- `repository_id`: Immutable GitHub repository ID.
+- `pr_number`: Pull request number (or null for direct dispatch).
+- `pr_head_sha`: Current commit SHA of the PR branch head.
+- `base_commit_sha`: Base commit SHA against which the PR is opened.
+- `workflow_run_id`: GitHub `github.run_id`.
+- `workflow_run_attempt`: GitHub `github.run_attempt`.
+- `status`: `RECORDED` | `IN_PROGRESS` | `COMPLETED` | `REJECTED` | `UNCERTAIN`.
+- `outcome_body`: Serialized JSON outcome returned upon completion.
 
-### 6.2 Stale candidate detection
-- If a pull request receives a new push while a workflow is executing:
-  1. The runner checks the current GitHub branch ref `HEAD` SHA before submitting.
-  2. If `HEAD != candidate_commit_sha`, the runner aborts submission with reason `CANDIDATE_SUPERSEDED`.
-  3. `DeliveryService.submit` independently enforces that `run.candidate_commit_sha == submission.candidate_sha`. An attempt to submit an older commit is rejected.
-
-### 6.3 Compare-and-Swap (CAS) revision control
-- Every state-modifying call to `DeliveryService` (`establish`, `agree`, `submit`, `reject`, `resume`, `challenge`, `resolve_challenge`, `accept`) requires the exact current integer `revision` of the task.
-- If concurrent runners or operations incremented `revision`, the operation fails with `DeliveryGateError: Stale delivery revision`.
-- Runners must catch CAS mismatches, reload task state, and abort or re-evaluate.
+### 6.2 Idempotency and replay semantics [Proposed]
+1. **Exact replay**: If a request arrives with an existing `(action_id, payload_digest)` in `COMPLETED` status, the gateway immediately returns the stored `outcome_body` without re-executing.
+2. **Conflicting replay**: If an existing `action_id` arrives with a differing `payload_digest`, the request is rejected with `IdempotencyConflictError`.
+3. **Rerun semantics (`workflow_run_attempt > 1`)**:
+   - A manual or automated rerun in GitHub Actions reuses the original `workflow_run_id` but increments `workflow_run_attempt`.
+   - The gateway records the new attempt as an observation of the existing logical dispatch, not a new coordinator job or new paid execution.
+   - If the task has already entered `IN_REVIEW` or `ACCEPTED`, reruns are rejected as redundant.
+4. **Atomic freshness check (PR-head race prevention)**:
+   - When a candidate submission arrives, the gateway queries the current PR head generation.
+   - If `pr_head_sha != candidate_commit_sha`, the candidate is marked `CANDIDATE_SUPERSEDED`. Submission is rejected, and no review is scheduled.
+5. **Uncertainty handling [Existing]**:
+   - If a runner crashes, disconnects, or times out, the event status is marked `UNCERTAIN`.
+   - Existing funding holds remain held. No automatic retry is spawned without explicit coordinator reconciliation (`reconcile_execution`).
 
 ---
 
-## 7. Delivery gate phases and GHA lifecycle
+## 7. Durable delivery gate lifecycle and resubmission semantics
+
+### 7.1 Existing lifecycle constraints [Existing]
+The coordinator delivery gate (`DeliveryService`) enforces exact phase transitions:
+1. `DeliveryService.submit()` **strictly requires** an existing completed run:
+   - Task phase must be `AWAITING_SUBMISSION` or `READINESS_RETURNED`.
+   - Run record in `pm_coordinator_runs` must have `status == 'EXITED'`, `exit_code == 0`.
+   - Run attempt in `pm_coordinator_attempts` must have `status == 'SUCCEEDED'`.
+   - Run intent in `pm_coordinator_intents` must have `status == 'COMPLETED'`.
+   - `fencing_token` must match between run and intent.
+   - `candidate_commit_sha` in the run must exactly match `submission.candidate_sha`.
+2. `submit()` **cannot be called directly from `READY`**. A task in `READY` must first undergo dispatch admission (`require_dispatch`, `record_dispatch`) and physical execution.
+
+### 7.2 Distinguishing resubmission from new candidate execution
+A critical distinction required by the architectural audit:
+
+1. **Resubmission of observations for the same candidate [Existing]**:
+   - Applies when execution succeeded for candidate `C`, but initial observations were incomplete or malformed (resulting in `READINESS_RETURNED`).
+   - The builder may re-invoke `DeliveryService.submit()` with the corrected observation manifest bound to the **same completed run ID and same candidate SHA**.
+   - If all observations now pass, the task transitions from `READINESS_RETURNED` to `IN_REVIEW`.
+2. **Execution of a new candidate commit [Proposed transition]**:
+   - When a candidate has code defects requiring edits, the builder produces a new candidate commit `C'`.
+   - In the current service implementation, dispatching a new run requires the task to be in `READY`. However, `DeliveryService` currently lacks an authorized transition from `READINESS_RETURNED` back to `READY` without coordinator re-establishment.
+   - **Proposed Lifecycle Transition**: Add `DeliveryService.retry_readiness(issue_id, revision, new_attempt_intent)`:
+     - Allows an assigned builder to transition a task from `READINESS_RETURNED` back to `READY` for a new attempt sequence under the same brief version.
+     - Increments attempt sequence and generation.
+     - Preserves all historical readiness return records in `pm_delivery_submissions`.
+     - **Constraint**: This transition must be implemented in code before live multi-candidate loops can execute. For GHA-02, execution is strictly offline validation against an already completed fixture run.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT: establish(brief)
-    DRAFT --> READY: agree(builder) & agree(reviewer)
-    READY --> DISPATCHED: require_dispatch()
-    DISPATCHED --> EXECUTING: execution_phase()
-    EXECUTING --> AWAITING_SUBMISSION: execution succeeds
-    EXECUTING --> UNCERTAIN: timeout / interruption
+    [*] --> DRAFT: establish(brief) [Existing]
+    DRAFT --> READY: agree(builder & reviewer) [Existing]
+    READY --> DISPATCHED: require_dispatch() [Existing]
+    DISPATCHED --> EXECUTING: execution_phase() [Existing]
+    EXECUTING --> AWAITING_SUBMISSION: run succeeds (exit 0) [Existing]
+    EXECUTING --> UNCERTAIN: timeout / failure [Existing]
     
-    AWAITING_SUBMISSION --> READINESS_RETURNED: submit() [missing/failing checks]
-    READINESS_RETURNED --> AWAITING_SUBMISSION: re-execution on new candidate
+    AWAITING_SUBMISSION --> READINESS_RETURNED: submit() [failing/missing checks] [Existing]
+    AWAITING_SUBMISSION --> IN_REVIEW: submit() [all checks PASSED] [Existing]
     
-    AWAITING_SUBMISSION --> IN_REVIEW: submit() [all checks PASSED]
+    READINESS_RETURNED --> IN_REVIEW: submit() [corrected observations, same run] [Existing]
+    READINESS_RETURNED --> READY: retry_readiness() [new candidate attempt] [Proposed]
     
-    IN_REVIEW --> ACCEPTED: accept() [valid receipts]
-    IN_REVIEW --> CHANGES_REQUESTED: reject() [first failure of requirement]
-    IN_REVIEW --> RECURRENCE_PAUSED: reject() [recurring failure]
-    IN_REVIEW --> CHANGES_REQUESTED: request_scope_change()
+    IN_REVIEW --> ACCEPTED: accept() [valid signed receipts] [Existing]
+    IN_REVIEW --> CHANGES_REQUESTED: reject() [new defect] [Existing]
+    IN_REVIEW --> RECURRENCE_PAUSED: reject() [recurring closed defect] [Existing]
+    IN_REVIEW --> CHANGES_REQUESTED: request_scope_change() [Existing]
     
-    CHANGES_REQUESTED --> READY: resume(correction_plan)
-    CHANGES_REQUESTED --> DISPUTED: challenge(finding_id)
-    RECURRENCE_PAUSED --> DISPUTED: challenge(finding_id)
-    RECURRENCE_PAUSED --> READY: resume(design_plan) [after reassessment]
+    CHANGES_REQUESTED --> READY: resume(correction_plan) [Existing]
+    CHANGES_REQUESTED --> DISPUTED: challenge(finding_id) [Existing]
+    RECURRENCE_PAUSED --> DISPUTED: challenge(finding_id) [Existing]
+    RECURRENCE_PAUSED --> READY: resume(design_plan) [Existing]
     
-    DISPUTED --> CHANGES_REQUESTED: resolve_challenge()
-    DISPUTED --> RECURRENCE_PAUSED: resolve_challenge()
+    DISPUTED --> CHANGES_REQUESTED: resolve_challenge() [Existing]
+    DISPUTED --> RECURRENCE_PAUSED: resolve_challenge() [Existing]
     
     ACCEPTED --> [*]
 ```
 
-### 7.1 Readiness Screening (`READINESS_RETURNED`)
-- When GHA runs the acceptance checks, it generates a `Submission` payload containing a `CheckObservation` for every check defined in `DeliveryBrief.checks`.
-- If **any** observation has `outcome != "PASSED"`, or if any check from the brief is omitted, `DeliveryService.submit` transitions the task to `READINESS_RETURNED`.
-- **GHA response**: Posts a failing GitHub Check Run with detailed diagnostic reasons (e.g. `check_04 failed: exit code 1`). Does **not** alert the independent reviewer. The candidate is returned to the builder for local correction.
-- **Repeat measurement**: The return increments `metrics.readiness_returns`. It is permanently preserved in `pm_delivery_submissions` and `pm_delivery_events`.
-
-### 7.2 Independent Verification and Formal Review (`IN_REVIEW`)
-- When **all** check observations pass and all previous finding closure paths are satisfied, `DeliveryService.submit` transitions the task to `IN_REVIEW`.
-- GHA posts a neutral/pending Check Run: `mas/delivery-gate: IN_REVIEW - Awaiting independent reviewer acceptance`.
-- The independent verifier executes the qualified verifier suite and produces a signed `VERIFICATION_EVIDENCE` receipt.
-- The independent reviewer inspects the candidate diff and evidence and produces a signed `REVIEW_EVIDENCE` receipt.
-- The reviewer calls `DeliveryService.accept(issue_id, revision, verification_id=..., review_id=...)`.
-
-### 7.3 Rejection and Recurrence Pauses (`RECURRENCE_PAUSED`)
-- If the reviewer rejects the candidate:
-  - If the rejection concerns a requirement that was previously claimed closed (via `Submission.closures`), `DeliveryService.reject` automatically sets phase to `RECURRENCE_PAUSED`.
-  - **GHA response**: GHA sets Check Run status to `action_required`. Automatic re-dispatch is **blocked**. The runner will refuse to execute new candidates for this task until the coordinator logs `DESIGN_REASSESSED` via `DeliveryService.resume(issue_id, revision, design_plan=...)`.
-  - This directly solves the Case Study defect where agents endlessly retry patches without fixing the underlying mechanism.
-
-### 7.4 Scope Changes (`SCOPE_CHANGED`)
-- If review uncovers work outside the brief's requirements, it must call `request_scope_change`, **not** `reject`.
-- GHA will refuse to submit against a task in `CHANGES_REQUESTED` until the coordinator either:
-  1. Issues an updated brief via `establish(issue_id, new_brief, reason=...)` (which increments `version` and requires fresh agreements); OR
-  2. Declines the scope change via `decline_scope_change(issue_id, revision, reason=...)`, returning the candidate to review.
-
-### 7.5 Challenges (`DISPUTED`)
-- If the builder challenges a finding (`challenge(issue_id, revision, finding_id, reason)`), the task enters `DISPUTED`.
-- GHA dispatches are paused. The coordinator reviews the dispute and records `resolve_challenge` (upheld or withdrawn).
-- If withdrawn, `resume_review` allows re-reviewing the existing candidate without re-running execution.
+### 7.3 Recurrence pause semantics [Existing]
+- When a reviewer rejects a candidate citing a requirement previously claimed closed in `closures`, `DeliveryService.reject()` sets phase to `RECURRENCE_PAUSED`.
+- The gateway blocks any further automated dispatches for this task.
+- Only the assigned coordinator calling `DeliveryService.resume(issue_id, revision, design_plan=...)` can reassess the design and return the task to `READY`.
 
 ---
 
-## 8. Structured result and artifact schema
+## 8. Bounded artifact schema and ingestion protocol
 
-### 8.1 CheckObservation schema
-Every check in `DeliveryBrief.checks` must have an exact 1:1 corresponding `CheckObservation`:
+### 8.1 Safe artifact limits [Proposed]
+To prevent resource exhaustion, zip-bombs, and path traversal:
+1. **File count**: At most 64 regular files per artifact bundle.
+2. **Total uncompressed size**: At most 10 MiB total uncompressed content.
+3. **Individual file size**: At most 2 MiB per file.
+4. **Path safety**:
+   - All paths must be relative POSIX paths (e.g. `artifacts/logs/check_01.log`).
+   - Leading slashes (`/`), backslashes (`\`), directory traversal (`..`), empty path segments, and NUL bytes (`\x00`) are rejected.
+   - Symlinks, hardlinks, FIFOs, and socket files are rejected.
+5. **Completeness check**: Ingestion validates that actual uploaded bytes equal the declared file size and match the declared SHA-256 digest. Incomplete or corrupted uploads are rejected atomically.
 
-```json
-{
-  "check_id": "string (min_length=1, max_length=80)",
-  "outcome": "PASSED | FAILED | SKIPPED | UNAVAILABLE",
-  "evidence_ref": "string (URL or artifact relative path, e.g. artifacts/check_01.json)",
-  "digest": "string (pattern=^[0-9a-f]{64}$)"
-}
-```
-
-- `digest` is the SHA-256 of the uncompressed evidence artifact referenced in `evidence_ref`.
-- An outcome of `SKIPPED` or `UNAVAILABLE` is treated as non-passing and triggers `READINESS_RETURNED`.
-
-### 8.2 Submission payload schema
-The builder submits the completed execution:
+### 8.2 Observation format [Existing]
+Every acceptance check defined in `DeliveryBrief.checks` must have a corresponding observation:
 
 ```json
 {
-  "run_id": "string (min_length=1, max_length=128)",
-  "candidate_sha": "string (pattern=^[0-9a-f]{40}$)",
-  "observations": [
-    {
-      "check_id": "check_g01_pos",
-      "outcome": "PASSED",
-      "evidence_ref": "artifacts/check_g01_pos.log",
-      "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    }
-  ],
-  "closures": {
-    "finding-2026-001": ["mas/pm/adapters/boundary.py", "mas/pm/adapters/antigravity.py"]
-  },
-  "limitations": "Synthetic execution fixture only; no live cloud resources provisioned."
+  "check_id": "string (min_length=1, max_length=80) [Existing]",
+  "outcome": "PASSED | FAILED | SKIPPED | UNAVAILABLE [Existing]",
+  "evidence_ref": "string (safe relative path) [Existing]",
+  "digest": "string (pattern=^[0-9a-f]{64}$) [Existing]"
 }
 ```
 
-### 8.3 Artifact packaging
-1. All check logs, standard outputs, execution manifests, and test outputs are collected under `artifacts/`.
-2. The runner creates an immutable zip archive: `delivery-evidence-${run_id}.zip`.
-3. The runner computes `evidence_digest = sha256(delivery-evidence-${run_id}.zip)`.
-4. Artifacts are uploaded via `actions/upload-artifact@v4` with retention period of 90 days.
+- `outcome`: Any outcome other than `PASSED` causes `READINESS_RETURNED`.
+- `digest`: SHA-256 of the uncompressed evidence artifact.
 
 ---
 
-## 9. GitHub status checks and check-run strategy
+## 9. Valid GitHub Actions semantics and trusted check publisher
 
-### 9.1 Status contexts
-To avoid confusion with existing CI workflows, the delivery gate publishes dedicated Check Runs via the GitHub Checks API:
+### 9.1 Valid GitHub triggers [Proposed]
+Workflows must use valid GitHub Actions event triggers:
+- `pull_request`: `types: [opened, synchronize, reopened]`. Evaluates PR candidate commits.
+- `merge_group`: Evaluates candidates in the GitHub Merge Queue before merge.
+- `workflow_dispatch`: Controlled manual dispatch for operator-authorized reruns.
+- *(Note: `workflow_run.rerun` is invalid in workflow syntax; reruns re-trigger the original workflow event with incremented `run_attempt`)*.
 
-1. `mas/delivery/readiness`: Published by the GHA candidate check harness.
-   - `queued`: Runner picked up job.
-   - `in_progress`: Running bounded checks.
-   - `success`: All checks passed, submitted to coordinator as `IN_REVIEW`.
-   - `failure`: One or more checks failed; task in `READINESS_RETURNED`.
-2. `mas/delivery/acceptance`: Published only when coordinator records `ACCEPTED`.
-   - `pending`: Task in `IN_REVIEW`.
-   - `success`: Independent verifier and reviewer receipts admitted; phase is `ACCEPTED`.
-   - `failure`: Reviewer rejected or paused recurrence.
+### 9.2 Pinned action revisions [Proposed]
+All external GitHub Actions must be pinned by immutable 40-character commit SHA:
+- `actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11` # v4.1.1
+- `actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3` # v4.3.1
 
-### 9.2 Automatic invalidation on new commit
-- In GitHub repository branch protection rules, `mas/delivery/acceptance` is configured as a **strict required check**.
-- Because Check Runs are bound to exact commit SHAs (`head_sha`), pushing a new commit automatically creates a new, pending check suite for the new commit.
-- Any prior `success` status on the older commit does **not** transfer to the new commit.
-- Force-pushes do not grant bypass; branch protection requires linear history and signed commits.
+### 9.3 Trusted Check Publisher separation [Proposed]
+To preserve the security boundary:
+1. **Candidate runner authority**: The runner executing candidate checks has **no** GitHub Checks write permissions. It outputs only structured evidence artifacts.
+2. **Authorized Check Publisher**: A separate, privileged service or workflow job running in an isolated environment receives the coordinator's verified state and publishes Check Runs using GitHub App credentials.
+3. **Checks API state mapping**:
+   The GitHub Checks API uses `status` and `conclusion`. The publisher maps coordinator states strictly:
+
+| Coordinator Delivery Phase | Checks API `status` | Checks API `conclusion` | Human-Readable Check Description |
+|---|---|---|---|
+| `READY` / `DISPATCHED` | `queued` | *none* | Delivery check queued |
+| `EXECUTING` | `in_progress` | *none* | Executing candidate test checks |
+| `READINESS_RETURNED` | `completed` | `failure` | Readiness returned: nonpassing or missing check observations |
+| `IN_REVIEW` | `in_progress` | *none* | In review: awaiting independent verifier & reviewer receipts |
+| `CHANGES_REQUESTED` | `completed` | `action_required` | Changes requested: review finding recorded against requirement |
+| `RECURRENCE_PAUSED` | `completed` | `action_required` | Recurrence paused: repeated failure of previously closed requirement |
+| `DISPUTED` | `in_progress` | *none* | Disputed: builder challenge pending coordinator resolution |
+| `ACCEPTED` | `completed` | `success` | Accepted: independent verification and review receipts admitted |
+| `UNCERTAIN` / Timeout | `completed` | `timed_out` | Uncertain: execution timed out or interrupted; holds retained |
+| `CANDIDATE_SUPERSEDED` | `completed` | `neutral` | Superseded: newer commit pushed to pull request branch |
+
+### 9.4 Branch protection and merge requirements [Proposed]
+1. The repository branch protection rule requires the Check Run `mas/delivery/acceptance` to have conclusion `success`.
+2. Because Check Runs are bound to exact commit SHAs (`head_sha`), pushing a new commit automatically leaves the new commit without a successful check run.
+3. Merge is strictly blocked until the new candidate commit completes execution, passes readiness, and receives independent acceptance.
 
 ---
 
@@ -299,8 +329,8 @@ To avoid confusion with existing CI workflows, the delivery gate publishes dedic
 
 A primary finding of `Acinonyx_Rework_Case_Study.md` is that repeat work was obscured across chat relays, PR revisions, and manual comments. Under this contract, all repeat work is durably recorded in the coordinator database:
 
-### 10.1 Durably counted metrics
-Calling `DeliveryService.metrics(issue_id)` computes:
+### 10.1 Durably counted metrics [Existing]
+Calling `DeliveryService.metrics(issue_id)` aggregates:
 - `readiness_returns`: Number of times the candidate failed pre-review checks and was returned to the builder.
 - `formal_submissions`: Number of times a candidate reached `IN_REVIEW`.
 - `rejections`: Number of times an independent reviewer rejected an admitted candidate.
@@ -311,38 +341,33 @@ Calling `DeliveryService.metrics(issue_id)` computes:
 - `overturned_findings`: Number of challenges upheld in builder's favor.
 - `acceptances`: Number of successful acceptances (0 or 1).
 
-### 10.2 Anti-masking guarantees
-- `pm_delivery_submissions` and `pm_delivery_events` are protected by SQLite database triggers (`BEFORE UPDATE RAISE(ABORT)` and `BEFORE DELETE RAISE(ABORT)`).
-- Submissions cannot be overwritten, amended, or deleted.
-- Every retry requires a new submission record, ensuring that repeat rounds are permanently queryable by SQL.
+### 10.2 Immutability triggers [Existing]
+- `pm_delivery_submissions` and `pm_delivery_events` are protected by SQLite triggers:
+  - `pm_delivery_submissions_no_update`
+  - `pm_delivery_submissions_no_delete`
+  - `pm_delivery_events_no_update`
+  - `pm_delivery_events_no_delete`
+- Updates and deletions trigger `RAISE(ABORT)`. Historical rounds cannot be modified, reordered, or deleted.
 
 ---
 
-## 11. Complete failure cases and denial specifications
+## 11. Failure modes, security threats and denial specifications
 
-The following failure conditions MUST result in immediate, non-zero exit in the GHA runner and atomic rejection by the Coordinator:
+The following table specifies the exact enforced behavior and denial outcomes across 14 failure scenarios:
 
-| Defect / Threat | Detection Point | Enforced Behavior | Resulting Phase / Exit |
-|---|---|---|---|
-| **Missing brief** | Runner pre-flight / `DeliveryService.submit` | Issue has no record in `pm_delivery_tasks`. | Rejects with `DeliveryGateError: Missing delivery brief`. GHA exits code 1. |
-| **Wrong tenant** | IAM token validation | Token `tenant_id` does not match `pm_delivery_projects.tenant_id`. | `PermissionError: Cross-tenant delivery operation`. GHA exits code 2. |
-| **Stale CAS revision** | `DeliveryService` atomic transaction | Submitted `revision` does not equal current `pm_delivery_tasks.revision`. | `DeliveryGateError: Stale delivery revision`. GHA reloads and aborts. |
-| **Changed candidate SHA** | `DeliveryService.submit` | `candidate_sha` in submission differs from completed run candidate. | `DeliveryGateError: Submission is not bound to successful current execution`. |
-| **Candidate out-of-scope edit** | Runner scope validation | `git diff --name-only base..candidate` includes files not in `brief.scope`. | Runner fails pre-flight; submits `READINESS_RETURNED`. |
-| **Forged test success** | Runner test harness / Verifier | Candidate outputs exit 0 without running tests, or fake pytest summary. | Verifier checks exact test execution counts and assertion trees. Rejection / return. |
-| **Skipped check** | `DeliveryService.submit` | `observations` array lacks one or more check IDs from `brief.checks`. | `READINESS_RETURNED`. Incomplete check observations. |
-| **Missing adverse test case** | `DeliveryService.establish` | A requirement in `brief.requirements` lacks an adverse (`negative: true`) check. | `ValueError: Each requirement needs positive and adverse-case checks`. Brief creation refused. |
-| **Tampered test files** | Runner checkout integrity | Runner detects test files modified by candidate tree. | Runner aborts; candidate scope violation recorded. |
-| **Self-approval** | `DeliveryService.accept` | Reviewer identity matches builder identity. | `PermissionError: Caller is not assigned reviewer` (or distinct principals check fails). |
-| **Unresolved execution** | `DeliveryService.establish` | Previous run in `PENDING`, `CLAIMED`, or `PROCESSING`. | `DeliveryGateError: Unresolved execution prohibits new brief`. |
-| **Recurrence of claimed closed finding** | `DeliveryService.reject` | Reviewer rejects requirement previously listed in `closures`. | Task transitions to `RECURRENCE_PAUSED`. Dispatch blocked until `resume`. |
-
----
-
-## 12. Verification and testing plan
-
-Before this contract is integrated into production workflows:
-1. **Targeted unit tests**: Exercise the GHA runner bridge script against private SQLite fixtures covering all 12 failure cases.
-2. **Offline container verification**: Run candidate checks in an isolated container without internet or Docker socket access.
-3. **Simulated recurrence test**: Verify that resubmitting a candidate that fails a previously closed requirement causes `RECURRENCE_PAUSED` and prevents automatic GHA reruns.
-4. **Independent review**: Codex architectural review must inspect and sign off on this contract specification.
+| Scenario / Threat | Detection Point | Accountable Component | Enforced Behavior | Resulting Phase & Exit Outcome |
+|---|---|---|---|---|
+| **1. Missing brief** | Gateway validation | `mas.pm.delivery` [Existing] | Issue lacks record in `pm_delivery_tasks`. | Rejects with `DeliveryGateError("Missing delivery brief")`. HTTP 400. |
+| **2. Wrong tenant** | Gateway token validation | Authentication Gateway [Proposed] | Token `tenant_id` does not match `pm_delivery_projects.tenant_id`. | `PermissionError("Cross-tenant delivery operation")`. HTTP 403. |
+| **3. Stale CAS revision** | `DeliveryService` atomic transaction | `mas.pm.delivery` [Existing] | Submitted `revision` does not equal `pm_delivery_tasks.revision`. | `DeliveryGateError("Stale delivery revision")`. Runner reloads task state. |
+| **4. Changed candidate SHA** | `submit()` execution check | `mas.pm.delivery` [Existing] | `candidate_sha` differs from completed run candidate. | `DeliveryGateError("Submission is not bound to successful current execution")`. |
+| **5. Submitting from READY** | `submit()` phase check | `mas.pm.delivery` [Existing] | Caller attempts `submit()` while phase is `READY`. | `DeliveryGateError("Successful execution required before submission")`. |
+| **6. Stale PR head (Head race)** | Freshness check before submit | Source Registry [Proposed] | Branch `HEAD` has advanced beyond candidate commit SHA. | Gateway rejects submission as `CANDIDATE_SUPERSEDED`. Check Run conclusion `neutral`. |
+| **7. Replay with changed payload** | Idempotency lookup | Source Registry [Proposed] | Same `action_id` submitted with different payload digest. | Rejection with `IdempotencyConflictError`. HTTP 409. |
+| **8. Candidate scope expansion** | NUL-safe diff check | Runner harness [Proposed] | Candidate modifies files outside `DeliveryBrief.scope`. | Runner aborts check; records scope violation in observation. `READINESS_RETURNED`. |
+| **9. Forged test outputs** | Bounded verifier | `EvidenceTrust` / Verifier [Existing] | Candidate outputs fake pytest summary without execution. | Verifier evaluates solve(payload) against host expectations; fake summary rejected. |
+| **10. Missing adverse test check** | `DeliveryService.establish()` | `mas.pm.delivery` [Existing] | Brief requirement lacks negative/adverse check. | `ValueError("Each requirement needs positive and adverse-case checks")`. Brief creation refused. |
+| **11. Incomplete artifact upload** | Artifact collector | Ingestion Gateway [Proposed] | Uploaded zip size or digest does not match manifest. | Gateway aborts upload; marks observation `UNAVAILABLE`. `READINESS_RETURNED`. |
+| **12. Path traversal in artifact** | Artifact extraction / unpack | Artifact Collector [Proposed] | Zip contains `../`, leading `/`, or symlink. | Extraction refused with `PathTraversalError`. Artifact rejected. |
+| **13. Recurrence of closed defect** | `DeliveryService.reject()` | `mas.pm.delivery` [Existing] | Reviewer rejects requirement previously listed in `closures`. | Phase becomes `RECURRENCE_PAUSED`. Automated dispatches locked until `resume()`. |
+| **14. Premature PM DONE write** | `require_accepted()` hook | `mas.pm.delivery` / `mas.pm.db` [Existing] | Supported PM method attempts close before acceptance. | `DeliveryGateError("Independent delivery acceptance required before DONE")`. |
