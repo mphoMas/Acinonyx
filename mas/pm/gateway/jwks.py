@@ -52,7 +52,7 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 def default_jwks_fetcher(url: str) -> bytes:
     """Fixed-endpoint, TLS-verified HTTP GET with 64 KiB stream limit and zero redirects."""
     if url != GITHUB_JWKS_URL:
-        raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic=f"Untrusted JWKS endpoint: {url!r}")
+        raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic='category=JWKS_UNAVAILABLE')
 
     req = urllib.request.Request(
         url,
@@ -66,15 +66,15 @@ def default_jwks_fetcher(url: str) -> bytes:
                 raise GatewayError(
                     status_code=503,
                     code="JWKS_UNAVAILABLE",
-                    diagnostic=f"JWKS response exceeded {MAX_JWKS_BYTES} bytes",
+                    diagnostic='category=JWKS_UNAVAILABLE',
                 )
             return data
     except Exception as exc:
-        logger.warning("JWKS HTTP fetch failed: %s", exc)
+        logger.warning('JWKS operation failed')
         raise GatewayError(
             status_code=503,
             code="JWKS_UNAVAILABLE",
-            diagnostic=f"JWKS endpoint fetch failed: {exc}",
+            diagnostic='category=JWKS_UNAVAILABLE',
         ) from exc
 
 
@@ -118,7 +118,7 @@ class JWKSCache:
     def get_key(self, kid: str) -> rsa.RSAPublicKey:
         """Retrieve an RSA public key by kid, triggering single-flight refresh when appropriate."""
         if not kid or not isinstance(kid, str) or len(kid) > 128:
-            raise GatewayError(status_code=401, code="INVALID_JWT_HEADER", diagnostic="Missing or invalid kid in token header")
+            raise GatewayError(status_code=401, code="INVALID_JWT_HEADER", diagnostic='category=INVALID_JWT_HEADER')
 
         now = self._clock()
 
@@ -136,7 +136,7 @@ class JWKSCache:
 
             # Outage throttling
             if (now - self._last_failed_at) < self.failed_fetch_cooldown:
-                raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic="JWKS endpoint in cooldown")
+                raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic='category=JWKS_UNAVAILABLE')
 
             # Unknown key throttling when cache is fresh
             cache_is_fresh = self._last_fetched_at > 0 and (now - self._last_fetched_at) < self.cache_ttl
@@ -145,7 +145,7 @@ class JWKSCache:
                     raise GatewayError(
                         status_code=401,
                         code="UNKNOWN_KEY_THROTTLED",
-                        diagnostic=f"Unknown key ID {kid!r}; refresh throttled",
+                        diagnostic='category=UNKNOWN_KEY_THROTTLED',
                     )
 
             # Perform bounded fetch
@@ -162,11 +162,11 @@ class JWKSCache:
                 raise GatewayError(
                     status_code=503,
                     code="JWKS_UNAVAILABLE",
-                    diagnostic=f"JWKS resolution failed: {exc}",
+                    diagnostic='category=JWKS_UNAVAILABLE',
                 ) from exc
 
             if kid not in self._keys:
-                raise GatewayError(status_code=401, code="UNKNOWN_KEY_ID", diagnostic=f"Key ID {kid!r} not found in JWKS")
+                raise GatewayError(status_code=401, code="UNKNOWN_KEY_ID", diagnostic='category=UNKNOWN_KEY_ID')
 
             return self._keys[kid]
 
@@ -176,7 +176,7 @@ class JWKSCache:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic=f"JWKS response exceeded {MAX_JWKS_BYTES} bytes",
+                diagnostic='category=JWKS_UNAVAILABLE',
             )
 
         try:
@@ -186,14 +186,14 @@ class JWKSCache:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic=f"Malformed JWKS JSON: {exc}",
+                diagnostic='category=JWKS_UNAVAILABLE',
             ) from exc
 
         if not isinstance(payload, dict) or "keys" not in payload:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic="JWKS payload must be an object with 'keys'",
+                diagnostic='category=JWKS_UNAVAILABLE',
             )
 
         keys_list = payload["keys"]
@@ -201,14 +201,14 @@ class JWKSCache:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic="JWKS keys must be a list",
+                diagnostic='category=JWKS_UNAVAILABLE',
             )
 
         if len(keys_list) > MAX_JWKS_KEYS:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic=f"JWKS key count exceeds limit of {MAX_JWKS_KEYS}",
+                diagnostic='category=JWKS_UNAVAILABLE',
             )
 
         parsed_keys: dict[str, rsa.RSAPublicKey] = {}
@@ -224,7 +224,7 @@ class JWKSCache:
                 raise GatewayError(
                     status_code=503,
                     code="JWKS_UNAVAILABLE",
-                    diagnostic=f"Duplicate kid {kid!r} in JWKS",
+                    diagnostic='category=JWKS_UNAVAILABLE',
                 )
 
             # Validate key metadata
@@ -247,24 +247,24 @@ class JWKSCache:
 
                 modulus_bits = n.bit_length()
                 if not (2048 <= modulus_bits <= 4096):
-                    logger.warning("Ignoring RSA key with unsupported modulus size %d bits", modulus_bits)
+                    logger.warning('JWKS operation failed')
                     continue
 
                 if not (3 <= e <= 65537):
-                    logger.warning("Ignoring RSA key with unsupported exponent %d", e)
+                    logger.warning('JWKS operation failed')
                     continue
 
                 public_key = rsa.RSAPublicNumbers(e, n).public_key()
                 parsed_keys[kid] = public_key
-            except Exception as exc:
-                logger.warning("Failed to construct RSA public key for kid %s: %s", kid, exc)
+            except Exception:
+                logger.warning('JWKS operation failed')
                 continue
 
         if not parsed_keys:
             raise GatewayError(
                 status_code=503,
                 code="JWKS_UNAVAILABLE",
-                diagnostic="JWKS response contained no valid RSA public keys",
+                diagnostic='category=JWKS_UNAVAILABLE',
             )
 
         return parsed_keys

@@ -1901,8 +1901,7 @@ def test_rework2_b2_sensitive_input_sentinel_in_validation_errors_excluded_from_
 
     # 1. Private diagnostic must NOT contain raw input sentinel
     assert sentinel not in (exc.value.diagnostic or "")
-    assert "field=github_run_attempt" in (exc.value.diagnostic or "")
-    assert "error=" in (exc.value.diagnostic or "")
+    assert exc.value.diagnostic == "category=INVALID_MANIFEST_STRUCTURE"
 
     # 2. Public error envelope must NOT contain raw sentinel
     env = exc.value.to_envelope()
@@ -1980,7 +1979,7 @@ def test_rework2_b2_audit_callback_exception_logging_does_not_echo_secret(gatewa
     assert resp.status == "VALIDATED_UNTRUSTED_OBSERVATION"
     # Ensure secret is NOT in caplog
     assert secret not in caplog.text
-    assert "Audit logging callback failed: RuntimeError" in caplog.text
+    assert "Gateway audit callback failed" in caplog.text
 
 
 def test_rework2_b2_dependency_exception_diagnostic_is_input_free(gateway_setup):
@@ -2011,10 +2010,53 @@ def test_rework2_b2_dependency_exception_diagnostic_is_input_free(gateway_setup)
 
     assert exc.value.status_code == 500
     assert exc.value.code == "INTERNAL_ERROR"
-    assert exc.value.diagnostic == "ConnectionError: error_occurred"
+    assert exc.value.diagnostic == "category=INTERNAL_ERROR"
     assert secret not in (exc.value.diagnostic or "")
     assert secret not in str(exc.value.to_envelope())
     assert secret not in str(audit_events)
 
 
 
+
+
+@pytest.mark.parametrize("field", ["tenant_id", "project_id"])
+def test_codex_coordinate_diagnostics_exclude_request_values(gateway_setup, field):
+    secret = "RAW_PAYLOAD_SECRET_SENTINEL"
+    manifest = make_valid_manifest().model_dump()
+    manifest[field] = secret
+    request = {
+        "manifest": manifest, "fencing_token": 1,
+        "github_run_id": "1029384756", "github_run_attempt": 1,
+    }
+    token = make_jwt(key_fixture=gateway_setup["key_pair"], override_clock=gateway_setup["get_time"]())
+    with pytest.raises(GatewayError) as error:
+        gateway_setup["validator"].validate_submission(f"Bearer {token}", request)
+    assert error.value.code == "COORDINATE_MISMATCH"
+    assert secret not in json.dumps(gateway_setup["audit_events"])
+    assert secret not in json.dumps(error.value.to_envelope())
+    assert error.value.diagnostic == "category=COORDINATE_MISMATCH"
+
+
+@pytest.mark.parametrize("claim", ["iss", "aud", "job_workflow_ref", "event_name", "ref", "runner_environment"])
+def test_codex_claim_diagnostics_exclude_rejected_values(gateway_setup, claim):
+    secret = "CLAIM_SECRET_SENTINEL"
+    token = make_jwt({claim: secret}, key_fixture=gateway_setup["key_pair"], override_clock=gateway_setup["get_time"]())
+    request = {
+        "manifest": make_valid_manifest().model_dump(), "fencing_token": 1,
+        "github_run_id": "1029384756", "github_run_attempt": 1,
+    }
+    with pytest.raises(GatewayError) as error:
+        gateway_setup["validator"].validate_submission(f"Bearer {token}", request)
+    assert secret not in json.dumps(gateway_setup["audit_events"])
+    assert secret not in json.dumps(error.value.to_envelope())
+    assert error.value.request_id
+
+
+def test_codex_error_diagnostics_are_allowlisted_even_for_new_callers():
+    from mas.pm.gateway.models import PUBLIC_ERROR_MESSAGES
+    for code in PUBLIC_ERROR_MESSAGES:
+        error = GatewayError(code=code, diagnostic="SECRET /private/path", message="RAW_BODY")
+        assert error.diagnostic == f"category={code}"
+        assert "SECRET" not in str(error)
+        assert "RAW_BODY" not in json.dumps(error.to_envelope())
+    assert GatewayError(code="UNKNOWN", diagnostic="SECRET").diagnostic == "category=GATEWAY_ERROR"

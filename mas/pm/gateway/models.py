@@ -69,12 +69,18 @@ PUBLIC_ERROR_MESSAGES: dict[str, str] = {
 }
 
 
+def safe_diagnostic(code: str) -> str:
+    """Return a schema-owned category; never retain caller or exception values."""
+    category = code if code in PUBLIC_ERROR_MESSAGES else "GATEWAY_ERROR"
+    return f"category={category}"
+
+
 class GatewayError(Exception):
     """Base error for authentication gateway and admission failures.
 
     Public messages are strictly bounded to static messages from PUBLIC_ERROR_MESSAGES.
-    Internal exception details, file paths, or sensitive input sentinels are retained
-    strictly in the private 'diagnostic' attribute and NEVER emitted in public envelopes.
+    Diagnostics retain only schema-owned categories, never supplied input or
+    exception values, even when a caller provides a diagnostic argument.
     """
 
     def __init__(
@@ -89,7 +95,7 @@ class GatewayError(Exception):
         self.code = code
         self.status_code = status_code
         self.request_id = request_id
-        self.diagnostic = diagnostic
+        self.diagnostic = safe_diagnostic(code)
         # Strictly bounded public message from centralized mapping
         self.message = PUBLIC_ERROR_MESSAGES.get(code, "A gateway error occurred during validation.")
         super().__init__(self.message)

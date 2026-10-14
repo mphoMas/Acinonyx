@@ -35,8 +35,6 @@ from mas.pm.gateway.models import (
     GitHubConnectorConfig,
     WitnessObservationSubmissionRequest,
     WitnessObservationValidationResponse,
-    sanitize_exception,
-    sanitize_validation_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,7 +137,7 @@ class GatewayObservationValidator:
             )
             raise exc
         except Exception as exc:
-            safe_diag = sanitize_exception(exc)
+            safe_diag = "category=INTERNAL_ERROR"
             self._log_audit(
                 {
                     "request_id": request_id,
@@ -154,7 +152,7 @@ class GatewayObservationValidator:
                 status_code=500,
                 code="INTERNAL_ERROR",
                 request_id=request_id,
-                diagnostic=safe_diag,
+                diagnostic='category=INTERNAL_ERROR',
             ) from exc
 
     def _execute_validation(
@@ -180,7 +178,6 @@ class GatewayObservationValidator:
         try:
             request = WitnessObservationSubmissionRequest.model_validate(request_data)
         except ValidationError as exc:
-            safe_diag = sanitize_validation_error(exc)
             is_oversized = False
             for err in exc.errors():
                 msg = str(err.get("msg", ""))
@@ -193,7 +190,7 @@ class GatewayObservationValidator:
                     status_code=413,
                     code="PAYLOAD_TOO_LARGE",
                     request_id=request_id,
-                    diagnostic=safe_diag,
+                    diagnostic='category=PAYLOAD_TOO_LARGE',
                 ) from exc
 
             error_types = {err.get("type") for err in exc.errors()}
@@ -202,13 +199,13 @@ class GatewayObservationValidator:
                     status_code=422,
                     code="EXTRA_FIELDS_FORBIDDEN",
                     request_id=request_id,
-                    diagnostic=safe_diag,
+                    diagnostic='category=EXTRA_FIELDS_FORBIDDEN',
                 ) from exc
             raise GatewayError(
                 status_code=422,
                 code="INVALID_MANIFEST_STRUCTURE",
                 request_id=request_id,
-                diagnostic=safe_diag,
+                diagnostic='category=INVALID_MANIFEST_STRUCTURE',
             ) from exc
 
         # 3. Cryptographically Verify OIDC Token
@@ -222,7 +219,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="REPOSITORY_NOT_ENROLLED",
                 request_id=request_id,
-                diagnostic=f"Repository ID {repo_coord[0]!r} (owner {repo_coord[1]!r}) is not enrolled",
+                diagnostic='category=REPOSITORY_NOT_ENROLLED',
             )
 
         if initial_snapshot.status != "ACTIVE":
@@ -230,7 +227,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONNECTOR_REVOKED",
                 request_id=request_id,
-                diagnostic=f"GitHub connector for repository {repo_coord[0]} is revoked",
+                diagnostic='category=CONNECTOR_REVOKED',
             )
 
         # Retain initial identity snapshot for completion verification
@@ -248,7 +245,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="TENANT_REVOKED",
                 request_id=request_id,
-                diagnostic=f"Tenant {snap_tenant_id!r} is inactive or revoked",
+                diagnostic='category=TENANT_REVOKED',
             )
 
         # 6. Verify Reusable Workflow Pinning
@@ -257,7 +254,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="WORKFLOW_UNAPPROVED",
                 request_id=request_id,
-                diagnostic=f"Workflow commit SHA {token_claims['job_workflow_sha']} does not match approved SHA {snap_approved_wf_sha}",
+                diagnostic='category=WORKFLOW_UNAPPROVED',
             )
 
         job_wf_ref = token_claims["job_workflow_ref"]
@@ -266,7 +263,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="WORKFLOW_NOT_PINNED",
                 request_id=request_id,
-                diagnostic=f"Mutable workflow ref {job_wf_ref!r} is not pinned by commit SHA",
+                diagnostic='category=WORKFLOW_NOT_PINNED',
             )
 
         expected_wf_ref = f"{snap_approved_wf_repo}/{snap_approved_wf_path}@{snap_approved_wf_sha}"
@@ -275,7 +272,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="WORKFLOW_UNAPPROVED",
                 request_id=request_id,
-                diagnostic=f"Workflow ref {job_wf_ref!r} does not match expected {expected_wf_ref!r}",
+                diagnostic='category=WORKFLOW_UNAPPROVED',
             )
 
         # 7. Check Execution Conditions
@@ -285,7 +282,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONDITION_DISALLOWED",
                 request_id=request_id,
-                diagnostic=f"GitHub event {event_name!r} is not permitted for delivery gates",
+                diagnostic='category=CONDITION_DISALLOWED',
             )
 
         ref_pattern = initial_snapshot.get_ref_pattern(event_name)
@@ -294,7 +291,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONDITION_DISALLOWED",
                 request_id=request_id,
-                diagnostic=f"Caller ref {token_claims['ref']!r} does not match allowed pattern for event {event_name!r}",
+                diagnostic='category=CONDITION_DISALLOWED',
             )
 
         if token_claims["runner_environment"] != snap_required_runner:
@@ -302,7 +299,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONDITION_DISALLOWED",
                 request_id=request_id,
-                diagnostic=f"Runner environment {token_claims['runner_environment']!r} does not match required {snap_required_runner!r}",
+                diagnostic='category=CONDITION_DISALLOWED',
             )
 
         # 8. Verify Coordinate Binding
@@ -311,7 +308,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="COORDINATE_MISMATCH",
                 request_id=request_id,
-                diagnostic=f"Request github_run_id ({request.github_run_id}) does not match token run_id ({token_claims['run_id']})",
+                diagnostic='category=COORDINATE_MISMATCH',
             )
 
         try:
@@ -321,7 +318,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="COORDINATE_MISMATCH",
                 request_id=request_id,
-                diagnostic="Token run_attempt is not an integer",
+                diagnostic='category=COORDINATE_MISMATCH',
             ) from exc
 
         if request.github_run_attempt != token_attempt_int:
@@ -329,7 +326,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="COORDINATE_MISMATCH",
                 request_id=request_id,
-                diagnostic=f"Request github_run_attempt ({request.github_run_attempt}) does not match token run_attempt ({token_attempt_int})",
+                diagnostic='category=COORDINATE_MISMATCH',
             )
 
         if request.manifest.tenant_id != snap_tenant_id:
@@ -337,7 +334,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="COORDINATE_MISMATCH",
                 request_id=request_id,
-                diagnostic=f"Manifest tenant_id ({request.manifest.tenant_id}) does not match configured tenant ({snap_tenant_id})",
+                diagnostic='category=COORDINATE_MISMATCH',
             )
 
         if request.manifest.project_id != snap_project_id:
@@ -345,7 +342,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="COORDINATE_MISMATCH",
                 request_id=request_id,
-                diagnostic=f"Manifest project_id ({request.manifest.project_id}) does not match configured project ({snap_project_id})",
+                diagnostic='category=COORDINATE_MISMATCH',
             )
 
         if request.manifest.fencing_token != request.fencing_token:
@@ -353,7 +350,7 @@ class GatewayObservationValidator:
                 status_code=409,
                 code="FENCING_TOKEN_MISMATCH",
                 request_id=request_id,
-                diagnostic=f"Manifest fencing token ({request.manifest.fencing_token}) does not match request ({request.fencing_token})",
+                diagnostic='category=FENCING_TOKEN_MISMATCH',
             )
 
         # 9. Validate Artifact Archive
@@ -373,7 +370,7 @@ class GatewayObservationValidator:
                     status_code=413,
                     code="PAYLOAD_TOO_LARGE",
                     request_id=request_id,
-                    diagnostic=f"Base64 artifact archive size ({len(request.artifact_archive_base64)}) exceeds limit",
+                    diagnostic='category=PAYLOAD_TOO_LARGE',
                 )
 
             try:
@@ -383,7 +380,7 @@ class GatewayObservationValidator:
                     status_code=400,
                     code="INVALID_BASE64_PAYLOAD",
                     request_id=request_id,
-                    diagnostic=f"Invalid base64 encoding in artifact archive: {exc}",
+                    diagnostic='category=INVALID_BASE64_PAYLOAD',
                 ) from exc
 
             if len(decoded_bytes) > MAX_ARCHIVE_COMPRESSED_SIZE:
@@ -391,7 +388,7 @@ class GatewayObservationValidator:
                     status_code=413,
                     code="PAYLOAD_TOO_LARGE",
                     request_id=request_id,
-                    diagnostic=f"Decoded artifact archive size ({len(decoded_bytes)}) exceeds limit of {MAX_ARCHIVE_COMPRESSED_SIZE} bytes",
+                    diagnostic='category=PAYLOAD_TOO_LARGE',
                 )
 
             try:
@@ -403,13 +400,13 @@ class GatewayObservationValidator:
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",
                         request_id=request_id,
-                        diagnostic="Artifact archive size exceeds limit",
+                        diagnostic='category=PAYLOAD_TOO_LARGE',
                     ) from exc
                 raise GatewayError(
                     status_code=400,
                     code="INVALID_ARTIFACT_ARCHIVE",
                     request_id=request_id,
-                    diagnostic=f"Artifact archive validation failed: {exc.__class__.__name__}",
+                    diagnostic='category=INVALID_ARTIFACT_ARCHIVE',
                 ) from exc
 
             artifact_digest = hashlib.sha256(decoded_bytes).hexdigest()
@@ -419,7 +416,7 @@ class GatewayObservationValidator:
                 status_code=400,
                 code="ARTIFACTS_REQUIRED",
                 request_id=request_id,
-                diagnostic="Observations declare artifact evidence but no artifact archive was submitted",
+                diagnostic='category=ARTIFACTS_REQUIRED',
             )
 
         # 10. Recheck Tenant & Connector Status at Completion
@@ -429,7 +426,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="TENANT_REVOKED",
                 request_id=request_id,
-                diagnostic=f"Tenant {snap_tenant_id} is inactive or revoked",
+                diagnostic='category=TENANT_REVOKED',
             )
 
         current_snapshot = self._lookup_connector(repo_coord)
@@ -438,7 +435,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONNECTOR_REMOVED",
                 request_id=request_id,
-                diagnostic=f"Connector for repository {repo_coord} was removed during processing",
+                diagnostic='category=CONNECTOR_REMOVED',
             )
 
         if current_snapshot.status != "ACTIVE":
@@ -446,7 +443,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONNECTOR_REVOKED",
                 request_id=request_id,
-                diagnostic=f"Connector for repository {repo_coord} was revoked during processing",
+                diagnostic='category=CONNECTOR_REVOKED',
             )
 
         if current_snapshot.generation != initial_snapshot.generation:
@@ -454,7 +451,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONNECTOR_GENERATION_CHANGED",
                 request_id=request_id,
-                diagnostic=f"Connector generation changed from {initial_snapshot.generation} to {current_snapshot.generation}",
+                diagnostic='category=CONNECTOR_GENERATION_CHANGED',
             )
 
         if current_snapshot.canonical_digest != initial_snapshot.canonical_digest:
@@ -462,7 +459,7 @@ class GatewayObservationValidator:
                 status_code=403,
                 code="CONNECTOR_AUTHORITY_CHANGED",
                 request_id=request_id,
-                diagnostic="Connector authority configuration mutated during validation processing",
+                diagnostic='category=CONNECTOR_AUTHORITY_CHANGED',
             )
 
         # 11. Construct Ephemeral Witness Context (Internal restricted validation only)
@@ -529,7 +526,7 @@ class GatewayObservationValidator:
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",
                         request_id=request_id,
-                        diagnostic=f"Dictionary envelope ({total_env_size} bytes) exceeds limit of {MAX_REQUEST_BODY_SIZE} bytes",
+                        diagnostic='category=PAYLOAD_TOO_LARGE',
                     )
             data = request_input
         elif isinstance(request_input, (bytes, str)):
@@ -539,7 +536,7 @@ class GatewayObservationValidator:
                     status_code=413,
                     code="PAYLOAD_TOO_LARGE",
                     request_id=request_id,
-                    diagnostic=f"Request body length ({len(encoded)} bytes) exceeds maximum limit of {MAX_REQUEST_BODY_SIZE} bytes",
+                    diagnostic='category=PAYLOAD_TOO_LARGE',
                 )
             try:
                 text = encoded.decode("utf-8")
@@ -549,21 +546,21 @@ class GatewayObservationValidator:
                     status_code=400,
                     code="INVALID_REQUEST_BODY",
                     request_id=request_id,
-                    diagnostic="Malformed request JSON body or invalid characters",
+                    diagnostic='category=INVALID_REQUEST_BODY',
                 ) from exc
             if not isinstance(data, dict):
                 raise GatewayError(
                     status_code=400,
                     code="INVALID_REQUEST_BODY",
                     request_id=request_id,
-                    diagnostic="Request body must be a JSON object",
+                    diagnostic='category=INVALID_REQUEST_BODY',
                 )
         else:
             raise GatewayError(
                 status_code=400,
                 code="INVALID_REQUEST_BODY",
                 request_id=request_id,
-                diagnostic="Request input must be bytes, str or dict",
+                diagnostic='category=INVALID_REQUEST_BODY',
             )
 
         # 2. Universal bounded check on nested manifest representation before expensive operations
@@ -578,7 +575,7 @@ class GatewayObservationValidator:
                             status_code=413,
                             code="PAYLOAD_TOO_LARGE",
                             request_id=request_id,
-                            diagnostic=f"Nested manifest size ({total_man_size} bytes) exceeds limit of {MAX_MANIFEST_JSON_SIZE} bytes",
+                            diagnostic='category=PAYLOAD_TOO_LARGE',
                         )
             elif isinstance(manifest_val, (str, bytes)):
                 enc_len = len(manifest_val.encode("utf-8") if isinstance(manifest_val, str) else manifest_val)
@@ -587,7 +584,7 @@ class GatewayObservationValidator:
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",
                         request_id=request_id,
-                        diagnostic=f"Nested manifest size ({enc_len} bytes) exceeds limit of {MAX_MANIFEST_JSON_SIZE} bytes",
+                        diagnostic='category=PAYLOAD_TOO_LARGE',
                     )
 
         return data
@@ -597,5 +594,5 @@ class GatewayObservationValidator:
         if self.audit_logger:
             try:
                 self.audit_logger(redact_sensitive(event))
-            except Exception as exc:
-                logger.warning("Audit logging callback failed: %s", exc.__class__.__name__)
+            except Exception:
+                logger.warning('Gateway audit callback failed')
