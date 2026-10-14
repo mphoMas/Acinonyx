@@ -1,37 +1,44 @@
 #!/usr/bin/env python3
 """Offline delivery manifest and artifact validator CLI.
 
-Validates candidate manifests, artifact archives, Git diffs, and coordinator DB state.
-Defaults to validation-only mode; publication requires --publish and authenticated authority.
+Performs pure offline claims validation of candidate manifests, artifact archives,
+and Git commit trees.
+Does NOT accept arbitrary database paths and does NOT perform unauthenticated state mutation.
+Publication belongs exclusively to the authenticated coordinator SDK.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
-from mas.pm.db import PMDatabase
-from mas.pm.delivery import DeliveryGateError, DeliveryService
 from mas.pm.delivery_validator import (
-    DeliveryValidatorError,
-    publish_submission,
-    validate_delivery_manifest,
+    MAX_ARCHIVE_COMPRESSED_SIZE,
+    MAX_MANIFEST_JSON_SIZE,
+    parse_manifest_json,
+    read_file_bounded,
+    validate_artifact_archive,
+    validate_git_candidate,
+    validate_manifest_input,
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Offline delivery manifest and artifact validator",
+        description="Offline delivery manifest and artifact claims validator",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--manifest", required=True, type=Path, help="Path to delivery manifest JSON")
     parser.add_argument("--archive", required=True, type=Path, help="Path to evidence zip archive")
     parser.add_argument("--repo", required=True, type=Path, help="Path to trusted Git repository root")
-    parser.add_argument("--db", required=True, type=Path, help="Path to coordinator SQLite database file")
-    parser.add_argument("--publish", action="store_true", default=False, help="Publish validated submission via DeliveryService.submit")
+    parser.add_argument(
+        "--scope",
+        required=False,
+        default="",
+        help="Optional comma-separated list of allowed relative file paths for scope validation",
+    )
     return parser
 
 
@@ -39,11 +46,11 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    # Validate file existence
     for path_arg, desc in (
         (args.manifest, "Manifest file"),
         (args.archive, "Archive file"),
         (args.repo, "Git repository"),
-        (args.db, "Database file"),
     ):
         if not path_arg.exists():
             out = {
@@ -54,103 +61,72 @@ def main() -> int:
             print(json.dumps(out, indent=2))
             return 1
 
+    # 1. Read and strictly revalidate manifest
     try:
-        manifest_bytes = args.manifest.read_bytes()
+        manifest_bytes = read_file_bounded(args.manifest, MAX_MANIFEST_JSON_SIZE)
+        manifest_dict = parse_manifest_json(manifest_bytes)
+        manifest = validate_manifest_input(manifest_dict)
     except Exception as exc:
         out = {
             "status": "VALIDATION_FAILED",
             "valid": False,
-            "reasons": [f"Failed to read manifest file: {exc}"],
+            "reasons": [f"Manifest validation error: {exc}"],
         }
         print(json.dumps(out, indent=2))
         return 1
 
+    # 2. Read and strictly validate artifact archive and observation links
     try:
-        conn = sqlite3.connect(f"file:{args.db.resolve()}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
+        archive_bytes = read_file_bounded(args.archive, MAX_ARCHIVE_COMPRESSED_SIZE)
+        validate_artifact_archive(archive_bytes, observations=manifest.observations)
     except Exception as exc:
         out = {
             "status": "VALIDATION_FAILED",
             "valid": False,
-            "reasons": [f"Failed to open database in read-only mode: {exc}"],
+            "issue_id": manifest.issue_id,
+            "candidate_sha": manifest.candidate_sha,
+            "reasons": [f"Artifact archive validation error: {exc}"],
         }
         print(json.dumps(out, indent=2))
         return 1
 
+    # 3. Validate Git candidate commit and diff-tree
     try:
-        with conn:
-            result = validate_delivery_manifest(
-                manifest_input=manifest_bytes,
-                archive_input=args.archive,
-                repo_path=args.repo,
-                conn=conn,
-            )
-    finally:
-        conn.close()
-
-    if not result.valid:
+        scope = [s.strip() for s in args.scope.split(",") if s.strip()] if args.scope else []
+        if not scope and manifest.closures:
+            # Flatten closure paths as scope if no explicit scope passed
+            for paths in manifest.closures.values():
+                scope.extend(paths)
+        validate_git_candidate(args.repo, manifest.base_sha, manifest.candidate_sha, scope)
+    except Exception as exc:
         out = {
             "status": "VALIDATION_FAILED",
             "valid": False,
-            "issue_id": result.issue_id,
-            "candidate_sha": result.candidate_sha,
-            "revision": result.revision,
-            "reasons": result.reasons,
+            "issue_id": manifest.issue_id,
+            "candidate_sha": manifest.candidate_sha,
+            "reasons": [f"Git candidate validation error: {exc}"],
         }
         print(json.dumps(out, indent=2))
         return 1
 
-    if not args.publish:
-        out = {
-            "status": "VALIDATED_CLAIMS",
-            "valid": True,
-            "issue_id": result.issue_id,
-            "candidate_sha": result.candidate_sha,
-            "revision": result.revision,
-            "run_id": result.run_id,
-            "reasons": [],
-        }
-        print(json.dumps(out, indent=2))
-        return 0
-
-    # Publish mode: requires PMDatabase and active authority
-    try:
-        db = PMDatabase(args.db)
-        service = DeliveryService(db)
-        task = publish_submission(service, result)
-        out = {
-            "status": task.get("phase", "UNKNOWN"),
-            "valid": True,
-            "published": True,
-            "issue_id": task.get("issue_id", result.issue_id),
-            "candidate_sha": result.candidate_sha,
-            "revision": task.get("revision", result.revision),
-            "reasons": [],
-        }
-        print(json.dumps(out, indent=2))
-        return 0
-    except (DeliveryGateError, DeliveryValidatorError, PermissionError) as exc:
-        out = {
-            "status": "PUBLICATION_FAILED",
-            "valid": True,
-            "published": False,
-            "issue_id": result.issue_id,
-            "candidate_sha": result.candidate_sha,
-            "revision": result.revision,
-            "reasons": [str(exc)],
-        }
-        print(json.dumps(out, indent=2))
-        return 1
-    except Exception as exc:
-        out = {
-            "status": "PUBLICATION_ERROR",
-            "valid": True,
-            "published": False,
-            "issue_id": result.issue_id,
-            "reasons": [f"Unexpected error during submission publication: {exc}"],
-        }
-        print(json.dumps(out, indent=2))
-        return 1
+    # Pure claims validation passed
+    out = {
+        "status": "VALIDATED_CLAIMS",
+        "valid": True,
+        "issue_id": manifest.issue_id,
+        "candidate_sha": manifest.candidate_sha,
+        "brief_version": manifest.brief_version,
+        "revision": manifest.revision,
+        "run_id": manifest.run_id,
+        "observations_count": len(manifest.observations),
+        "authority_verified": False,
+        "note": (
+            "Offline claims validation successful. Authority and database binding must be "
+            "verified by the coordinator or delivery service before admission."
+        ),
+    }
+    print(json.dumps(out, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
