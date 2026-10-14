@@ -243,6 +243,7 @@ def gateway_setup(tmp_path: Path, mock_clock, key_pair):
         "validator": validator,
         "key_pair": key_pair,
         "connector_config": config,
+        "connector_registry": connector_registry,
         "iam": iam,
         "pm_db": pm_db,
         "delivery_svc": delivery_svc,
@@ -1188,3 +1189,534 @@ def test_security_audit_logging_redacts_tokens_and_bodies(gateway_setup):
     # Verify no raw bearer token in audit event
     assert "Bearer" not in str(event)
     assert t not in str(event)
+
+
+# ==============================================================================
+# GHA-03 REWORK CORRECTION REGRESSION TESTS (B1, B2, B3)
+# ==============================================================================
+
+
+def test_rework_b1_connector_replacement_during_artifact_validation_rejected(gateway_setup):
+    """B1: Replace frozen connector entry during real artifact validation with status='REVOKED', generation=2.
+    Must be rejected with 403 CONNECTOR_REVOKED.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    cfg = gateway_setup["connector_config"]
+    reg = gateway_setup["connector_registry"]
+    now = gateway_setup["get_time"]()
+
+    zip_bytes = make_zip_bytes({"test_report.txt": b"test content"})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+    report_digest = hashlib.sha256(b"test content").hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+
+    def hook(stage: str):
+        if stage == "artifact_validation":
+            revoked_cfg = cfg.model_copy(update={"status": "REVOKED", "generation": 2})
+            reg[repo_coord] = revoked_cfg
+
+    v.on_validation_stage = hook
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 403
+    assert exc.value.code == "CONNECTOR_REVOKED"
+    env = exc.value.to_envelope()
+    assert env["code"] == "CONNECTOR_REVOKED"
+
+
+def test_rework_b1_connector_removal_during_artifact_validation_rejected(gateway_setup):
+    """B1: Remove connector entry during real artifact validation.
+    Must be rejected with 403 CONNECTOR_REMOVED.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    cfg = gateway_setup["connector_config"]
+    reg = gateway_setup["connector_registry"]
+    now = gateway_setup["get_time"]()
+
+    zip_bytes = make_zip_bytes({"test_report.txt": b"test content"})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+    report_digest = hashlib.sha256(b"test content").hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+
+    def hook(stage: str):
+        if stage == "artifact_validation":
+            reg.pop(repo_coord, None)
+
+    v.on_validation_stage = hook
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 403
+    assert exc.value.code == "CONNECTOR_REMOVED"
+
+
+def test_rework_b1_connector_generation_change_during_validation_rejected(gateway_setup):
+    """B1: Generation changed (e.g. from 1 to 2) during validation must be rejected."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    cfg = gateway_setup["connector_config"]
+    reg = gateway_setup["connector_registry"]
+    now = gateway_setup["get_time"]()
+
+    zip_bytes = make_zip_bytes({"test_report.txt": b"test content"})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+    report_digest = hashlib.sha256(b"test content").hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+
+    def hook(stage: str):
+        if stage == "artifact_validation":
+            new_cfg = cfg.model_copy(update={"generation": 2})
+            reg[repo_coord] = new_cfg
+
+    v.on_validation_stage = hook
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 403
+    assert exc.value.code == "CONNECTOR_GENERATION_CHANGED"
+
+
+def test_rework_b1_connector_authority_change_during_validation_rejected(gateway_setup):
+    """B1: Authority configuration mutated (tenant_id / workflow sha changed) during validation."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    cfg = gateway_setup["connector_config"]
+    reg = gateway_setup["connector_registry"]
+    now = gateway_setup["get_time"]()
+
+    zip_bytes = make_zip_bytes({"test_report.txt": b"test content"})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+    report_digest = hashlib.sha256(b"test content").hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    repo_coord = (cfg.repository_id, cfg.repository_owner_id)
+
+    def hook(stage: str):
+        if stage == "artifact_validation":
+            new_cfg = cfg.model_copy(update={"tenant_id": "tenant-other"})
+            reg[repo_coord] = new_cfg
+
+    v.on_validation_stage = hook
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 403
+    assert exc.value.code == "CONNECTOR_AUTHORITY_CHANGED"
+
+
+def test_rework_b2_two_mib_closure_nested_manifest_dict_and_json_rejected(gateway_setup):
+    """B2: Reproduced review defect: manifest with ~2 MiB closure path must be rejected
+    on dict route, json route, and direct model validation.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+
+    two_mb_path = "mas/" + "a" * (2 * 1024 * 1024)
+    manifest_dict = make_valid_manifest().model_dump()
+    manifest_dict["closures"] = {"F-01": [two_mb_path]}
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+
+    # 1. Dict route
+    req_dict = {
+        "manifest": manifest_dict,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+    with pytest.raises(GatewayError) as exc_dict:
+        v.validate_submission(f"Bearer {t}", req_dict)
+
+    assert exc_dict.value.status_code == 413
+    assert exc_dict.value.code == "PAYLOAD_TOO_LARGE"
+
+    # 2. JSON route (serialized JSON bytes)
+    req_json = json.dumps(req_dict).encode("utf-8")
+    with pytest.raises(GatewayError) as exc_json:
+        v.validate_submission(f"Bearer {t}", req_json)
+
+    assert exc_json.value.status_code == 413
+    assert exc_json.value.code == "PAYLOAD_TOO_LARGE"
+
+    # 3. Direct model validation
+    from mas.pm.gateway.models import WitnessObservationSubmissionRequest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        WitnessObservationSubmissionRequest.model_validate(req_dict)
+
+
+def test_rework_b2_manifest_size_exact_boundaries(gateway_setup):
+    """B2: Exact boundary test for 1 MiB manifest size limit."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    t = make_jwt(key_fixture=kp, override_clock=now)
+
+    target_limit = 1048576  # 1 MiB
+
+    # 1. Exact 1 MiB passes
+    base_m = make_valid_manifest().model_dump()
+    base_m["closures"] = {"F-01": ["mas/"]}
+    current_len = len(json.dumps(base_m).encode("utf-8"))
+    needed = target_limit - current_len
+    base_m["closures"] = {"F-01": ["mas/" + "a" * needed]}
+    assert len(json.dumps(base_m).encode("utf-8")) == target_limit
+
+    req_exact = {
+        "manifest": base_m,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+    resp = v.validate_submission(f"Bearer {t}", req_exact)
+    assert resp.status == "VALIDATED_UNTRUSTED_OBSERVATION"
+
+    # 2. 1 MiB + 1 byte fails
+    base_m_over = make_valid_manifest().model_dump()
+    base_m_over["closures"] = {"F-01": ["mas/" + "a" * (needed + 1)]}
+    assert len(json.dumps(base_m_over).encode("utf-8")) == target_limit + 1
+    req_over = {
+        "manifest": base_m_over,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req_over)
+    assert exc.value.status_code == 413
+    assert exc.value.code == "PAYLOAD_TOO_LARGE"
+
+
+def test_rework_b2_oversized_dict_and_json_envelopes_rejected(gateway_setup):
+    """B2: Oversized envelopes (> 18 MiB) rejected across dict and json representations."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    t = make_jwt(key_fixture=kp, override_clock=now)
+
+    # 1. Dict route > 18 MiB
+    huge_dict = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+        "padding": "x" * (19 * 1024 * 1024),
+    }
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", huge_dict)
+    assert exc.value.status_code == 413
+    assert exc.value.code == "PAYLOAD_TOO_LARGE"
+
+    # 2. JSON route > 18 MiB
+    huge_json = b'{"data": "' + b"x" * (19 * 1024 * 1024) + b'"}'
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", huge_json)
+    assert exc.value.status_code == 413
+    assert exc.value.code == "PAYLOAD_TOO_LARGE"
+
+
+def test_rework_b2_valid_12_mib_archive_envelope_accepted(gateway_setup):
+    """B2: Valid archive with normal manifest fits inside 18 MiB envelope and is accepted."""
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    t = make_jwt(key_fixture=kp, override_clock=now)
+
+    raw_file = b"Valid report content line\n"
+    report_digest = hashlib.sha256(raw_file).hexdigest()
+
+    manifest = make_valid_manifest(
+        observations=[
+            ManifestObservation(
+                check_id="CHK-01",
+                outcome="PASSED",
+                evidence_ref="test_report.txt",
+                digest=report_digest,
+            )
+        ]
+    )
+
+    zip_bytes = make_zip_bytes({"test_report.txt": raw_file})
+    zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+
+    req = {
+        "manifest": manifest.model_dump(),
+        "artifact_archive_base64": zip_b64,
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    resp = v.validate_submission(f"Bearer {t}", req)
+    assert resp.status == "VALIDATED_UNTRUSTED_OBSERVATION"
+    assert resp.artifacts_validated is True
+
+
+def test_rework_b3_public_errors_and_envelope_never_leak_sentinel_or_exceptions(gateway_setup):
+    """B3: Inject an internal dependency failure with message '/private/host/keys SECRET_SENTINEL'.
+    Verify public GatewayError.to_envelope() contains stable code/message and ZERO sentinel text.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+
+    sentinel = "/private/host/keys SECRET_SENTINEL"
+
+    def bad_verify(_token):
+        raise RuntimeError(sentinel)
+
+    v.token_verifier.verify_token = bad_verify
+
+    t = make_jwt(key_fixture=kp, override_clock=now)
+    req = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+    }
+
+    with pytest.raises(GatewayError) as exc:
+        v.validate_submission(f"Bearer {t}", req)
+
+    assert exc.value.status_code == 500
+    assert exc.value.code == "INTERNAL_ERROR"
+
+    envelope = exc.value.to_envelope()
+    assert envelope["status"] == "ERROR"
+    assert envelope["code"] == "INTERNAL_ERROR"
+    assert envelope["message"] == "An internal gateway error occurred during observation validation."
+    assert sentinel not in str(envelope)
+    assert "/private/host/keys" not in str(envelope)
+    assert "SECRET_SENTINEL" not in str(envelope)
+    assert sentinel not in exc.value.message
+
+
+def test_rework_b3_sentinels_across_jwks_parsing_schema_archive_handlers(gateway_setup):
+    """B3: Test injected sentinels across JWKS, parsing, schema, and archive handlers.
+    None must ever leak into the public error envelope.
+    """
+    v = gateway_setup["validator"]
+    kp = gateway_setup["key_pair"]
+    now = gateway_setup["get_time"]()
+    sentinel = "/secret/root/store SENSITIVE_DATA_12345"
+
+    # 1. JWKS fetcher error
+    orig_fetcher = v.jwks_cache._fetcher
+    def bad_fetcher(_url):
+        raise RuntimeError(f"Connection error to {sentinel}")
+
+    v.jwks_cache._fetcher = bad_fetcher
+    try:
+        t = make_jwt(key_fixture=kp, kid="new-uncached-kid", override_clock=now)
+        req = {
+            "manifest": make_valid_manifest().model_dump(),
+            "fencing_token": 1,
+            "github_run_id": "1029384756",
+            "github_run_attempt": 1,
+        }
+        with pytest.raises(GatewayError) as exc_jwks:
+            v.validate_submission(f"Bearer {t}", req)
+
+        env_jwks = exc_jwks.value.to_envelope()
+        assert env_jwks["code"] == "JWKS_UNAVAILABLE"
+        assert sentinel not in str(env_jwks)
+        assert sentinel not in exc_jwks.value.message
+    finally:
+        v.jwks_cache._fetcher = orig_fetcher
+        v.jwks_cache._last_failed_at = 0.0
+
+    # 2. JSON parsing error with embedded sentinel
+    bad_json = f'{{"manifest": "{sentinel}", broken_json: '.encode("utf-8")
+    t_valid = make_jwt(key_fixture=kp, override_clock=now)
+    with pytest.raises(GatewayError) as exc_json:
+        v.validate_submission(f"Bearer {t_valid}", bad_json)
+
+    env_json = exc_json.value.to_envelope()
+    assert env_json["code"] == "INVALID_REQUEST_BODY"
+    assert sentinel not in str(env_json)
+
+    # 3. Schema validation with sensitive input in unexpected field
+    hostile_req = {
+        "manifest": make_valid_manifest().model_dump(),
+        "fencing_token": 1,
+        "github_run_id": "1029384756",
+        "github_run_attempt": 1,
+        "injected_sensitive_field": sentinel,
+    }
+    with pytest.raises(GatewayError) as exc_schema:
+        v.validate_submission(f"Bearer {t_valid}", hostile_req)
+
+    env_schema = exc_schema.value.to_envelope()
+    assert env_schema["code"] == "EXTRA_FIELDS_FORBIDDEN"
+    assert sentinel not in str(env_schema)
+
+    # 4. Archive validation error with embedded sentinel
+    import mas.pm.gateway.validator as gv_mod
+    orig_val = gv_mod.validate_artifact_archive
+
+    def bad_val(_archive_bytes, observations=None):
+        from mas.pm.delivery_validator import DeliveryValidatorError
+        raise DeliveryValidatorError(f"Corrupt entry at {sentinel}")
+
+    gv_mod.validate_artifact_archive = bad_val
+    try:
+        zip_bytes = make_zip_bytes({"test_report.txt": b"content"})
+        zip_b64 = base64.b64encode(zip_bytes).decode("ascii")
+        req_arch = {
+            "manifest": make_valid_manifest(
+                observations=[
+                    ManifestObservation(
+                        check_id="CHK-01",
+                        outcome="PASSED",
+                        evidence_ref="test_report.txt",
+                        digest=hashlib.sha256(b"content").hexdigest(),
+                    )
+                ]
+            ).model_dump(),
+            "artifact_archive_base64": zip_b64,
+            "fencing_token": 1,
+            "github_run_id": "1029384756",
+            "github_run_attempt": 1,
+        }
+        with pytest.raises(GatewayError) as exc_arch:
+            v.validate_submission(f"Bearer {t_valid}", req_arch)
+
+        env_arch = exc_arch.value.to_envelope()
+        assert env_arch["code"] == "INVALID_ARTIFACT_ARCHIVE"
+        assert sentinel not in str(env_arch)
+        assert sentinel not in exc_arch.value.message
+    finally:
+        gv_mod.validate_artifact_archive = orig_val
+
+
+def test_connector_registry_thread_safe_operations():
+    """Verify ConnectorRegistry synchronization, mapping protocols, and snapshot behavior."""
+    from mas.pm.gateway.models import ConnectorRegistry, GitHubConnectorConfig
+
+    cfg1 = GitHubConnectorConfig(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        repository_id="111",
+        repository_owner_id="222",
+        approved_workflow_repo="org/repo",
+        approved_workflow_path=".github/workflows/gate.yml",
+        approved_workflow_sha=HEX40_DEFAULT,
+        generation=1,
+    )
+    reg = ConnectorRegistry({("111", "222"): cfg1})
+    assert len(reg) == 1
+    assert ("111", "222") in reg
+    assert reg.get(("111", "222")) == cfg1
+    assert reg[("111", "222")] == cfg1
+
+    # Replacement
+    cfg2 = cfg1.model_copy(update={"generation": 2, "status": "REVOKED"})
+    reg.register(cfg2)
+    assert reg.get(("111", "222")).generation == 2
+    assert reg.get(("111", "222")).status == "REVOKED"
+
+    # Snapshot isolation
+    snap = reg.snapshot()
+    assert snap[("111", "222")] == cfg2
+    cfg3 = cfg1.model_copy(update={"generation": 3})
+    reg[("111", "222")] = cfg3
+    assert snap[("111", "222")].generation == 2
+    assert reg.get(("111", "222")).generation == 3
+
+    # Removal
+    removed = reg.remove(("111", "222"))
+    assert removed == cfg3
+    assert ("111", "222") not in reg
+    assert reg.get(("111", "222")) is None
+
+

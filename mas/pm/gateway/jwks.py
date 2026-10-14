@@ -52,7 +52,7 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 def default_jwks_fetcher(url: str) -> bytes:
     """Fixed-endpoint, TLS-verified HTTP GET with 64 KiB stream limit and zero redirects."""
     if url != GITHUB_JWKS_URL:
-        raise GatewayError(f"Untrusted JWKS endpoint: {url!r}", status_code=503, code="JWKS_UNAVAILABLE")
+        raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic=f"Untrusted JWKS endpoint: {url!r}")
 
     req = urllib.request.Request(
         url,
@@ -63,11 +63,19 @@ def default_jwks_fetcher(url: str) -> bytes:
         with opener.open(req, timeout=5.0) as resp:
             data = resp.read(MAX_JWKS_BYTES + 1)
             if len(data) > MAX_JWKS_BYTES:
-                raise GatewayError(f"JWKS response exceeded {MAX_JWKS_BYTES} bytes", status_code=503, code="JWKS_UNAVAILABLE")
+                raise GatewayError(
+                    status_code=503,
+                    code="JWKS_UNAVAILABLE",
+                    diagnostic=f"JWKS response exceeded {MAX_JWKS_BYTES} bytes",
+                )
             return data
     except Exception as exc:
         logger.warning("JWKS HTTP fetch failed: %s", exc)
-        raise GatewayError(f"JWKS endpoint fetch failed: {exc}", status_code=503, code="JWKS_UNAVAILABLE") from exc
+        raise GatewayError(
+            status_code=503,
+            code="JWKS_UNAVAILABLE",
+            diagnostic=f"JWKS endpoint fetch failed: {exc}",
+        ) from exc
 
 
 def b64url_to_int(s: str) -> int:
@@ -110,7 +118,7 @@ class JWKSCache:
     def get_key(self, kid: str) -> rsa.RSAPublicKey:
         """Retrieve an RSA public key by kid, triggering single-flight refresh when appropriate."""
         if not kid or not isinstance(kid, str) or len(kid) > 128:
-            raise GatewayError("Missing or invalid kid in token header", status_code=401, code="INVALID_JWT_HEADER")
+            raise GatewayError(status_code=401, code="INVALID_JWT_HEADER", diagnostic="Missing or invalid kid in token header")
 
         now = self._clock()
 
@@ -128,16 +136,16 @@ class JWKSCache:
 
             # Outage throttling
             if (now - self._last_failed_at) < self.failed_fetch_cooldown:
-                raise GatewayError("JWKS endpoint is temporarily unavailable (cooldown active)", status_code=503, code="JWKS_UNAVAILABLE")
+                raise GatewayError(status_code=503, code="JWKS_UNAVAILABLE", diagnostic="JWKS endpoint in cooldown")
 
             # Unknown key throttling when cache is fresh
             cache_is_fresh = self._last_fetched_at > 0 and (now - self._last_fetched_at) < self.cache_ttl
             if cache_is_fresh and kid not in self._keys:
                 if (now - self._last_fetched_at) < self.unknown_kid_cooldown:
                     raise GatewayError(
-                        f"Unknown key ID {kid!r}; refresh throttled ({self.unknown_kid_cooldown}s cooldown)",
                         status_code=401,
                         code="UNKNOWN_KEY_THROTTLED",
+                        diagnostic=f"Unknown key ID {kid!r}; refresh throttled",
                     )
 
             # Perform bounded fetch
@@ -151,33 +159,57 @@ class JWKSCache:
                 raise exc
             except Exception as exc:
                 self._last_failed_at = now
-                raise GatewayError(f"JWKS resolution failed: {exc}", status_code=503, code="JWKS_UNAVAILABLE") from exc
+                raise GatewayError(
+                    status_code=503,
+                    code="JWKS_UNAVAILABLE",
+                    diagnostic=f"JWKS resolution failed: {exc}",
+                ) from exc
 
             if kid not in self._keys:
-                raise GatewayError(f"Key ID {kid!r} not found in JWKS", status_code=401, code="UNKNOWN_KEY_ID")
+                raise GatewayError(status_code=401, code="UNKNOWN_KEY_ID", diagnostic=f"Key ID {kid!r} not found in JWKS")
 
             return self._keys[kid]
 
     def _parse_and_validate_jwks(self, raw_bytes: bytes) -> dict[str, rsa.RSAPublicKey]:
         """Strictly parse JWKS response, enforcing key count, duplicate rejection, and RSA bounds."""
         if len(raw_bytes) > MAX_JWKS_BYTES:
-            raise GatewayError(f"JWKS response exceeded {MAX_JWKS_BYTES} bytes", status_code=503, code="JWKS_UNAVAILABLE")
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic=f"JWKS response exceeded {MAX_JWKS_BYTES} bytes",
+            )
 
         try:
             text = raw_bytes.decode("utf-8")
             payload = json.loads(text, object_pairs_hook=reject_duplicate_keys, parse_constant=parse_nonfinite)
         except Exception as exc:
-            raise GatewayError(f"Malformed JWKS JSON: {exc}", status_code=503, code="JWKS_UNAVAILABLE") from exc
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic=f"Malformed JWKS JSON: {exc}",
+            ) from exc
 
         if not isinstance(payload, dict) or "keys" not in payload:
-            raise GatewayError("JWKS payload must be a JSON object containing a 'keys' list", status_code=503, code="JWKS_UNAVAILABLE")
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic="JWKS payload must be an object with 'keys'",
+            )
 
         keys_list = payload["keys"]
         if not isinstance(keys_list, list):
-            raise GatewayError("JWKS 'keys' must be a list", status_code=503, code="JWKS_UNAVAILABLE")
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic="JWKS keys must be a list",
+            )
 
         if len(keys_list) > MAX_JWKS_KEYS:
-            raise GatewayError(f"JWKS key count exceeds limit of {MAX_JWKS_KEYS}", status_code=503, code="JWKS_UNAVAILABLE")
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic=f"JWKS key count exceeds limit of {MAX_JWKS_KEYS}",
+            )
 
         parsed_keys: dict[str, rsa.RSAPublicKey] = {}
         for entry in keys_list:
@@ -189,16 +221,20 @@ class JWKSCache:
                 continue
 
             if kid in parsed_keys:
-                raise GatewayError(f"Duplicate kid {kid!r} detected in JWKS response", status_code=503, code="JWKS_UNAVAILABLE")
+                raise GatewayError(
+                    status_code=503,
+                    code="JWKS_UNAVAILABLE",
+                    diagnostic=f"Duplicate kid {kid!r} in JWKS",
+                )
 
             # Validate key metadata
             kty = entry.get("kty")
             if kty != "RSA":
-                continue  # Skip or ignore non-RSA keys safely
+                continue
 
             use = entry.get("use")
             if use is not None and use != "sig":
-                continue  # Key not designated for signatures
+                continue
 
             n_str = entry.get("n")
             e_str = entry.get("e")
@@ -209,7 +245,6 @@ class JWKSCache:
                 n = b64url_to_int(n_str)
                 e = b64url_to_int(e_str)
 
-                # RSA Parameter constraints
                 modulus_bits = n.bit_length()
                 if not (2048 <= modulus_bits <= 4096):
                     logger.warning("Ignoring RSA key with unsupported modulus size %d bits", modulus_bits)
@@ -226,6 +261,10 @@ class JWKSCache:
                 continue
 
         if not parsed_keys:
-            raise GatewayError("JWKS response contained no valid RSA public keys", status_code=503, code="JWKS_UNAVAILABLE")
+            raise GatewayError(
+                status_code=503,
+                code="JWKS_UNAVAILABLE",
+                diagnostic="JWKS response contained no valid RSA public keys",
+            )
 
         return parsed_keys

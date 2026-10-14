@@ -211,11 +211,18 @@ class GitHubConnectorConfig(StrictModel):
     generation: int = Field(default=1, ge=1)
 ```
 
-**Resolution Protocol**:
-1. Gateway extracts `repository_id` and `repository_owner_id` from the verified OIDC token.
-2. It queries the server-owned registry for a matching `(repository_id, repository_owner_id)` record.
-3. If no record exists $\rightarrow$ 403 `REPOSITORY_NOT_ENROLLED`.
-4. If `config.status != "ACTIVE"` $\rightarrow$ 403 `CONNECTOR_REVOKED`.
+**Synchronized Registry & Resolution Protocol**:
+1. Server-owned `ConnectorRegistry` is synchronized with thread-safe `threading.RLock`, supporting `register`, `get`, `remove`, `snapshot`, and mapping access.
+2. Gateway extracts `repository_id` and `repository_owner_id` from the verified OIDC token.
+3. It queries the synchronized registry for a matching `(repository_id, repository_owner_id)` entry.
+4. If no entry exists $\rightarrow$ 403 `REPOSITORY_NOT_ENROLLED`.
+5. If `config.status != "ACTIVE"` $\rightarrow$ 403 `CONNECTOR_REVOKED`.
+6. The validator takes an in-memory snapshot of the initial connector authority fields: `generation`, `tenant_id`, `project_id`, `approved_workflow_sha`, `approved_workflow_path`, `approved_workflow_repo`, and `required_runner_env`.
+7. At validation completion (Step 10), the validator re-resolves the connector from the registry (not using the stale initial object):
+   - If removed $\rightarrow$ 403 `CONNECTOR_REMOVED`.
+   - If revoked $\rightarrow$ 403 `CONNECTOR_REVOKED`.
+   - If `current_config.generation != snap_generation` $\rightarrow$ 403 `CONNECTOR_GENERATION_CHANGED`.
+   - If any authority field mutated $\rightarrow$ 403 `CONNECTOR_AUTHORITY_CHANGED`.
 
 ### 4.2 Integration with Real `MultiTenantIAM` Verification APIs
 
@@ -331,7 +338,10 @@ All gateway errors return standardized structured envelopes:
 }
 ```
 
-*Sanitization Rule*: Stack traces, internal filesystem paths, database connection details, and cryptographic verification internals are logged to private server audit logs (`events.jsonl`) but are **strictly excluded** from HTTP response bodies.
+*Sanitization & Centralized Mapping Rule*:
+- Public error messages are strictly defined in a centralized static dictionary (`PUBLIC_ERROR_MESSAGES`), mapping each error code to a constant, non-interpolated string.
+- Raw dependency exception messages, user input dumps, stack traces, host paths, and sentinels are strictly kept in the private `diagnostic` attribute on the server and are **never** interpolated into public messages or serialized in `to_envelope()`.
+- Private audit logs (`events.jsonl` or callback) sanitize bearer tokens, JWTs, and sensitive payload keys.
 
 ### 5.4 Precise Failure Invariants
 
