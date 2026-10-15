@@ -509,6 +509,8 @@ class PMDatabase:
         self.migrate_coordinator_evidence_schema()
         from mas.pm.delivery import migrate
         migrate(self)
+        from mas.pm.receipts import migrate_receipts
+        migrate_receipts(self)
 
     def migrate_coordinator_schema(self) -> None:
         """

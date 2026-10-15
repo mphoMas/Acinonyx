@@ -25,6 +25,8 @@ from mas.audit_anchor import HTTPAuditAnchor
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Set
 
+from mas.authority import get_authority_guard
+
 
 class TenantStatus(str, Enum):
     ACTIVE = "ACTIVE"
@@ -136,6 +138,7 @@ class MultiTenantIAM:
                 "agents:*",
                 "audit:*",
                 "admin:*",
+                "receipt:*",
             },
             StandardRole.DATA_ARCHITECT.value: {
                 "tools:read",
@@ -226,13 +229,14 @@ class MultiTenantIAM:
         return self._tenants.get(tenant_id)
 
     def suspend_tenant(self, tenant_id: str) -> None:
-        if self._store:
-            self._store.suspend_tenant(tenant_id)
-        elif tenant_id in self._tenants:
-            self._tenants[tenant_id].status = TenantStatus.SUSPENDED
-            for session in self._sessions.values():
-                if session["tenant_id"] == tenant_id:
-                    session["revoked"] = True
+        with get_authority_guard():
+            if self._store:
+                self._store.suspend_tenant(tenant_id)
+            elif tenant_id in self._tenants:
+                self._tenants[tenant_id].status = TenantStatus.SUSPENDED
+                for session in self._sessions.values():
+                    if session["tenant_id"] == tenant_id:
+                        session["revoked"] = True
 
     def suspend_principal(
         self,
@@ -241,36 +245,37 @@ class MultiTenantIAM:
         actor_token: Optional[str] = None,
     ) -> bool:
         """Suspends or removes principal, revoking all principal sessions and persisting suspension."""
-        effective_token = actor_token
-        tenant_id = tenant_or_actor
-        if actor_token is None and "." in tenant_or_actor:
-            effective_token = tenant_or_actor
+        with get_authority_guard():
+            effective_token = actor_token
+            tenant_id = tenant_or_actor
+            if actor_token is None and "." in tenant_or_actor:
+                effective_token = tenant_or_actor
 
-        actor = None
-        if effective_token:
-            actor = self.verify_token(effective_token)
-            tenant_id = actor.tenant_id
-            if not self.authorize(actor, "admin:suspend", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal") and not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal"):
-                raise PermissionError("Principal suspension requires tenant admin authority")
+            actor = None
+            if effective_token:
+                actor = self.verify_token(effective_token)
+                tenant_id = actor.tenant_id
+                if not self.authorize(actor, "admin:suspend", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal") and not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:principal"):
+                    raise PermissionError("Principal suspension requires tenant admin authority")
 
-        key = f"{tenant_id}:{user_id}"
-        if key in self._principals:
-            p = self._principals[key]
-            p.status = "SUSPENDED"
-            for session in self._sessions.values():
-                if session.get("tenant_id") == tenant_id and session.get("user_id") == user_id:
-                    session["revoked"] = True
+            key = f"{tenant_id}:{user_id}"
+            if key in self._principals:
+                p = self._principals[key]
+                p.status = "SUSPENDED"
+                for session in self._sessions.values():
+                    if session.get("tenant_id") == tenant_id and session.get("user_id") == user_id:
+                        session["revoked"] = True
 
-        if self._store:
-            if actor:
-                self._store.suspend_principal(
-                    actor,
-                    user_id,
-                    lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:suspend") or self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"),
-                )
-            else:
-                self._store.suspend_principal(tenant_id, user_id)
-        return True
+            if self._store:
+                if actor:
+                    self._store.suspend_principal(
+                        actor,
+                        user_id,
+                        lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:suspend") or self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"),
+                    )
+                else:
+                    self._store.suspend_principal(tenant_id, user_id)
+            return True
 
     # -------------------------------------------------------------------------
     # Principal Management
@@ -536,50 +541,53 @@ class MultiTenantIAM:
 
     def revoke_session(self, actor_token: str, session_id: str) -> bool:
         """Revoke your own session, or a session in your tenant with admin authority."""
-        if not isinstance(session_id, str) or not re.fullmatch(r"[a-f0-9]{64}", session_id):
-            raise ValueError("Invalid session identifier")
-        actor = self.verify_token(actor_token)
-        if session_id != actor.token_id and not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:session"):
-            raise PermissionError("Session revocation requires tenant admin authority")
-        if self._store:
-            return self._store.revoke_session(actor, session_id, lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"))
-        session = self._sessions.get(session_id)
-        if not session or session["tenant_id"] != actor.tenant_id:
-            raise PermissionError("Session unavailable in this tenant")
-        session["revoked"] = True
-        return True
+        with get_authority_guard():
+            if not isinstance(session_id, str) or not re.fullmatch(r"[a-f0-9]{64}", session_id):
+                raise ValueError("Invalid session identifier")
+            actor = self.verify_token(actor_token)
+            if session_id != actor.token_id and not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:session"):
+                raise PermissionError("Session revocation requires tenant admin authority")
+            if self._store:
+                return self._store.revoke_session(actor, session_id, lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"))
+            session = self._sessions.get(session_id)
+            if not session or session["tenant_id"] != actor.tenant_id:
+                raise PermissionError("Session unavailable in this tenant")
+            session["revoked"] = True
+            return True
 
     def revoke_principal_sessions(self, actor_token: str, user_id: str) -> int:
         """Tenant administrator revokes every current session for one principal."""
-        if not isinstance(user_id, str) or not re.fullmatch(r"[a-zA-Z0-9_\-]+", user_id):
-            raise ValueError("Invalid user_id")
-        actor = self.verify_token(actor_token)
-        if not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:session"):
-            raise PermissionError("Session revocation requires tenant admin authority")
-        if self._store:
-            return self._store.revoke_principal_sessions(actor, user_id, lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"))
-        if not self.get_principal(actor.tenant_id, user_id):
-            raise PermissionError("Principal unavailable in this tenant")
-        count = 0
-        for session in self._sessions.values():
-            if session["tenant_id"] == actor.tenant_id and session["user_id"] == user_id and not session["revoked"]:
-                session["revoked"] = True
-                count += 1
-        return count
+        with get_authority_guard():
+            if not isinstance(user_id, str) or not re.fullmatch(r"[a-zA-Z0-9_\-]+", user_id):
+                raise ValueError("Invalid user_id")
+            actor = self.verify_token(actor_token)
+            if not self.authorize(actor, "admin:revoke", actor.tenant_id, f"urn:mas:tenant:{actor.tenant_id}:session"):
+                raise PermissionError("Session revocation requires tenant admin authority")
+            if self._store:
+                return self._store.revoke_principal_sessions(actor, user_id, lambda doc: self._has_permission(actor, self._principal_from_document(doc), "admin:revoke"))
+            if not self.get_principal(actor.tenant_id, user_id):
+                raise PermissionError("Principal unavailable in this tenant")
+            count = 0
+            for session in self._sessions.values():
+                if session["tenant_id"] == actor.tenant_id and session["user_id"] == user_id and not session["revoked"]:
+                    session["revoked"] = True
+                    count += 1
+            return count
 
     def invalidate_all_sessions(self) -> int:
         """Trusted host restore operation, while request servers are offline.
 
         This is deliberately unavailable through HTTP and agent tool registries.
         """
-        if self._store:
-            return self._store.invalidate_all_sessions()
-        count = 0
-        for session in self._sessions.values():
-            if not session["revoked"]:
-                session["revoked"] = True
-                count += 1
-        return count
+        with get_authority_guard():
+            if self._store:
+                return self._store.invalidate_all_sessions()
+            count = 0
+            for session in self._sessions.values():
+                if not session["revoked"]:
+                    session["revoked"] = True
+                    count += 1
+            return count
 
     def backup(self, destination: str | Path) -> None:
         """Trusted host administrator only; never expose this as an agent tool."""

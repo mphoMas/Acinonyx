@@ -12,7 +12,7 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -723,3 +723,38 @@ class DeliveryService:
             c.execute("UPDATE pm_delivery_tasks SET phase='IN_REVIEW',revision=revision+1 WHERE issue_id=?", (issue_id,))
             _event(c, row, actor, "SCOPE_DECLINED", {"reason": reason})
         return self.get(issue_id)
+
+    def record_observation(
+        self,
+        authenticated_binding: Any,
+        action_id: str,
+        observation_id: str,
+        contract: dict[str, Any],
+        payload: dict[str, Any],
+        *,
+        issue_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        connector_registry: Optional[Any] = None,
+    ) -> dict[str, Any]:
+        """Record an untrusted observation into the durable quarantined receipt store."""
+        from mas.pm.receipts import DeliveryReceiptService
+        service = DeliveryReceiptService(self.db, connector_registry=connector_registry)
+        return service.record_observation(
+            authenticated_binding,
+            action_id,
+            observation_id,
+            contract,
+            payload,
+            issue_id=issue_id,
+            project_id=project_id,
+        )
+
+    def get_receipt(
+        self,
+        authenticated_binding: Any,
+        receipt_id: str,
+    ) -> Optional[dict[str, Any]]:
+        """Retrieve an immutable quarantined receipt."""
+        from mas.pm.receipts import DeliveryReceiptService
+        service = DeliveryReceiptService(self.db)
+        return service.get_receipt(authenticated_binding, receipt_id)

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Mapping
 from pydantic import Field, ValidationError, field_validator, model_validator
 
+from mas.authority import get_authority_guard
 from mas.pm.delivery_validator import DeliveryManifest, StrictModel
 
 SHA = r"^[0-9a-f]{40}$"
@@ -251,38 +252,42 @@ class ConnectorRegistry:
 
     def register(self, config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
         """Register initial connector configuration or update if generation advances."""
-        with self._lock:
-            key = (config.repository_id, config.repository_owner_id)
-            snapshot = ConnectorPolicySnapshot.from_config(config)
-            existing = self._entries.get(key)
-            if existing is not None and snapshot.generation <= existing.generation:
-                raise ValueError(
-                    f"Monotonically advancing generation required: new generation {snapshot.generation} <= existing generation {existing.generation}"
-                )
-            self._entries[key] = snapshot
+        with get_authority_guard():
+            with self._lock:
+                key = (config.repository_id, config.repository_owner_id)
+                snapshot = ConnectorPolicySnapshot.from_config(config)
+                existing = self._entries.get(key)
+                if existing is not None and snapshot.generation <= existing.generation:
+                    raise ValueError(
+                        f"Monotonically advancing generation required: new generation {snapshot.generation} <= existing generation {existing.generation}"
+                    )
+                self._entries[key] = snapshot
 
     def update(self, config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
         """Sole supported update API enforcing strictly monotonic generation advancement."""
-        with self._lock:
-            key = (config.repository_id, config.repository_owner_id)
-            existing = self._entries.get(key)
-            if existing is None:
-                raise KeyError(f"Connector for repository {key} is not registered; use register() for initial admission")
-            snapshot = ConnectorPolicySnapshot.from_config(config)
-            if snapshot.generation <= existing.generation:
-                raise ValueError(
-                    f"Monotonically advancing generation required for connector policy updates: "
-                    f"new generation {snapshot.generation} <= existing generation {existing.generation}"
-                )
-            self._entries[key] = snapshot
+        with get_authority_guard():
+            with self._lock:
+                key = (config.repository_id, config.repository_owner_id)
+                existing = self._entries.get(key)
+                if existing is None:
+                    raise KeyError(f"Connector for repository {key} is not registered; use register() for initial admission")
+                snapshot = ConnectorPolicySnapshot.from_config(config)
+                if snapshot.generation <= existing.generation:
+                    raise ValueError(
+                        f"Monotonically advancing generation required for connector policy updates: "
+                        f"new generation {snapshot.generation} <= existing generation {existing.generation}"
+                    )
+                self._entries[key] = snapshot
 
     def remove(self, key: tuple[str, str]) -> ConnectorPolicySnapshot | None:
-        with self._lock:
-            return self._entries.pop(key, None)
+        with get_authority_guard():
+            with self._lock:
+                return self._entries.pop(key, None)
 
     def pop(self, key: tuple[str, str], default: Any = None) -> Any:
-        with self._lock:
-            return self._entries.pop(key, default)
+        with get_authority_guard():
+            with self._lock:
+                return self._entries.pop(key, default)
 
     def snapshot(self) -> dict[tuple[str, str], ConnectorPolicySnapshot]:
         with self._lock:
@@ -293,19 +298,21 @@ class ConnectorRegistry:
             return self._entries[key]
 
     def __setitem__(self, key: tuple[str, str], config: GitHubConnectorConfig | ConnectorPolicySnapshot) -> None:
-        with self._lock:
-            snapshot = ConnectorPolicySnapshot.from_config(config)
-            existing = self._entries.get(key)
-            if existing is not None and snapshot.generation <= existing.generation:
-                raise ValueError(
-                    f"Monotonically advancing generation required for connector policy updates: "
-                    f"new generation {snapshot.generation} <= existing generation {existing.generation}"
-                )
-            self._entries[key] = snapshot
+        with get_authority_guard():
+            with self._lock:
+                snapshot = ConnectorPolicySnapshot.from_config(config)
+                existing = self._entries.get(key)
+                if existing is not None and snapshot.generation <= existing.generation:
+                    raise ValueError(
+                        f"Monotonically advancing generation required for connector policy updates: "
+                        f"new generation {snapshot.generation} <= existing generation {existing.generation}"
+                    )
+                self._entries[key] = snapshot
 
     def __delitem__(self, key: tuple[str, str]) -> None:
-        with self._lock:
-            del self._entries[key]
+        with get_authority_guard():
+            with self._lock:
+                del self._entries[key]
 
     def __contains__(self, key: tuple[str, str]) -> bool:
         with self._lock:
