@@ -1,0 +1,472 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Platinum Lodge Multi-Property Hotel API",
+    "version": "1.0.0",
+    "description": "Production API specification for multi-property hotel operations, reservations, folios, housekeeping, and night audit."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1",
+      "description": "Local production gateway"
+    }
+  ],
+  "paths": {
+    "/user/memberships": {
+      "get": {
+        "summary": "Get authenticated user memberships and capabilities across organizations and properties",
+        "operationId": "getUserMemberships",
+        "responses": {
+          "200": {
+            "description": "User memberships retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMembershipsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/properties/{property_id}/inventory/availability": {
+      "get": {
+        "summary": "Query room availability for a date range",
+        "operationId": "checkAvailability",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "room_type_id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "arrival_date",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "departure_date",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of available rooms",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Room" }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ForbiddenError" }
+        }
+      }
+    },
+    "/properties/{property_id}/reservations": {
+      "post": {
+        "summary": "Create a new reservation with policy snapshots and idempotency key",
+        "operationId": "createReservation",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateReservationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reservation created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reservation" }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ConflictError" }
+        }
+      }
+    },
+    "/properties/{property_id}/reservations/{reservation_id}": {
+      "patch": {
+        "summary": "Amend reservation dates/room with optimistic concurrency protection",
+        "operationId": "amendReservation",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AmendReservationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reservation amended",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reservation" }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ConflictError" }
+        }
+      }
+    },
+    "/properties/{property_id}/reservations/{reservation_id}/check-in": {
+      "post": {
+        "summary": "Perform atomic check-in verifying room readiness and creating stay",
+        "operationId": "checkInReservation",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Guest checked in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stay_id": { "type": "string" },
+                    "reservation_id": { "type": "string" },
+                    "status": { "type": "string", "enum": ["CHECKED_IN"] }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequestError" }
+        }
+      }
+    },
+    "/properties/{property_id}/reservations/{reservation_id}/check-out": {
+      "post": {
+        "summary": "Perform check-out verifying zero folio balance and marking room DIRTY",
+        "operationId": "checkOutReservation",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Guest checked out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reservation_id": { "type": "string" },
+                    "status": { "type": "string", "enum": ["CHECKED_OUT"] }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequestError" }
+        }
+      }
+    },
+    "/properties/{property_id}/folios/{folio_id}/charges": {
+      "post": {
+        "summary": "Post an immutable charge debit line to a folio",
+        "operationId": "postFolioCharge",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "folio_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PostChargeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Charge posted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "charge_id": { "type": "string" },
+                    "amount_cents": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/{property_id}/folios/{folio_id}/payments": {
+      "post": {
+        "summary": "Record an immutable payment credit with mandatory idempotency key",
+        "operationId": "recordFolioPayment",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "folio_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecordPaymentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment recorded",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Payment" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/{property_id}/night-audit": {
+      "post": {
+        "summary": "Execute idempotent daily night audit close and advance business date",
+        "operationId": "runNightAudit",
+        "parameters": [
+          {
+            "name": "property_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Night audit completed successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NightAuditResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Room": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "number": { "type": "string" },
+          "room_type_id": { "type": "string" },
+          "cleaning_status": { "type": "string", "enum": ["DIRTY", "CLEANING_IN_PROGRESS", "CLEAN", "INSPECTED"] },
+          "readiness_status": { "type": "string", "enum": ["READY_FOR_CHECKIN", "BLOCKED", "OUT_OF_SERVICE", "MAINTENANCE_REQUIRED"] }
+        },
+        "required": ["id", "number", "room_type_id", "cleaning_status", "readiness_status"]
+      },
+      "Reservation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "organization_id": { "type": "string" },
+          "property_id": { "type": "string" },
+          "guest_name": { "type": "string" },
+          "guest_email": { "type": "string", "format": "email" },
+          "room_id": { "type": "string" },
+          "room_type_id": { "type": "string" },
+          "rate_plan_id": { "type": "string" },
+          "arrival_date": { "type": "string", "format": "date" },
+          "departure_date": { "type": "string", "format": "date" },
+          "adults": { "type": "integer", "minimum": 1 },
+          "rate_cents": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string", "enum": ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"] },
+          "version": { "type": "integer", "minimum": 1 },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "organization_id", "property_id", "guest_name", "arrival_date", "departure_date", "rate_cents", "status", "version"]
+      },
+      "CreateReservationRequest": {
+        "type": "object",
+        "properties": {
+          "room_type_id": { "type": "string" },
+          "rate_plan_id": { "type": "string" },
+          "guest_name": { "type": "string" },
+          "guest_email": { "type": "string", "format": "email" },
+          "arrival_date": { "type": "string", "format": "date" },
+          "departure_date": { "type": "string", "format": "date" },
+          "rate_cents": { "type": "integer", "minimum": 0 },
+          "adults": { "type": "integer", "default": 1 },
+          "room_id": { "type": "string" }
+        },
+        "required": ["room_type_id", "rate_plan_id", "guest_name", "guest_email", "arrival_date", "departure_date", "rate_cents"]
+      },
+      "AmendReservationRequest": {
+        "type": "object",
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "new_arrival_date": { "type": "string", "format": "date" },
+          "new_departure_date": { "type": "string", "format": "date" },
+          "new_room_id": { "type": "string" }
+        },
+        "required": ["expected_version"]
+      },
+      "PostChargeRequest": {
+        "type": "object",
+        "properties": {
+          "department": { "type": "string", "enum": ["ROOM", "TAX", "FOOD_BEVERAGE", "SPA", "PARKING", "MISC", "REVERSAL"] },
+          "description": { "type": "string" },
+          "amount_cents": { "type": "integer" },
+          "business_date": { "type": "string", "format": "date" }
+        },
+        "required": ["department", "description", "amount_cents", "business_date"]
+      },
+      "RecordPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "amount_cents": { "type": "integer", "minimum": 1 },
+          "method": { "type": "string", "enum": ["CASH", "CREDIT_CARD", "DEBIT_CARD", "BANK_TRANSFER", "VOUCHER"] },
+          "idempotency_key": { "type": "string" },
+          "business_date": { "type": "string", "format": "date" },
+          "reference": { "type": "string" }
+        },
+        "required": ["amount_cents", "method", "idempotency_key", "business_date"]
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "folio_id": { "type": "string" },
+          "amount_cents": { "type": "integer" },
+          "method": { "type": "string" },
+          "idempotency_key": { "type": "string" },
+          "status": { "type": "string", "enum": ["CAPTURED", "REFUNDED", "FAILED"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "NightAuditResponse": {
+        "type": "object",
+        "properties": {
+          "audit_id": { "type": "string" },
+          "business_date": { "type": "string", "format": "date" },
+          "next_business_date": { "type": "string", "format": "date" },
+          "total_revenue_cents": { "type": "integer" },
+          "total_payments_cents": { "type": "integer" }
+        }
+      },
+      "UserMembershipsResponse": {
+        "type": "object",
+        "properties": {
+          "user_id": { "type": "string" },
+          "organizations": { "type": "array", "items": { "type": "object" } },
+          "properties": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Authentication token missing or invalid",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "ForbiddenError": {
+        "description": "Tenant boundary or role capability violation",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "ConflictError": {
+        "description": "Optimistic lock conflict or room availability contention",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "BadRequestError": {
+        "description": "Invalid input or unmet business rule precondition",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    }
+  }
+}

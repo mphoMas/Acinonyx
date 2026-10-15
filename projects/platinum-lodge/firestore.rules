@@ -1,0 +1,752 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Hierarchical Multi-Tenancy Architecture for Platinum Lodge Hotel Management System:
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - email: string (required, valid email, <= 100 chars, immutable)
+    //   - full_name: string (required, 1-100 chars)
+    //   - phone: string (optional, <= 25 chars)
+    //   - status: string (optional, ['ACTIVE', 'DEACTIVATED', 'LOCKED'], immutable by non-admin)
+    //   - created_at: timestamp (optional/required on create, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Collection: organizations
+    // Document ID: {orgId}
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - legal_name: string (required, 1-150 chars)
+    //   - contact_email: string (required, valid email, <= 100 chars)
+    //   - status: string (required, ['ACTIVE', 'SUSPENDED', 'ARCHIVED'])
+    //   - tax_identifier: string (optional, <= 50 chars)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/memberships
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - role: string (required, ['org_owner', 'org_admin', 'ORG_OWNER', 'ORG_ADMIN'])
+    //   - user_id: string (required, matches {userId}, immutable)
+    //   - status: string (optional, ['ACTIVE', 'INVITED', 'REVOKED'])
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties
+    // Document ID: {propertyId}
+    // Fields:
+    //   - code: string (required, 1-20 chars, immutable)
+    //   - name: string (required, 1-100 chars)
+    //   - timezone: string (required, 1-50 chars)
+    //   - currency: string (required, 3-char ISO currency code)
+    //   - current_business_date: string (required, YYYY-MM-DD format)
+    //   - country_code: string (required, 2-3 chars)
+    //   - city: string (required, 1-100 chars)
+    //   - address: string (required, 1-200 chars)
+    //   - status: string (required, ['ACTIVE', 'CLOSED_SEASONAL', 'MAINTENANCE', 'ARCHIVED'])
+    //   - star_rating: int (optional, 1-5)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/memberships
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - role: string (required, ['general_manager', 'front_desk', 'night_auditor', 'housekeeping_lead', 'housekeeper', 'maintenance'])
+    //   - user_id: string (required, matches {userId}, immutable)
+    //   - status: string (optional, ['ACTIVE', 'INVITED', 'REVOKED'])
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/rooms
+    // Document ID: {roomId}
+    // Fields:
+    //   - number: string (required, 1-20 chars)
+    //   - type: string (required, 1-50 chars)
+    //   - capacity: int (required, 1-20)
+    //   - rate_cents: int (required, positive integer >= 0)
+    //   - cleaning_status: string (required, ['DIRTY', 'CLEANING_IN_PROGRESS', 'CLEAN', 'INSPECTED'])
+    //   - readiness_status: string (required, ['READY_FOR_CHECKIN', 'BLOCKED', 'OUT_OF_SERVICE', 'MAINTENANCE_REQUIRED'])
+    //   - floor: int (required, -5 to 200)
+    //   - is_smoking: bool (optional)
+    //   - room_type_id: string (optional, <= 100 chars)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/room_types
+    // Document ID: {roomTypeId}
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - code: string (required, 1-20 chars)
+    //   - base_rate_cents: int (required, positive integer >= 0)
+    //   - max_occupancy: int (required, 1-20)
+    //   - amenities: list (optional, <= 50 items)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/rate_plans
+    // Document ID: {planId}
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - cancellation_policy: string (required, 1-500 chars)
+    //   - deposit_required_pct: int (required, 0-100)
+    //   - active: bool (required)
+    //   - code: string (optional, 1-20 chars)
+    //   - cancellation_hours: int (optional, >= 0)
+    //   - is_refundable: bool (optional)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/reservations
+    // Document ID: {reservationId}
+    // Fields:
+    //   - guest_name: string (required, 1-100 chars)
+    //   - email: string (required, valid email, <= 100 chars)
+    //   - room_id: string (required, <= 100 chars)
+    //   - arrival_date: string (required, YYYY-MM-DD format or timestamp)
+    //   - departure_date: string (required, YYYY-MM-DD format or timestamp)
+    //   - adults: int (required, 1-20)
+    //   - rate_cents: int (required, >= 0)
+    //   - status: string (required, ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'CANCELLED', 'NO_SHOW'])
+    //   - deposit_paid_cents: int (required, >= 0)
+    //   - version: int (required, optimistic lock >= 1)
+    //   - phone: string (optional, <= 30 chars)
+    //   - guest_id_number: string (optional, <= 50 chars)
+    //   - room_type_id: string (optional, <= 100 chars)
+    //   - rate_plan_id: string (optional, <= 100 chars)
+    //   - deposit_required_cents: int (optional, >= 0)
+    //   - notes: string (optional, <= 1000 chars)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/folios
+    // Document ID: {folioId}
+    // Fields:
+    //   - reservation_id: string (required, <= 100 chars, immutable)
+    //   - guest_name: string (required, 1-100 chars)
+    //   - status: string (required, ['OPEN', 'CLOSED', 'SETTLED'])
+    //   - balance_cents: int (required, -100000000 to 100000000)
+    //   - folio_number: string (optional, <= 50 chars)
+    //   - currency: string (optional, 3 chars)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/folios/{folioId}/charges
+    // Document ID: {chargeId} (IMMUTABLE: create-only, no update, no delete)
+    // Fields:
+    //   - description: string (required, 1-255 chars)
+    //   - department: string (required, ['ROOM', 'TAX', 'FOOD_BEVERAGE', 'SPA', 'PARKING', 'MISC', 'REVERSAL'])
+    //   - amount_cents: int (required, != 0, -100000000 to 100000000)
+    //   - currency: string (required, 3-char ISO code)
+    //   - business_date: string (required, YYYY-MM-DD)
+    //   - created_at: timestamp (required)
+    //   - created_by: string (required, matches request.auth.uid)
+    //   - reversal_of_id: string (optional, <= 100 chars)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/folios/{folioId}/payments
+    // Document ID: {paymentId} (IMMUTABLE: create-only, no update, no delete)
+    // Fields:
+    //   - method: string (required, ['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'VOUCHER'])
+    //   - amount_cents: int (required, positive integer > 0)
+    //   - currency: string (required, 3-char ISO code)
+    //   - reference: string (optional, <= 100 chars)
+    //   - status: string (required, ['PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED', 'FAILED'])
+    //   - idempotency_key: string (required, 1-100 chars)
+    //   - created_at: timestamp (required)
+    //   - created_by: string (required, matches request.auth.uid)
+    //   - business_date: string (optional, YYYY-MM-DD)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/housekeeping_tasks
+    // Document ID: {taskId}
+    // Fields:
+    //   - room_id: string (required, 1-100 chars, immutable)
+    //   - assigned_to_uid: string (required, <= 100 chars)
+    //   - priority: string (required, ['URGENT', 'HIGH', 'MEDIUM', 'LOW'])
+    //   - cleaning_status: string (required, ['DIRTY', 'CLEANING_IN_PROGRESS', 'CLEAN', 'INSPECTED'])
+    //   - notes: string (required, <= 500 chars)
+    //   - updated_at: timestamp (required)
+    //   - status: string (optional, ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED'])
+    //   - created_at: timestamp (optional, immutable)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/maintenance_blocks
+    // Document ID: {blockId}
+    // Fields:
+    //   - room_id: string (required, 1-100 chars, immutable)
+    //   - reason: string (required, 1-255 chars)
+    //   - start_date: string (required, YYYY-MM-DD or timestamp)
+    //   - end_date: string (required, YYYY-MM-DD or timestamp)
+    //   - active: bool (required)
+    //   - created_by: string (required, matches request.auth.uid, immutable)
+    //   - created_at: timestamp (optional, immutable)
+    //   - updated_at: timestamp (optional)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/audit_logs
+    // Document ID: {logId} (IMMUTABLE: create-only, no update, no delete)
+    // Fields:
+    //   - actor_uid: string (required, matches request.auth.uid)
+    //   - action: string (required, 1-100 chars)
+    //   - resource: string (required, 1-100 chars)
+    //   - details: string (required, 1-2000 chars)
+    //   - created_at: timestamp (required)
+    //   - correlation_id: string (optional, <= 100 chars)
+    //   - ip_address: string (optional, <= 50 chars)
+    //
+    // Subcollection: organizations/{orgId}/properties/{propertyId}/night_audits
+    // Document ID: {auditId} (IMMUTABLE once closed)
+    // Fields:
+    //   - business_date: string (required, YYYY-MM-DD, immutable)
+    //   - closed_by_uid: string (required, matches request.auth.uid, immutable)
+    //   - total_room_revenue_cents: int (required, >= 0)
+    //   - total_payments_cents: int (required, >= 0)
+    //   - closed_at: timestamp (required)
+    //   - balanced: bool (required)
+    //   - total_tax_cents: int (optional, >= 0)
+    //   - status: string (optional, <= 50 chars)
+    //   - created_at: timestamp (optional, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Standard Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() >= 5 &&
+        email.size() <= 100 &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+[.][a-zA-Z]{2,}$');
+    }
+
+    function isValidDateString(val) {
+      return val is string &&
+        val.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidDateOrTimestamp(val) {
+      return val is timestamp || isValidDateString(val);
+    }
+
+    // ===============================================================
+    // Tenancy & Role-Based Access Control (RBAC) Helpers
+    // ===============================================================
+
+    function orgMembershipPath(orgId, uid) {
+      return /databases/$(database)/documents/organizations/$(orgId)/memberships/$(uid);
+    }
+
+    function hasOrgRole(orgId, roles) {
+      return isAuthenticated() &&
+        exists(orgMembershipPath(orgId, request.auth.uid)) &&
+        get(orgMembershipPath(orgId, request.auth.uid)).data.role in roles;
+    }
+
+    function isOrgAdmin(orgId) {
+      return hasOrgRole(orgId, ['org_owner', 'org_admin', 'ORG_OWNER', 'ORG_ADMIN']);
+    }
+
+    function isOrgMember(orgId) {
+      return isAuthenticated() && exists(orgMembershipPath(orgId, request.auth.uid));
+    }
+
+    function propMembershipPath(orgId, propertyId, uid) {
+      return /databases/$(database)/documents/organizations/$(orgId)/properties/$(propertyId)/memberships/$(uid);
+    }
+
+    function hasPropertyRole(orgId, propertyId, roles) {
+      return isAuthenticated() &&
+        exists(propMembershipPath(orgId, propertyId, request.auth.uid)) &&
+        get(propMembershipPath(orgId, propertyId, request.auth.uid)).data.role in roles;
+    }
+
+    function isGeneralManager(orgId, propertyId) {
+      return isOrgAdmin(orgId) ||
+        hasPropertyRole(orgId, propertyId, ['general_manager', 'GENERAL_MANAGER']);
+    }
+
+    function isFrontDesk(orgId, propertyId) {
+      return isGeneralManager(orgId, propertyId) ||
+        hasPropertyRole(orgId, propertyId, ['front_desk', 'FRONT_DESK']);
+    }
+
+    function isNightAuditor(orgId, propertyId) {
+      return isGeneralManager(orgId, propertyId) ||
+        hasPropertyRole(orgId, propertyId, ['night_auditor', 'NIGHT_AUDITOR']);
+    }
+
+    function isHousekeepingLead(orgId, propertyId) {
+      return isGeneralManager(orgId, propertyId) ||
+        hasPropertyRole(orgId, propertyId, ['housekeeping_lead', 'HOUSEKEEPING_LEAD']);
+    }
+
+    function isHousekeeper(orgId, propertyId) {
+      return isHousekeepingLead(orgId, propertyId) ||
+        hasPropertyRole(orgId, propertyId, ['housekeeper', 'HOUSEKEEPER']);
+    }
+
+    function isMaintenance(orgId, propertyId) {
+      return isGeneralManager(orgId, propertyId) ||
+        hasPropertyRole(orgId, propertyId, ['maintenance', 'MAINTENANCE']);
+    }
+
+    function isPropertyStaff(orgId, propertyId) {
+      return isOrgAdmin(orgId) ||
+        (isAuthenticated() && exists(propMembershipPath(orgId, propertyId, request.auth.uid)));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserProfile(data) {
+      return hasRequiredFields(['email', 'full_name']) &&
+        hasOnlyAllowedFields(['email', 'full_name', 'phone', 'status', 'created_at', 'updated_at']) &&
+        data.email is string && isValidEmail(data.email) &&
+        data.full_name is string && data.full_name.size() >= 1 && data.full_name.size() <= 100 &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 25)) &&
+        (!('status' in data) || (data.status in ['ACTIVE', 'DEACTIVATED', 'LOCKED', 'active', 'deactivated', 'locked'])) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidOrganization(data) {
+      return hasRequiredFields(['name', 'legal_name', 'contact_email', 'status']) &&
+        hasOnlyAllowedFields(['name', 'legal_name', 'contact_email', 'status', 'tax_identifier', 'created_at', 'updated_at']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.legal_name is string && data.legal_name.size() >= 1 && data.legal_name.size() <= 150 &&
+        data.contact_email is string && isValidEmail(data.contact_email) &&
+        data.status in ['ACTIVE', 'SUSPENDED', 'ARCHIVED', 'active', 'suspended', 'archived'] &&
+        (!('tax_identifier' in data) || (data.tax_identifier is string && data.tax_identifier.size() <= 50)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidOrgMembership(data) {
+      return hasRequiredFields(['role', 'user_id']) &&
+        hasOnlyAllowedFields(['role', 'user_id', 'status', 'created_at', 'updated_at']) &&
+        data.role in ['org_owner', 'org_admin', 'ORG_OWNER', 'ORG_ADMIN'] &&
+        data.user_id is string && data.user_id.size() >= 1 && data.user_id.size() <= 100 &&
+        (!('status' in data) || (data.status in ['ACTIVE', 'INVITED', 'REVOKED', 'active', 'invited', 'revoked'])) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidProperty(data) {
+      return hasRequiredFields(['code', 'name', 'timezone', 'currency', 'current_business_date', 'country_code', 'city', 'address', 'status']) &&
+        hasOnlyAllowedFields(['code', 'name', 'timezone', 'currency', 'current_business_date', 'country_code', 'city', 'address', 'status', 'star_rating', 'created_at', 'updated_at']) &&
+        data.code is string && data.code.size() >= 1 && data.code.size() <= 20 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.timezone is string && data.timezone.size() >= 1 && data.timezone.size() <= 50 &&
+        data.currency is string && data.currency.size() == 3 &&
+        isValidDateString(data.current_business_date) &&
+        data.country_code is string && data.country_code.size() >= 2 && data.country_code.size() <= 3 &&
+        data.city is string && data.city.size() >= 1 && data.city.size() <= 100 &&
+        data.address is string && data.address.size() >= 1 && data.address.size() <= 200 &&
+        data.status in ['ACTIVE', 'CLOSED_SEASONAL', 'MAINTENANCE', 'ARCHIVED', 'active', 'closed_seasonal', 'maintenance', 'archived'] &&
+        (!('star_rating' in data) || (data.star_rating is int && data.star_rating >= 1 && data.star_rating <= 5)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidPropertyMembership(data) {
+      return hasRequiredFields(['role', 'user_id']) &&
+        hasOnlyAllowedFields(['role', 'user_id', 'status', 'created_at', 'updated_at']) &&
+        data.role in ['general_manager', 'front_desk', 'night_auditor', 'housekeeping_lead', 'housekeeper', 'maintenance',
+                      'GENERAL_MANAGER', 'FRONT_DESK', 'NIGHT_AUDITOR', 'HOUSEKEEPING_LEAD', 'HOUSEKEEPER', 'MAINTENANCE'] &&
+        data.user_id is string && data.user_id.size() >= 1 && data.user_id.size() <= 100 &&
+        (!('status' in data) || (data.status in ['ACTIVE', 'INVITED', 'REVOKED', 'active', 'invited', 'revoked'])) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidRoom(data) {
+      return hasRequiredFields(['number', 'type', 'capacity', 'rate_cents', 'cleaning_status', 'readiness_status', 'floor']) &&
+        hasOnlyAllowedFields(['number', 'room_number', 'type', 'capacity', 'rate_cents', 'cleaning_status', 'readiness_status', 'floor', 'is_smoking', 'room_type_id', 'created_at', 'updated_at']) &&
+        data.number is string && data.number.size() >= 1 && data.number.size() <= 20 &&
+        data.type is string && data.type.size() >= 1 && data.type.size() <= 50 &&
+        data.capacity is int && data.capacity >= 1 && data.capacity <= 20 &&
+        data.rate_cents is int && data.rate_cents >= 0 && data.rate_cents <= 100000000 &&
+        data.cleaning_status in ['DIRTY', 'CLEANING_IN_PROGRESS', 'CLEAN', 'INSPECTED', 'dirty', 'cleaning_in_progress', 'clean', 'inspected'] &&
+        data.readiness_status in ['READY_FOR_CHECKIN', 'BLOCKED', 'OUT_OF_SERVICE', 'MAINTENANCE_REQUIRED', 'ready_for_checkin', 'blocked', 'out_of_service', 'maintenance_required'] &&
+        data.floor is int && data.floor >= -5 && data.floor <= 200 &&
+        (!('is_smoking' in data) || data.is_smoking is bool) &&
+        (!('room_type_id' in data) || (data.room_type_id is string && data.room_type_id.size() <= 100)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidRoomType(data) {
+      return hasRequiredFields(['name', 'code', 'base_rate_cents', 'max_occupancy']) &&
+        hasOnlyAllowedFields(['name', 'code', 'base_rate_cents', 'max_occupancy', 'amenities', 'created_at', 'updated_at']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.code is string && data.code.size() >= 1 && data.code.size() <= 20 &&
+        data.base_rate_cents is int && data.base_rate_cents >= 0 && data.base_rate_cents <= 100000000 &&
+        data.max_occupancy is int && data.max_occupancy >= 1 && data.max_occupancy <= 20 &&
+        (!('amenities' in data) || (data.amenities is list && data.amenities.size() <= 50)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidRatePlan(data) {
+      return hasRequiredFields(['name', 'cancellation_policy', 'deposit_required_pct', 'active']) &&
+        hasOnlyAllowedFields(['name', 'cancellation_policy', 'deposit_required_pct', 'active', 'code', 'cancellation_hours', 'is_refundable', 'created_at', 'updated_at']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.cancellation_policy is string && data.cancellation_policy.size() >= 1 && data.cancellation_policy.size() <= 500 &&
+        data.deposit_required_pct is int && data.deposit_required_pct >= 0 && data.deposit_required_pct <= 100 &&
+        data.active is bool &&
+        (!('code' in data) || (data.code is string && data.code.size() <= 20)) &&
+        (!('cancellation_hours' in data) || (data.cancellation_hours is int && data.cancellation_hours >= 0)) &&
+        (!('is_refundable' in data) || data.is_refundable is bool) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidReservation(data) {
+      return hasRequiredFields(['guest_name', 'email', 'room_id', 'arrival_date', 'departure_date', 'adults', 'rate_cents', 'status', 'deposit_paid_cents', 'version']) &&
+        hasOnlyAllowedFields(['guest_name', 'email', 'guest_email', 'room_id', 'arrival_date', 'departure_date', 'adults', 'rate_cents', 'status', 'deposit_paid_cents', 'version', 'phone', 'guest_id_number', 'room_type_id', 'rate_plan_id', 'deposit_required_cents', 'notes', 'created_at', 'updated_at']) &&
+        data.guest_name is string && data.guest_name.size() >= 1 && data.guest_name.size() <= 100 &&
+        data.email is string && isValidEmail(data.email) &&
+        data.room_id is string && data.room_id.size() <= 100 &&
+        isValidDateOrTimestamp(data.arrival_date) &&
+        isValidDateOrTimestamp(data.departure_date) &&
+        data.adults is int && data.adults >= 1 && data.adults <= 20 &&
+        data.rate_cents is int && data.rate_cents >= 0 && data.rate_cents <= 100000000 &&
+        data.status in ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'CANCELLED', 'NO_SHOW', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'] &&
+        data.deposit_paid_cents is int && data.deposit_paid_cents >= 0 && data.deposit_paid_cents <= 100000000 &&
+        data.version is int && data.version >= 1 &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('guest_id_number' in data) || (data.guest_id_number is string && data.guest_id_number.size() <= 50)) &&
+        (!('room_type_id' in data) || (data.room_type_id is string && data.room_type_id.size() <= 100)) &&
+        (!('rate_plan_id' in data) || (data.rate_plan_id is string && data.rate_plan_id.size() <= 100)) &&
+        (!('deposit_required_cents' in data) || (data.deposit_required_cents is int && data.deposit_required_cents >= 0)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidFolio(data) {
+      return hasRequiredFields(['reservation_id', 'guest_name', 'status', 'balance_cents']) &&
+        hasOnlyAllowedFields(['reservation_id', 'guest_name', 'status', 'balance_cents', 'folio_number', 'currency', 'created_at', 'updated_at']) &&
+        data.reservation_id is string && data.reservation_id.size() <= 100 &&
+        data.guest_name is string && data.guest_name.size() >= 1 && data.guest_name.size() <= 100 &&
+        data.status in ['OPEN', 'CLOSED', 'SETTLED', 'open', 'closed', 'settled'] &&
+        data.balance_cents is int && data.balance_cents >= -100000000 && data.balance_cents <= 100000000 &&
+        (!('folio_number' in data) || (data.folio_number is string && data.folio_number.size() <= 50)) &&
+        (!('currency' in data) || (data.currency is string && data.currency.size() == 3)) &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidCharge(data) {
+      return hasRequiredFields(['description', 'department', 'amount_cents', 'currency', 'business_date', 'created_at', 'created_by']) &&
+        hasOnlyAllowedFields(['description', 'department', 'amount_cents', 'currency', 'business_date', 'created_at', 'created_by', 'reversal_of_id']) &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 255 &&
+        data.department in ['ROOM', 'TAX', 'FOOD_BEVERAGE', 'SPA', 'PARKING', 'MISC', 'REVERSAL', 'room', 'tax', 'food_beverage', 'spa', 'parking', 'misc', 'reversal'] &&
+        data.amount_cents is int && data.amount_cents >= -100000000 && data.amount_cents <= 100000000 && data.amount_cents != 0 &&
+        data.currency is string && data.currency.size() == 3 &&
+        isValidDateString(data.business_date) &&
+        data.created_at is timestamp &&
+        data.created_by is string && data.created_by == request.auth.uid &&
+        (!('reversal_of_id' in data) || (data.reversal_of_id is string && data.reversal_of_id.size() <= 100));
+    }
+
+    function isValidPayment(data) {
+      return hasRequiredFields(['method', 'amount_cents', 'currency', 'status', 'idempotency_key', 'created_at', 'created_by']) &&
+        hasOnlyAllowedFields(['method', 'amount_cents', 'currency', 'reference', 'status', 'idempotency_key', 'created_at', 'created_by', 'business_date']) &&
+        data.method in ['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'VOUCHER', 'cash', 'credit_card', 'debit_card', 'bank_transfer', 'voucher'] &&
+        data.amount_cents is int && data.amount_cents > 0 && data.amount_cents <= 100000000 &&
+        data.currency is string && data.currency.size() == 3 &&
+        data.status in ['PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED', 'FAILED', 'pending', 'authorized', 'captured', 'refunded', 'failed'] &&
+        data.idempotency_key is string && data.idempotency_key.size() >= 1 && data.idempotency_key.size() <= 100 &&
+        data.created_at is timestamp &&
+        data.created_by is string && data.created_by == request.auth.uid &&
+        (!('reference' in data) || (data.reference is string && data.reference.size() <= 100)) &&
+        (!('business_date' in data) || isValidDateString(data.business_date));
+    }
+
+    function isValidHousekeepingTask(data) {
+      return hasRequiredFields(['room_id', 'assigned_to_uid', 'priority', 'cleaning_status', 'notes', 'updated_at']) &&
+        hasOnlyAllowedFields(['room_id', 'assigned_to_uid', 'priority', 'cleaning_status', 'notes', 'updated_at', 'status', 'created_at']) &&
+        data.room_id is string && data.room_id.size() >= 1 && data.room_id.size() <= 100 &&
+        data.assigned_to_uid is string && data.assigned_to_uid.size() <= 100 &&
+        data.priority in ['URGENT', 'HIGH', 'MEDIUM', 'LOW', 'urgent', 'high', 'medium', 'low'] &&
+        data.cleaning_status in ['DIRTY', 'CLEANING_IN_PROGRESS', 'CLEAN', 'INSPECTED', 'dirty', 'cleaning_in_progress', 'clean', 'inspected'] &&
+        data.notes is string && data.notes.size() <= 500 &&
+        data.updated_at is timestamp &&
+        (!('status' in data) || (data.status in ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'pending', 'in_progress', 'completed', 'verified'])) &&
+        (!('created_at' in data) || data.created_at is timestamp);
+    }
+
+    function isValidMaintenanceBlock(data) {
+      return hasRequiredFields(['room_id', 'reason', 'start_date', 'end_date', 'active', 'created_by']) &&
+        hasOnlyAllowedFields(['room_id', 'reason', 'start_date', 'end_date', 'active', 'created_by', 'created_at', 'updated_at']) &&
+        data.room_id is string && data.room_id.size() >= 1 && data.room_id.size() <= 100 &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 255 &&
+        isValidDateOrTimestamp(data.start_date) &&
+        isValidDateOrTimestamp(data.end_date) &&
+        data.active is bool &&
+        data.created_by is string && data.created_by == request.auth.uid &&
+        (!('created_at' in data) || data.created_at is timestamp) &&
+        (!('updated_at' in data) || data.updated_at is timestamp);
+    }
+
+    function isValidAuditLog(data) {
+      return hasRequiredFields(['actor_uid', 'action', 'resource', 'details', 'created_at']) &&
+        hasOnlyAllowedFields(['actor_uid', 'action', 'resource', 'details', 'created_at', 'correlation_id', 'ip_address']) &&
+        data.actor_uid is string && data.actor_uid == request.auth.uid &&
+        data.action is string && data.action.size() >= 1 && data.action.size() <= 100 &&
+        data.resource is string && data.resource.size() >= 1 && data.resource.size() <= 100 &&
+        data.details is string && data.details.size() >= 1 && data.details.size() <= 2000 &&
+        data.created_at is timestamp &&
+        (!('correlation_id' in data) || (data.correlation_id is string && data.correlation_id.size() <= 100)) &&
+        (!('ip_address' in data) || (data.ip_address is string && data.ip_address.size() <= 50));
+    }
+
+    function isValidNightAudit(data) {
+      return hasRequiredFields(['business_date', 'closed_by_uid', 'total_room_revenue_cents', 'total_payments_cents', 'closed_at', 'balanced']) &&
+        hasOnlyAllowedFields(['business_date', 'closed_by_uid', 'total_room_revenue_cents', 'total_payments_cents', 'closed_at', 'balanced', 'total_tax_cents', 'status', 'created_at']) &&
+        isValidDateString(data.business_date) &&
+        data.closed_by_uid is string && data.closed_by_uid == request.auth.uid &&
+        data.total_room_revenue_cents is int && data.total_room_revenue_cents >= 0 && data.total_room_revenue_cents <= 1000000000 &&
+        data.total_payments_cents is int && data.total_payments_cents >= 0 && data.total_payments_cents <= 1000000000 &&
+        data.closed_at is timestamp &&
+        data.balanced is bool &&
+        (!('total_tax_cents' in data) || (data.total_tax_cents is int && data.total_tax_cents >= 0)) &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 50)) &&
+        (!('created_at' in data) || data.created_at is timestamp);
+    }
+
+    // ===============================================================
+    // Root Rule: Default Deny for All Unspecified Paths
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Users Profile Collection
+    // ===============================================================
+    match /users/{userId} {
+      // PII Protection: Only the authenticated user can access their own profile
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUserProfile(request.resource.data) &&
+        areImmutableFieldsUnchanged(['email', 'created_at']) &&
+        (!('status' in request.resource.data) || request.resource.data.status == resource.data.status);
+      allow delete: if false;
+    }
+
+    // ===============================================================
+    // Hierarchical Multi-Tenant Core: Organizations & Properties
+    // ===============================================================
+    match /organizations/{orgId} {
+      // Verified organization members can read organization metadata
+      allow read: if isOrgMember(orgId);
+      allow create: if isOrgAdmin(orgId) && isValidOrganization(request.resource.data);
+      allow update: if isOrgAdmin(orgId) &&
+        isValidOrganization(request.resource.data) &&
+        areImmutableFieldsUnchanged(['created_at']);
+      allow delete: if isOrgAdmin(orgId);
+
+      // Organization Memberships (org_owner, org_admin)
+      match /memberships/{userId} {
+        allow read: if isAuthenticated() && (request.auth.uid == userId || isOrgAdmin(orgId));
+        allow create: if isOrgAdmin(orgId) &&
+          isValidOrgMembership(request.resource.data) &&
+          request.resource.data.user_id == userId;
+        allow update: if isOrgAdmin(orgId) &&
+          isValidOrgMembership(request.resource.data) &&
+          areImmutableFieldsUnchanged(['user_id', 'created_at']);
+        allow delete: if isOrgAdmin(orgId);
+      }
+
+      // Properties within the Organization
+      match /properties/{propertyId} {
+        // Scoped property staff or organization admins can read property details
+        allow read: if isPropertyStaff(orgId, propertyId);
+        allow create: if isOrgAdmin(orgId) && isValidProperty(request.resource.data);
+        allow update: if isGeneralManager(orgId, propertyId) &&
+          isValidProperty(request.resource.data) &&
+          areImmutableFieldsUnchanged(['code', 'created_at']);
+        allow delete: if isOrgAdmin(orgId);
+
+        // Property-Level Memberships
+        match /memberships/{userId} {
+          allow read: if isAuthenticated() && (request.auth.uid == userId || isGeneralManager(orgId, propertyId));
+          allow create: if isGeneralManager(orgId, propertyId) &&
+            isValidPropertyMembership(request.resource.data) &&
+            request.resource.data.user_id == userId;
+          allow update: if isGeneralManager(orgId, propertyId) &&
+            isValidPropertyMembership(request.resource.data) &&
+            areImmutableFieldsUnchanged(['user_id', 'created_at']);
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Rooms Inventory Subcollection
+        match /rooms/{roomId} {
+          // Property staff can read rooms to coordinate operations
+          allow read: if isPropertyStaff(orgId, propertyId);
+          allow create: if isGeneralManager(orgId, propertyId) && isValidRoom(request.resource.data);
+          allow update: if isValidRoom(request.resource.data) && (
+            // General manager has full administrative control within property scope
+            isGeneralManager(orgId, propertyId) ||
+            // Front desk can update cleaning and readiness states
+            (isFrontDesk(orgId, propertyId) &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cleaning_status', 'readiness_status', 'updated_at'])) ||
+            // Housekeeper can ONLY update room cleaning status
+            (isHousekeeper(orgId, propertyId) &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cleaning_status', 'updated_at'])) ||
+            // Maintenance staff can update room readiness status
+            (isMaintenance(orgId, propertyId) &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readiness_status', 'updated_at']))
+          ) && areImmutableFieldsUnchanged(['created_at']);
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Room Types Subcollection
+        match /room_types/{roomTypeId} {
+          allow read: if isPropertyStaff(orgId, propertyId);
+          allow create: if isGeneralManager(orgId, propertyId) && isValidRoomType(request.resource.data);
+          allow update: if isGeneralManager(orgId, propertyId) &&
+            isValidRoomType(request.resource.data) &&
+            areImmutableFieldsUnchanged(['created_at']);
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Rate Plans Subcollection
+        match /rate_plans/{planId} {
+          allow read: if isPropertyStaff(orgId, propertyId);
+          allow create: if isGeneralManager(orgId, propertyId) && isValidRatePlan(request.resource.data);
+          allow update: if isGeneralManager(orgId, propertyId) &&
+            isValidRatePlan(request.resource.data) &&
+            areImmutableFieldsUnchanged(['created_at']);
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Reservations Subcollection
+        match /reservations/{reservationId} {
+          // Front desk, night auditor, and management can access reservations (PII protected from housekeeping/maintenance)
+          allow read: if isFrontDesk(orgId, propertyId) || isNightAuditor(orgId, propertyId);
+          allow create: if isFrontDesk(orgId, propertyId) && isValidReservation(request.resource.data);
+          allow update: if isFrontDesk(orgId, propertyId) &&
+            isValidReservation(request.resource.data) &&
+            areImmutableFieldsUnchanged(['created_at']) &&
+            request.resource.data.version >= resource.data.version;
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Folios Subcollection (Financial Billing Container)
+        match /folios/{folioId} {
+          allow read: if isFrontDesk(orgId, propertyId) || isNightAuditor(orgId, propertyId);
+          allow create: if isFrontDesk(orgId, propertyId) && isValidFolio(request.resource.data);
+          allow update: if isFrontDesk(orgId, propertyId) &&
+            isValidFolio(request.resource.data) &&
+            areImmutableFieldsUnchanged(['reservation_id', 'created_at']);
+          // Folios are financial containers and must not be deleted
+          allow delete: if false;
+
+          // Charges Subcollection (IMMUTABLE double-entry journal lines: create-only, no update, no delete)
+          match /charges/{chargeId} {
+            allow read: if isFrontDesk(orgId, propertyId) || isNightAuditor(orgId, propertyId);
+            allow create: if (isFrontDesk(orgId, propertyId) || isNightAuditor(orgId, propertyId)) &&
+              isValidCharge(request.resource.data) &&
+              request.resource.data.created_by == request.auth.uid;
+            allow update: if false;
+            allow delete: if false;
+          }
+
+          // Payments Subcollection (IMMUTABLE payment entries: create-only, no update, no delete)
+          match /payments/{paymentId} {
+            allow read: if isFrontDesk(orgId, propertyId) || isNightAuditor(orgId, propertyId);
+            allow create: if isFrontDesk(orgId, propertyId) &&
+              isValidPayment(request.resource.data) &&
+              request.resource.data.created_by == request.auth.uid;
+            allow update: if false;
+            allow delete: if false;
+          }
+        }
+
+        // Housekeeping Tasks Subcollection
+        match /housekeeping_tasks/{taskId} {
+          // Housekeepers, leads, front desk, and management can view tasks
+          allow read: if isHousekeeper(orgId, propertyId) || isFrontDesk(orgId, propertyId);
+          allow create: if (isHousekeepingLead(orgId, propertyId) || isFrontDesk(orgId, propertyId)) &&
+            isValidHousekeepingTask(request.resource.data);
+          allow update: if isValidHousekeepingTask(request.resource.data) &&
+            areImmutableFieldsUnchanged(['room_id', 'created_at']) && (
+              isHousekeepingLead(orgId, propertyId) ||
+              isFrontDesk(orgId, propertyId) ||
+              // Housekeepers can update cleaning status, status, notes, updated_at
+              (isHousekeeper(orgId, propertyId) &&
+               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cleaning_status', 'status', 'notes', 'updated_at']))
+            );
+          allow delete: if isHousekeepingLead(orgId, propertyId);
+        }
+
+        // Maintenance Blocks Subcollection
+        match /maintenance_blocks/{blockId} {
+          allow read: if isMaintenance(orgId, propertyId) || isFrontDesk(orgId, propertyId);
+          allow create: if (isMaintenance(orgId, propertyId) || isGeneralManager(orgId, propertyId)) &&
+            isValidMaintenanceBlock(request.resource.data) &&
+            request.resource.data.created_by == request.auth.uid;
+          allow update: if (isMaintenance(orgId, propertyId) || isGeneralManager(orgId, propertyId)) &&
+            isValidMaintenanceBlock(request.resource.data) &&
+            areImmutableFieldsUnchanged(['room_id', 'created_by', 'created_at']);
+          allow delete: if isGeneralManager(orgId, propertyId);
+        }
+
+        // Audit Logs Subcollection (IMMUTABLE security audit records: create-only, no update, no delete)
+        match /audit_logs/{logId} {
+          // Read restricted to property General Manager or Org Admin
+          allow read: if isGeneralManager(orgId, propertyId);
+          allow create: if isPropertyStaff(orgId, propertyId) &&
+            isValidAuditLog(request.resource.data) &&
+            request.resource.data.actor_uid == request.auth.uid;
+          allow update: if false;
+          allow delete: if false;
+        }
+
+        // Night Audits Subcollection (IMMUTABLE once closed)
+        match /night_audits/{auditId} {
+          allow read: if isNightAuditor(orgId, propertyId) || isGeneralManager(orgId, propertyId);
+          allow create: if (isNightAuditor(orgId, propertyId) || isGeneralManager(orgId, propertyId)) &&
+            isValidNightAudit(request.resource.data) &&
+            request.resource.data.closed_by_uid == request.auth.uid;
+          // IMMUTABLE once closed: only un-balanced / draft records can be modified
+          allow update: if (isNightAuditor(orgId, propertyId) || isGeneralManager(orgId, propertyId)) &&
+            resource.data.balanced == false &&
+            isValidNightAudit(request.resource.data) &&
+            request.resource.data.closed_by_uid == request.auth.uid &&
+            areImmutableFieldsUnchanged(['business_date', 'closed_by_uid', 'created_at']);
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}
