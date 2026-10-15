@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 15
     env:
       MAS_SWARM_TEST_IMAGE: python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+      MAS_COORDINATOR_TEST_IMAGE: python:3.12-slim
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,12 +23,18 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install system deps (virtual display + input)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xdotool bubblewrap openssl
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xdotool bubblewrap openssl
+          sudo chmod u+s "$(which bwrap)" || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Install package
-        run: pip install -e ".[dev,browser]"
+        run: |
+          pip install uv
+          pip install -e ".[dev,browser]"
       - name: Install pinned browser and worker image
         run: |
           python -m playwright install --with-deps chromium
+          docker pull python:3.12-slim
           docker pull "$MAS_SWARM_TEST_IMAGE"
       - name: Lint
         run: ruff check mas tests
