@@ -12,6 +12,7 @@ __pycache__/
 # Runtime outputs & audit logs
 workspace/audit/
 workspace/scratch/
+workspace/Hotel/
 workspace/*.png
 workspace/*.jsonl
 company/founder/*.log
