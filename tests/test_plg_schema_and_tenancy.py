@@ -13,10 +13,7 @@ Verifies:
 from __future__ import annotations
 
 import datetime
-from pathlib import Path
 import pytest
-import sqlite3
-import uuid
 
 import sys
 sys.path.insert(0, "/home/acinonyx/Desktop/MAS/projects/platinum-lodge")
@@ -26,8 +23,6 @@ from hotel_core import (
     FolioSettlementError,
     HotelDatabase,
     HotelService,
-    InsufficientPermissionsError,
-    TenantContext,
     TenantIsolationViolationError,
 )
 
