@@ -3,6 +3,7 @@
 
 > **Document Type:** Pre-Contractual Joint Venture Term Sheet & Risk Allocation Framework  
 > **Party A (Technology & AI Partner):** Acinonyx Consulting Group (Pty) Ltd / AcinonyxLabs ("Acinonyx")  
+> **Party A Website:** [acinonyxlabs.com](http://acinonyxlabs.com/)  
 > **Party B (Strategic / Commercial Partner):** [Partner Company Legal Name] ("Partner")  
 > **Effective Date:** [Day] [Month], 2026  
 > **Accompanying Technical Annex:** [AcinonyxLabs Company Profile](COMPANY_PROFILE.md) (Schedule A)

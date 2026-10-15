@@ -6,6 +6,7 @@
 > **Headquarters:** Johannesburg, South Africa | Global Reach  
 > **Primary Contact:** Mpho Mashile (Founder & Chief Principal Agentic Engineer)  
 > **Email:** [mphoset@gmail.com](mailto:mphoset@gmail.com) | **Tel:** +27 78 05 05 277  
+> **Official Website:** [acinonyxlabs.com](http://acinonyxlabs.com/)  
 > **Repository:** [github.com/mphoMas/Acinonyx](https://github.com/mphoMas/Acinonyx) | **Corporate Repo:** [github.com/mphoMas/AcinonyxLabs](https://github.com/mphoMas/AcinonyxLabs)  
 > **Application:** Core Exhibit / Technical & Commercial Schedule A for Joint Venture Agreements
 
@@ -108,6 +109,16 @@ AcinonyxLabs rejects the separation between "data pipelines" and "AI agents." Ou
 - **Anti-Sycophancy Multi-Agent Debate (MAD):** Dialectical verification protocol featuring blind-masked claim submission, round caps ($K \le 3$), and automated contrarian injection to mathematically eradicate sycophantic consensus.
 - **Cognitive Memory & Comms Vault:** SQLite WAL-mode FTS5 semantic telemetry (`comms_vault.db`) capturing multi-agent trajectory history, vocabulary depth, and instant semantic retrieval.
 - **Native Model Context Protocol (MCP):** Universal JSON-RPC 2.0 client/server matrix standardizing tool, database, API, and code sandbox interactions over STDIO and HTTP transports.
+
+### Pillar 3: Commercial Product Family ([acinonyxlabs.com](http://acinonyxlabs.com/))
+AcinonyxLabs translates its core data and agentic engines into four commercial product applications designed for enterprise friction reduction:
+
+| Product | Domain | Description & Capabilities | Runtime Engine Underpinning |
+|---|---|---|---|
+| **Access** | Customer Experiences | A modernized front door for enterprise businesses; intelligent customer intake and dynamic self-service workflows. | Native MCP Client interfaces + Agent Task Decomposition. |
+| **Collect** | Payment Operations | Connects customer payment flows directly to the service actions they unlock, ensuring seamless transaction fulfillment. | Grounded verification invariants & idempotent transaction auditing. |
+| **Flow** | Workflow Automation | Transforms incoming documents, invoices, and contracts into structured, verified work streams that move across systems. | MAS-Core Finite State Machines (FSM) & Sequential SOP Pipelines. |
+| **Signal** | Operational Intelligence | Real-time monitoring and anomaly routing; gives every exception, SLA breach, or operational failure an immediate owner. | SQLite WAL FTS5 Comms Vault & automated alert dispatch. |
 
 ---
 
@@ -250,6 +261,7 @@ Joint solutions engineered with AcinonyxLabs incorporate standard enterprise lia
 * **Registered Address:** Johannesburg, Gauteng, South Africa
 * **Legal Counsel / Representative:** Mpho Mashile
 * **Primary Email:** [mphoset@gmail.com](mailto:mphoset@gmail.com) | **Tel:** +27 78 05 05 277
+* **Official Website:** [acinonyxlabs.com](http://acinonyxlabs.com/)
 * **LinkedIn:** [linkedin.com/in/mpho-mashile-04ab896a](https://www.linkedin.com/in/mpho-mashile-04ab896a/)
 * **Credentials:** [credly.com/users/mpho-mashile](https://www.credly.com/users/mpho-mashile)
 
