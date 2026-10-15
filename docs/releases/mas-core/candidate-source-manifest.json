@@ -1,0 +1,28 @@
+{
+  "scope": "SHA256 of changed runtime, infrastructure, tests and setup files; unchanged baseline is base_commit",
+  "base_commit": "dd195c01974b42c41584b126ee17016934264af3",
+  "files": {
+    ".dockerignore": "79c67c188bf7bf067906d7d7caca728169819ff7a5d341c8fe75f48e619af92e",
+    ".github/workflows/ci.yml": "ea119e81c30382e0b4cb7ec79b5b726f5b891f43eacdfd2032ef44f49a7440cb",
+    "Dockerfile": "b63994572110ed53e13d791af70896aa7f1d8570c7d4757b7955037523f5beee",
+    "infra/gce/.gitignore": "46642f80e3090d678254db8be4d1166b71c4f7fcb451ef4d53fc2e12446e761c",
+    "infra/gce/.terraform.lock.hcl": "f14a50e10e9471e724d322b2e91ecc3d13f7796433902af5e449264a290c2553",
+    "infra/gce/README.md": "6efe6f0458e3e0c4e1763e60a4692bdfd6cd0ad8bf8cad07c013c74151f359e3",
+    "infra/gce/bootstrap.sh": "822781e870ae5719c57be8ac12eac2a0ba6d6b1f3e471aa2233f4a289b7db878",
+    "infra/gce/main.tf": "55856ba297920babb98cedc609d7f35e7f19474cef3197c21cb2c00759fa4033",
+    "infra/gce/terraform.tfvars.example": "c2eb6f077b43d2c3d086297848f5e77a6c65d3d92e7016259c4d41e81ad03aae",
+    "infra/gce/tests/pilot.tftest.hcl": "23baa34cc5da2fec0f6707027a815ca2ffd37eb2b90ceb4e8351e193bd4646bb",
+    "mas/authority.py": "65cf242086e03b9015f29bb710b58fd6ce56219e8e65b7a67dcc3ba4441112a3",
+    "mas/iam.py": "49068cd4635219e10b59ad5f93985a2995ebee15f1b921947391a7fe1c22dede",
+    "mas/pm/delivery.py": "560532e250bd070eb765aef95656a1fde22594013d685b0dd120b9100b6f05fe",
+    "mas/pm/receipt_access.py": "afe9e44c7f5f5987a12c36f5928464d88ddfa046e98a3d299d79da873f3b79d5",
+    "mas/pm/receipt_contracts.py": "5f7d56a5ca3df572ac44897a07e53d7d6a15f2c895ab40a16faa11157b66a81a",
+    "mas/pm/receipts.py": "b78b08dd4293820bba5672805834e885fca9684f2567afe8e1308afd536e5c66",
+    "requirements-development.txt": "b18d827b8d9fbd9b44d485096eb69ba930962c326150e01010f5c863d948509a",
+    "scripts/qualify_live_coding.py": "be3d0748fe4a20f364cf99565a38116da18dac632b2df51b2cc63f904885a1b0",
+    "scripts/setup_cloud_development.sh": "20cddbc8640155ecc4a4cbfbfaf0eb0aacdbdd67bb4fe30289943d45a82f3a11",
+    "tests/test_gha_receipt_slice.py": "f17164a3fb50d4946694c0c8fcb6f32ec7c17bbfc03f3ed595afe0f3b6b587b1",
+    "tests/test_live_coding_qualification.py": "3235d70f91c93c008de0fd1f2431f0130e5227b076a198f7a2ab90bc3bc54c44",
+    "tests/test_receipt_authority_regressions.py": "ddd89e8dd363cf8a0f4176430fa98192d4e98d270a0e13b9acd5db6c4a39dad7"
+  }
+}

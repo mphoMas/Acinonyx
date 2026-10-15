@@ -1,0 +1,109 @@
+{
+  "status": "development_candidate_verified; full_release_incomplete",
+  "date": "2026-10-15",
+  "branch": "release/mas-core",
+  "base_commit": "dd195c01974b42c41584b126ee17016934264af3",
+  "candidate_identity": {
+    "source_manifest_sha256": "52dea9c6e085fb65699267e786072ac1017a25ed3cd94540fa8a014f29f97cc6",
+    "source_manifest": "/workspace/mas-release-evidence/source-manifest.json",
+    "working_changes": "uncommitted; not pushed"
+  },
+  "environment": {
+    "python": "3.12.14",
+    "os": "Debian 13 amd64",
+    "browser": "managed system Chromium; not Playwright-pinned binary",
+    "worker_image": "python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f",
+    "isolation": "application Docker and bubblewrap enabled; outer execution sandbox escalated for nested UID maps"
+  },
+  "checks": {
+    "full_repository_gate": {
+      "stages_passed": 5,
+      "stages_total": 5,
+      "pytest": {
+        "tests": 1003,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1003
+      }
+    },
+    "clean_installed_wheel_tests": {
+      "tests": 128,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 128
+    },
+    "packaged_source_integrity": {
+      "installed_root": "/workspace/mas-wheel-venv/lib/python3.12/site-packages/mas",
+      "files_checked": 127,
+      "mismatches": []
+    },
+    "staged_runtime": {
+      "status": "passed",
+      "checks": [
+        "actual dashboard startup",
+        "active health response",
+        "portal HTML served",
+        "unconfigured dispatch denied with 401"
+      ],
+      "scope": "staged development runtime; not production or live-model acceptance"
+    },
+    "setup_script": "executed successfully",
+    "desktop": "3 real Xvfb/xdotool tests included in full suite"
+  },
+  "wheel": {
+    "filename": "mas_core-0.2.0-py3-none-any.whl",
+    "sha256": "586ad48a62ad9e4c6f3a306161169cee78c7b8a3b87be502feb0bf024d54bf52"
+  },
+  "logs": {
+    "final-gate.log": {
+      "path": "/workspace/mas-release-evidence/final-gate.log",
+      "sha256": "3c91995f1fe93e41fbe923e5724e6d3e1b7d0a853235f35c439a98d9ad81c919"
+    },
+    "final.xml": {
+      "path": "/workspace/mas-release-evidence/final.xml",
+      "sha256": "4a5e6ee15cff2e5403cf4e8075f25b4c1e00bfe4119d47e06a058ef6aca9208b"
+    },
+    "wheel-tests.log": {
+      "path": "/workspace/mas-release-evidence/wheel-tests.log",
+      "sha256": "396397d1a37313052a61f86d7a2b8dd2754e57d3338904824711487d11546df9"
+    },
+    "wheel-tests.xml": {
+      "path": "/workspace/mas-release-evidence/wheel-tests.xml",
+      "sha256": "81f3cbe0d44c15a55b5eeb098b3fbaa4936cc4edfe133273f28f8be071a5517c"
+    },
+    "runtime-smoke.json": {
+      "path": "/workspace/mas-release-evidence/runtime-smoke.json",
+      "sha256": "79a95969c4044defa96ff196ad740624354246b8f42b205033ec014d8e4bfed8"
+    },
+    "setup-script.log": {
+      "path": "/workspace/mas-release-evidence/setup-script.log",
+      "sha256": "b36985bd1929a911e41f985e514539b9ff713156443b559ed24b58476d13909f"
+    }
+  },
+  "gemini": {
+    "requested": "Gemini 3.8",
+    "api_model_id": "unverified",
+    "credential_injected": false,
+    "authenticated_discovery": "not_run_missing_configuration",
+    "documentation_request": "proxy tunnel denied with HTTP 403 even after domains appeared in configuration metadata"
+  },
+  "remaining_engineering": [
+    "general shared contracts and platform consolidation",
+    "accepted PM-to-coding-to-approval/export vertical slice",
+    "historical identity migration",
+    "per-adapter production admission and interface cutover"
+  ],
+  "external_prerequisites": [
+    "usable Gemini binding and exact model ID",
+    "deployment host and independent witness operator",
+    "historical identity mappings and migration authority",
+    "separate implementation/release reviewer",
+    "measured load/restore/soak and 30-day observation"
+  ],
+  "independent_acceptance": "not_performed",
+  "production_activation": "not_performed",
+  "remote_publication": "not_performed",
+  "record_scope": "Historical pre-publication snapshot; superseded for current status by STATUS.md and post-publication-validation.json"
+}

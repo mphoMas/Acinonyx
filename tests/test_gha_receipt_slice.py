@@ -37,6 +37,7 @@ from mas.iam import MultiTenantIAM, StandardRole, TenantContext
 from mas.pm.delivery import DeliveryGateError, DeliveryService, delivery_admin_actor
 from mas.pm.gateway.models import ConnectorRegistry, GitHubConnectorConfig
 from mas.pm.models import Issue, Project
+from mas.pm.receipt_access import ReceiptAccess
 from mas.pm.receipts import (
     MAX_CANONICAL_BYTES,
     get_receipt,
@@ -134,7 +135,7 @@ def setup_env(tmp_path):
     db.create_issue(Issue(id="issue-1", project_id="proj-1", key="P1-1", title="Task 1", appetite_tokens=1000, path_whitelist=["mas/"]))
 
     # Enroll in delivery
-    delivery_svc = DeliveryService(db)
+    delivery_svc = DeliveryService(db, receipt_access=ReceiptAccess(trusted_local=True))
     from mas.pm.coordinator import trusted_coordinator_admin_scope
 
     with trusted_coordinator_admin_scope(), delivery_admin_actor("coordinator"):
@@ -265,6 +266,7 @@ os.kill(os.getpid(), signal.SIGKILL)
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
 
     assert result["status"] == "EXISTING"
@@ -296,6 +298,7 @@ def test_fresh_auth_recovery_after_token_expiry(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert first["status"] == "CREATED"
 
@@ -312,6 +315,7 @@ def test_fresh_auth_recovery_after_token_expiry(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     # Fresh token recovers EXISTING
@@ -327,6 +331,7 @@ def test_fresh_auth_recovery_after_token_expiry(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert second["status"] == "EXISTING"
     assert second["receipt_id"] == first["receipt_id"]
@@ -347,6 +352,7 @@ def test_concurrent_identical_observations(setup_env):
                 make_payload(),
                 issue_id="issue-1",
                 db=setup_env["db"],
+                access=ReceiptAccess(trusted_local=True),
             )
             results.append(res)
         except Exception as e:
@@ -392,6 +398,7 @@ def test_concurrent_conflicting_observations(setup_env):
                 make_payload(outcome=outcome),
                 issue_id="issue-1",
                 db=setup_env["db"],
+                access=ReceiptAccess(trusted_local=True),
             )
             results.append(res)
         except Exception as e:
@@ -411,7 +418,7 @@ def test_concurrent_conflicting_observations(setup_env):
     assert "OBSERVATION_CONFLICT" in str(errors[0])
 
     # Check original row intact in DB
-    receipt = get_receipt(setup_env["binding_1"], results[0]["receipt_id"], db=setup_env["db"])
+    receipt = get_receipt(setup_env["binding_1"], results[0]["receipt_id"], db=setup_env["db"], access=ReceiptAccess(trusted_local=True))
     assert receipt is not None
     assert receipt["receipt_id"] == results[0]["receipt_id"]
 
@@ -426,6 +433,7 @@ def test_new_attempt_same_action_different_observation(setup_env):
         make_payload(outcome="FAILED", attempt=1),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert first["status"] == "CREATED"
 
@@ -437,6 +445,7 @@ def test_new_attempt_same_action_different_observation(setup_env):
         make_payload(outcome="PASSED", attempt=2),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert second["status"] == "CREATED"
     assert first["receipt_id"] != second["receipt_id"]
@@ -459,6 +468,7 @@ def test_changed_contract_requires_new_action(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert first["status"] == "CREATED"
 
@@ -472,6 +482,7 @@ def test_changed_contract_requires_new_action(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     # Original action and receipt intact
@@ -494,6 +505,7 @@ def test_cross_tenant_isolation(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     receipt_id = first["receipt_id"]
 
@@ -507,14 +519,15 @@ def test_cross_tenant_isolation(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     # Tenant B tries to read Tenant A's receipt -> returns None (no disclosure)
-    res = get_receipt(setup_env["binding_2"], receipt_id, db=setup_env["db"])
+    res = get_receipt(setup_env["binding_2"], receipt_id, db=setup_env["db"], access=ReceiptAccess(trusted_local=True))
     assert res is None
 
     # Tenant A reads own receipt -> succeeds
-    res_a = get_receipt(setup_env["binding_1"], receipt_id, db=setup_env["db"])
+    res_a = get_receipt(setup_env["binding_1"], receipt_id, db=setup_env["db"], access=ReceiptAccess(trusted_local=True))
     assert res_a is not None
     assert res_a["receipt_id"] == receipt_id
     assert res_a["tenant_id"] == "tenant-1"
@@ -531,6 +544,7 @@ def test_foreign_task_not_enrolled(setup_env):
             make_payload(),
             issue_id="issue-nonexistent",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
 
@@ -553,10 +567,11 @@ def test_naked_tenant_context_rejected(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     with pytest.raises(PermissionError, match="Naked TenantContext cannot be accepted as proof of IAM authentication"):
-        get_receipt(naked_ctx, "rcpt_" + "0" * 64, db=setup_env["db"])
+        get_receipt(naked_ctx, "rcpt_" + "0" * 64, db=setup_env["db"], access=ReceiptAccess(trusted_local=True))
 
 
 def test_sqlite_triggers_block_mutation_and_replace(setup_env):
@@ -569,6 +584,7 @@ def test_sqlite_triggers_block_mutation_and_replace(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     receipt_id = res["receipt_id"]
     conn = setup_env["db"]._get_connection()
@@ -635,6 +651,7 @@ def test_authority_guard_revocation_ordering(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=setup_env["db"],
+        access=ReceiptAccess(trusted_local=True),
     )
     assert res1["status"] == "CREATED"
 
@@ -649,6 +666,7 @@ def test_authority_guard_revocation_ordering(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     # 3. New session, then suspend principal -> blocked
@@ -666,6 +684,7 @@ def test_authority_guard_revocation_ordering(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
     # 4. Suspend tenant -> blocked
@@ -684,6 +703,7 @@ def test_authority_guard_revocation_ordering(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
+            access=ReceiptAccess(trusted_local=True),
         )
 
 
@@ -714,7 +734,7 @@ def test_connector_policy_revocation_blocks_admission(setup_env):
             make_payload(),
             issue_id="issue-1",
             db=setup_env["db"],
-            connector_registry=conn_reg,
+            access=ReceiptAccess(conn_reg, ("100", "200"), "tenant-1", "proj-1"),
         )
 
 
@@ -726,12 +746,12 @@ def test_check_scope_and_ordering_validation(setup_env):
     # 1. Unsorted contract checks -> rejected
     c_unsorted = make_contract(check_ids=["check-b", "check-a"])
     with pytest.raises(ValueError, match="check_ids must be strictly sorted and unique"):
-        record_observation(binding, "a1", "o1", c_unsorted, make_payload(), issue_id="issue-1", db=db)
+        record_observation(binding, "a1", "o1", c_unsorted, make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 2. Duplicate contract checks -> rejected
     c_dups = make_contract(check_ids=["check-a", "check-a"])
     with pytest.raises(ValueError, match="check_ids must be strictly sorted and unique"):
-        record_observation(binding, "a1", "o1", c_dups, make_payload(), issue_id="issue-1", db=db)
+        record_observation(binding, "a1", "o1", c_dups, make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 3. Unsorted payload item checks -> rejected
     p_unsorted = make_payload(items=[
@@ -739,28 +759,28 @@ def test_check_scope_and_ordering_validation(setup_env):
         {"check_id": "check-a", "claimed_outcome": "PASSED"},
     ])
     with pytest.raises(ValueError, match="item check_ids must be strictly sorted and unique"):
-        record_observation(binding, "a1", "o1", make_contract(), p_unsorted, issue_id="issue-1", db=db)
+        record_observation(binding, "a1", "o1", make_contract(), p_unsorted, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 4. Unknown item check -> rejected
     p_unknown = make_payload(items=[
         {"check_id": "check-unknown", "claimed_outcome": "PASSED"},
     ])
     with pytest.raises(ValueError, match="item check_ids must be subset of contract check_ids"):
-        record_observation(binding, "a1", "o1", make_contract(), p_unknown, issue_id="issue-1", db=db)
+        record_observation(binding, "a1", "o1", make_contract(), p_unknown, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 5. Invalid claimed_outcome -> rejected
     p_bad_outcome = make_payload(items=[
         {"check_id": "check-a", "claimed_outcome": "INVALID_STATE"},
     ])
     with pytest.raises(ValueError, match="invalid claimed_outcome"):
-        record_observation(binding, "a1", "o1", make_contract(), p_bad_outcome, issue_id="issue-1", db=db)
+        record_observation(binding, "a1", "o1", make_contract(), p_bad_outcome, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 6. Equality with contract set -> allowed
     p_equal = make_payload(items=[
         {"check_id": "check-a", "claimed_outcome": "PASSED"},
         {"check_id": "check-b", "claimed_outcome": "PASSED"},
     ])
-    res = record_observation(binding, "act-check-equal", "o1", make_contract(), p_equal, issue_id="issue-1", db=db)
+    res = record_observation(binding, "act-check-equal", "o1", make_contract(), p_equal, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
     assert res["status"] == "CREATED"
 
 
@@ -773,42 +793,42 @@ def test_limits_and_receipt_quota_boundaries(setup_env):
     oversized_payload = make_payload()
     oversized_payload["limitations"] = "x" * (MAX_CANONICAL_BYTES + 100)
     with pytest.raises(ValueError, match="Request bounds exceeded: combined canonical JSON exceeds"):
-        record_observation(binding, "act-oversized", "o1", make_contract(), oversized_payload, issue_id="issue-1", db=db)
+        record_observation(binding, "act-oversized", "o1", make_contract(), oversized_payload, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 2. Items > 128 -> rejected
     check_ids_129 = [f"chk-{i:03d}" for i in range(129)]
     contract_129 = make_contract(check_ids=check_ids_129)
     payload_129 = make_payload(items=[{"check_id": cid, "claimed_outcome": "PASSED"} for cid in check_ids_129])
     with pytest.raises(ValueError, match="items count 129 exceeds limit 128"):
-        record_observation(binding, "act-129", "o1", contract_129, payload_129, issue_id="issue-1", db=db)
+        record_observation(binding, "act-129", "o1", contract_129, payload_129, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 3. Artifacts > 64 -> rejected
     payload_65_art = make_payload()
     payload_65_art["artifact_claims"] = [{"digest": "a" * 64} for _ in range(65)]
     with pytest.raises(ValueError, match="artifact_claims count 65 exceeds limit 64"):
-        record_observation(binding, "act-65-art", "o1", make_contract(), payload_65_art, issue_id="issue-1", db=db)
+        record_observation(binding, "act-65-art", "o1", make_contract(), payload_65_art, issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
     # 4. Quota cap: verify receipt creation stops at cap, but existing receipt retrieves
     from mas.pm import receipts
     orig_quota = receipts.MAX_RECEIPTS_PER_PROJECT
     try:
         receipts.MAX_RECEIPTS_PER_PROJECT = 2
-        r1 = record_observation(binding, "act-q1", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db)
+        r1 = record_observation(binding, "act-q1", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
         assert r1["status"] == "CREATED"
 
-        r2 = record_observation(binding, "act-q2", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db)
+        r2 = record_observation(binding, "act-q2", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
         assert r2["status"] == "CREATED"
 
         # Third admission exceeds quota
         with pytest.raises(ValueError, match="PROJECT_RECEIPT_QUOTA_EXCEEDED"):
-            record_observation(binding, "act-q3", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db)
+            record_observation(binding, "act-q3", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
 
         # Existing retrieval at cap is preserved
-        r1_dup = record_observation(binding, "act-q1", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db)
+        r1_dup = record_observation(binding, "act-q1", "obs-1", make_contract(), make_payload(), issue_id="issue-1", db=db, access=ReceiptAccess(trusted_local=True))
         assert r1_dup["status"] == "EXISTING"
         assert r1_dup["receipt_id"] == r1["receipt_id"]
 
-        fetched = get_receipt(binding, r1["receipt_id"], db=db)
+        fetched = get_receipt(binding, r1["receipt_id"], db=db, access=ReceiptAccess(trusted_local=True))
         assert fetched is not None
         assert fetched["receipt_id"] == r1["receipt_id"]
     finally:
@@ -833,6 +853,7 @@ def test_no_delivery_phase_or_budget_mutation(setup_env):
         make_payload(),
         issue_id="issue-1",
         db=db,
+        access=ReceiptAccess(trusted_local=True),
     )
     assert res["status"] == "CREATED"
 

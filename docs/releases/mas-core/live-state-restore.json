@@ -1,0 +1,21 @@
+{
+  "scope": "two restores of a quiescent live-qualification swarm database using its original IAM authority; not production service RPO/RTO qualification",
+  "trials": [
+    {
+      "trial": 1,
+      "result": "passed",
+      "elapsed_seconds": 0.0039,
+      "state": "awaiting_approval",
+      "candidate_hash": "eef20d2973d3f19c8d30378290799c76d143b1865b111416286619f24735ccb1",
+      "backup_sha256": "0c29f2d800df559f59ef208351f9b91575163bc7ee1a0d2234797e29133f3905"
+    },
+    {
+      "trial": 2,
+      "result": "passed",
+      "elapsed_seconds": 0.0035,
+      "state": "awaiting_approval",
+      "candidate_hash": "eef20d2973d3f19c8d30378290799c76d143b1865b111416286619f24735ccb1",
+      "backup_sha256": "0c29f2d800df559f59ef208351f9b91575163bc7ee1a0d2234797e29133f3905"
+    }
+  ]
+}

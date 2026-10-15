@@ -24,7 +24,7 @@ RUN --mount=type=secret,id=proxy_ca \
     && chmod -R a+rX /ms-playwright
 
 COPY mas/ mas/
-COPY main.py pyproject.toml README.md ./
+COPY main.py pyproject.toml README.md requirements-development.txt ./
 COPY company/MANDATE.md company/MANDATE.md
 COPY docs/ docs/
 COPY portal/ portal/
@@ -35,7 +35,7 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     useradd --create-home --uid 10001 mas \
     && mkdir -p /app/workspace/audit /app/workspace/projects \
-    && pip install -e ".[browser]" \
+    && pip install -c requirements-development.txt -e ".[browser]" \
     && chown -R mas:mas /app
 USER mas
 

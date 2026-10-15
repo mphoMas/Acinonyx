@@ -25,7 +25,7 @@ from mas.audit_anchor import HTTPAuditAnchor
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-from mas.authority import get_authority_guard
+from mas.authority import authority_guarded, get_authority_guard
 
 
 class TenantStatus(str, Enum):
@@ -190,6 +190,7 @@ class MultiTenantIAM:
     # Tenant Management
     # -------------------------------------------------------------------------
 
+    @authority_guarded
     def create_tenant(
         self,
         tenant_id: str,
@@ -281,6 +282,7 @@ class MultiTenantIAM:
     # Principal Management
     # -------------------------------------------------------------------------
 
+    @authority_guarded
     def register_principal(
         self,
         tenant_id: str,

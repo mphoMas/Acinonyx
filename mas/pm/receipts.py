@@ -13,11 +13,16 @@ import re
 import sqlite3
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
+from pydantic import ValidationError
 from typing import Any, Optional
 
 from mas.authority import get_authority_guard
 from mas.iam import MultiTenantIAM, TenantContext, TenantStatus
 from mas.pm.delivery import DeliveryGateError
+from mas.pm.receipt_access import ReceiptAccess
+from mas.pm.receipt_contracts import ReceiptContract, ReceiptPayload
 from mas.tenancy import TenantBinding, current_binding
 
 RECEIPTS_DDL = """
@@ -138,60 +143,51 @@ def sha256_digest(value: Any) -> str:
 
 
 def validate_identifier(name: str, value: Any) -> None:
-    if not isinstance(value, str) or not IDENTIFIER_REGEX.match(value):
+    if not isinstance(value, str) or not IDENTIFIER_REGEX.fullmatch(value):
         raise ValueError(f"Invalid {name}: must be 1-128 ASCII alphanumeric, '.', '-', '_'")
 
 
 def validate_contract(contract: Any) -> None:
-    if not isinstance(contract, dict):
-        raise ValueError("INVALID_CONTRACT: contract must be a dict")
-    if contract.get("schema_version") != 1:
-        raise ValueError("INVALID_CONTRACT: schema_version must be 1")
-    if not isinstance(contract.get("claims"), dict):
-        raise ValueError("INVALID_CONTRACT: claims must be a dict")
-    check_ids = contract.get("check_ids")
-    if not isinstance(check_ids, list):
-        raise ValueError("INVALID_CONTRACT: check_ids must be a list")
-    if any(not isinstance(c, str) or not c for c in check_ids):
-        raise ValueError("INVALID_CONTRACT: check_id must be non-empty string")
-    if check_ids != sorted(set(check_ids)) or len(check_ids) != len(set(check_ids)):
-        raise ValueError("INVALID_CONTRACT: check_ids must be strictly sorted and unique")
+    try:
+        ReceiptContract.model_validate(contract)
+    except ValidationError as exc:
+        errors = exc.errors(include_input=False, include_context=False)
+        if any(e["loc"] == ("check_ids",) and e["type"] == "value_error" for e in errors):
+            raise ValueError("INVALID_CONTRACT: check_ids must be strictly sorted and unique") from exc
+        raise ValueError("INVALID_CONTRACT: strict version-one contract required") from exc
 
 
 def validate_payload(payload: Any, contract: dict[str, Any]) -> None:
-    if not isinstance(payload, dict):
-        raise ValueError("INVALID_PAYLOAD: payload must be a dict")
-    if payload.get("schema_version") != 1:
-        raise ValueError("INVALID_PAYLOAD: schema_version must be 1")
-    items = payload.get("items")
-    if not isinstance(items, list):
-        raise ValueError("INVALID_PAYLOAD: items must be a list")
-    if len(items) > MAX_ITEMS:
-        raise ValueError(f"INVALID_PAYLOAD: items count {len(items)} exceeds limit {MAX_ITEMS}")
-
-    contract_checks = contract.get("check_ids", [])
-    item_checks = []
-    for item in items:
-        if not isinstance(item, dict):
-            raise ValueError("INVALID_PAYLOAD: item must be a dict")
-        cid = item.get("check_id")
-        outcome = item.get("claimed_outcome")
-        if not isinstance(cid, str) or not cid:
-            raise ValueError("INVALID_PAYLOAD: item check_id must be non-empty string")
-        if outcome not in ALLOWED_OUTCOMES:
-            raise ValueError(f"INVALID_PAYLOAD: invalid claimed_outcome {outcome}")
-        item_checks.append(cid)
-
-    if item_checks != sorted(set(item_checks)) or len(item_checks) != len(set(item_checks)):
-        raise ValueError("INVALID_PAYLOAD: item check_ids must be strictly sorted and unique")
-    if not set(item_checks).issubset(set(contract_checks)):
+    if isinstance(payload, dict):
+        for field, limit in (("items", MAX_ITEMS), ("artifact_claims", MAX_ARTIFACTS)):
+            if isinstance(payload.get(field), list) and len(payload[field]) > limit:
+                raise ValueError(f"INVALID_PAYLOAD: {field} count {len(payload[field])} exceeds limit {limit}")
+    try:
+        validated = ReceiptPayload.model_validate(payload)
+    except ValidationError as exc:
+        errors = exc.errors(include_input=False, include_context=False)
+        if any(e["loc"] and e["loc"][-1] == "claimed_outcome" for e in errors):
+            raise ValueError("INVALID_PAYLOAD: invalid claimed_outcome") from exc
+        if any(e["loc"] == () and e["type"] == "value_error" for e in errors):
+            raise ValueError("INVALID_PAYLOAD: item check_ids must be strictly sorted and unique") from exc
+        raise ValueError("INVALID_PAYLOAD: strict version-one payload required") from exc
+    if not {item.check_id for item in validated.items}.issubset(contract["check_ids"]):
         raise ValueError("INVALID_PAYLOAD: item check_ids must be subset of contract check_ids")
 
-    artifacts = payload.get("artifact_claims", [])
-    if not isinstance(artifacts, list):
-        raise ValueError("INVALID_PAYLOAD: artifact_claims must be a list")
-    if len(artifacts) > MAX_ARTIFACTS:
-        raise ValueError(f"INVALID_PAYLOAD: artifact_claims count {len(artifacts)} exceeds limit {MAX_ARTIFACTS}")
+
+def _bound_database(binding: TenantBinding, db: Any) -> Any:
+    if db is None:
+        from mas.pm.db import PMDatabase
+        return PMDatabase(binding.database)
+    if Path(db.db_path).resolve() != Path(binding.database).resolve():
+        raise PermissionError("Receipt database differs from authenticated storage binding")
+    return db
+
+
+def _require_access(access: Any) -> ReceiptAccess:
+    if not isinstance(access, ReceiptAccess):
+        raise PermissionError("Explicit trusted receipt access profile required")
+    return access
 
 
 def validate_caller_binding(binding: Any, action: str = "write") -> TenantBinding:
@@ -272,75 +268,39 @@ def record_observation(
     issue_id: Optional[str] = None,
     project_id: Optional[str] = None,
     db: Optional[Any] = None,
-    connector_registry: Optional[Any] = None,
+    access: ReceiptAccess | None = None,
 ) -> dict[str, Any]:
     """Records an untrusted witness observation into the durable quarantined receipt store."""
+    access = _require_access(access)
     validate_identifier("action_id", action_id)
     validate_identifier("observation_id", observation_id)
-    validate_contract(contract)
-    validate_payload(payload, contract)
-
     canonical_contract = canonical_json(contract)
     canonical_payload = canonical_json(payload)
     if len(canonical_contract.encode("utf-8")) + len(canonical_payload.encode("utf-8")) > MAX_CANONICAL_BYTES:
         raise ValueError(f"Request bounds exceeded: combined canonical JSON exceeds {MAX_CANONICAL_BYTES} bytes")
 
+    validate_contract(contract)
+    validate_payload(payload, contract)
+    contract = json.loads(canonical_contract)
+    payload = json.loads(canonical_payload)
+    validate_contract(contract)
+    validate_payload(payload, contract)
+
     valid_binding = validate_caller_binding(authenticated_binding, action="write")
-    iam = valid_binding.iam
     tenant_id = valid_binding.identity.tenant_id
 
     target_issue_id = issue_id
-    if target_issue_id is None:
-        target_issue_id = (
-            contract.get("issue_id")
-            or (contract.get("claims") or {}).get("issue_id")
-            or (payload.get("mas_claims") or {}).get("issue_id")
-            or payload.get("issue_id")
-        )
     if not target_issue_id:
-        raise ValueError("issue_id must be provided or present in contract/payload claims")
+        raise ValueError("issue_id must be explicitly provided")
     validate_identifier("issue_id", target_issue_id)
 
     if project_id is not None:
         validate_identifier("project_id", project_id)
 
-    effective_db = db
-    if effective_db is None:
-        from mas.pm.db import PMDatabase
-        effective_db = PMDatabase(valid_binding.database)
-
     with get_authority_guard():
-        # Re-verify tenant, principal, session under the guard
-        tenant = iam.get_tenant(tenant_id)
-        if tenant is None or tenant.status != TenantStatus.ACTIVE:
-            raise PermissionError("Tenant is suspended, inactive or unavailable")
-        principal = iam.get_principal(tenant_id, valid_binding.identity.principal_id)
-        if principal is None or getattr(principal, "status", "ACTIVE") == "SUSPENDED":
-            raise PermissionError("Principal is suspended or unavailable")
-        if valid_binding.identity.token_id:
-            if iam._store:
-                sess_doc = iam._store.get("session", valid_binding.identity.token_id)
-                if sess_doc is None or sess_doc.get("revoked", False):
-                    raise PermissionError("Session is revoked or unavailable")
-            else:
-                session = iam._sessions.get(valid_binding.identity.token_id)
-                if session is None or session.get("revoked", False):
-                    raise PermissionError("Session is revoked or unavailable")
-
-        # Verify connector policy if connector registry is provided
-        if connector_registry is not None and "transport_claims" in payload:
-            tc = payload["transport_claims"]
-            repo_id = tc.get("repository_id")
-            owner_id = tc.get("repository_owner_id")
-            if repo_id and owner_id:
-                key = (str(repo_id), str(owner_id))
-                snap = None
-                if hasattr(connector_registry, "get_snapshot"):
-                    snap = connector_registry.get_snapshot(key)
-                elif hasattr(connector_registry, "get"):
-                    snap = connector_registry.get(key)
-                if snap is None or getattr(snap, "status", None) != "ACTIVE":
-                    raise PermissionError("Connector policy is not registered or not active")
+        valid_binding = validate_caller_binding(authenticated_binding, action="write")
+        effective_db = _bound_database(valid_binding, db)
+        access.require(tenant_id, project_id=project_id, payload=payload)
 
         with effective_db.atomic_transaction() as conn:
             task_row = conn.execute(
@@ -354,6 +314,7 @@ def record_observation(
                 raise ValueError(f"Project mismatch: expected {task_row['project_id']}, got {project_id}")
 
             effective_project_id = task_row["project_id"]
+            access.require(tenant_id, project_id=effective_project_id, payload=payload)
             owner = [tenant_id, effective_project_id, target_issue_id]
 
             action_hash = sha256_digest({"owner": owner, "contract": contract})
@@ -381,8 +342,8 @@ def record_observation(
                 }
 
             count = conn.execute(
-                "SELECT count(*) FROM pm_delivery_receipts WHERE project_id=?",
-                (effective_project_id,),
+                "SELECT count(*) FROM pm_delivery_receipts WHERE tenant_id=? AND project_id=?",
+                (tenant_id, effective_project_id),
             ).fetchone()[0]
             if count >= MAX_RECEIPTS_PER_PROJECT:
                 raise ValueError(f"PROJECT_RECEIPT_QUOTA_EXCEEDED: maximum {MAX_RECEIPTS_PER_PROJECT} receipts reached")
@@ -434,43 +395,29 @@ def get_receipt(
     receipt_id: str,
     *,
     db: Optional[Any] = None,
+    access: ReceiptAccess | None = None,
 ) -> Optional[dict[str, Any]]:
-    """Retrieves an immutable receipt scoped to the authenticated caller's tenant."""
+    """Read immutable quarantined claims with fresh guarded authority."""
+    access = _require_access(access)
     valid_binding = validate_caller_binding(authenticated_binding, action="read")
-    iam = valid_binding.iam
     tenant_id = valid_binding.identity.tenant_id
-
     with get_authority_guard():
-        tenant = iam.get_tenant(tenant_id)
-        if tenant is None or tenant.status != TenantStatus.ACTIVE:
-            raise PermissionError("Tenant is suspended, inactive or unavailable")
-        principal = iam.get_principal(tenant_id, valid_binding.identity.principal_id)
-        if principal is None or getattr(principal, "status", "ACTIVE") == "SUSPENDED":
-            raise PermissionError("Principal is suspended or unavailable")
-        if valid_binding.identity.token_id:
-            if iam._store:
-                sess_doc = iam._store.get("session", valid_binding.identity.token_id)
-                if sess_doc is None or sess_doc.get("revoked", False):
-                    raise PermissionError("Session is revoked or unavailable")
-            else:
-                session = iam._sessions.get(valid_binding.identity.token_id)
-                if session is None or session.get("revoked", False):
-                    raise PermissionError("Session is revoked or unavailable")
-
-        effective_db = db
-        if effective_db is None:
-            from mas.pm.db import PMDatabase
-            effective_db = PMDatabase(valid_binding.database)
+        valid_binding = validate_caller_binding(authenticated_binding, action="read")
+        effective_db = _bound_database(valid_binding, db)
+        access.require(tenant_id)
 
         conn = effective_db._get_connection()
         try:
             row = conn.execute(
-                "SELECT * FROM pm_delivery_receipts WHERE receipt_id=?", (receipt_id,)
+                "SELECT * FROM pm_delivery_receipts WHERE receipt_id=? AND tenant_id=? "
+                "AND (? IS NULL OR project_id=?)",
+                (receipt_id, tenant_id, access.project_id, access.project_id),
             ).fetchone()
             if not row:
                 return None
             if row["tenant_id"] != tenant_id:
                 return None
+            access.require(tenant_id, project_id=row["project_id"])
 
             action_row = conn.execute(
                 "SELECT contract_json FROM pm_delivery_actions WHERE tenant_id=? AND project_id=? AND issue_id=? AND action_id=?",
@@ -509,9 +456,12 @@ def get_receipt(
 class DeliveryReceiptService:
     """Supported service interface for durable delivery receipts."""
 
-    def __init__(self, db: Any, connector_registry: Optional[Any] = None) -> None:
+    def __init__(
+        self, db: Any, connector_registry=None, *, connector_key=None,
+        tenant_id=None, project_id=None, trusted_local=False,
+    ) -> None:
         self.db = db
-        self.connector_registry = connector_registry
+        self.access = ReceiptAccess(connector_registry, connector_key, tenant_id, project_id, trusted_local)
 
     def record_observation(
         self,
@@ -533,7 +483,7 @@ class DeliveryReceiptService:
             issue_id=issue_id,
             project_id=project_id,
             db=self.db,
-            connector_registry=self.connector_registry,
+            access=self.access,
         )
 
     def get_receipt(
@@ -545,4 +495,5 @@ class DeliveryReceiptService:
             authenticated_binding,
             receipt_id,
             db=self.db,
+            access=self.access,
         )

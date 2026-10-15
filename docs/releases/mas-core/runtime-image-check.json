@@ -1,0 +1,13 @@
+{
+  "image": "mas-core:release-candidate",
+  "checks": {
+    "non_root_uid": 10001,
+    "portal_http": 200,
+    "unconfigured_mutation_denied": 401,
+    "volume_restart_preserves_pm_project": true,
+    "legacy_python_executor": "unavailable_in_default_container; execution_refused",
+    "cleanup_confirmed": true
+  },
+  "image_id": "sha256:074b3ed447435180bffd597fcc19cdd2d5777c855e52cff89313959346f2b9ce",
+  "status": "passed"
+}

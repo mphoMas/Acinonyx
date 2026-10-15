@@ -1,0 +1,12 @@
+{
+  "model": "gemini-3.8-flash",
+  "configured_model_setting_changed": false,
+  "authenticated_model_discovery": "passed",
+  "bounded_json_request": "passed",
+  "reported_total_tokens": 125,
+  "elapsed_seconds": 2.097,
+  "scope": "Single authenticated live-provider smoke request; not held-out model quality, integrated release or production qualification",
+  "saved_model_setting": "still requires correction to gemini-3.8-flash",
+  "date": "2026-10-15",
+  "record_scope": "Historical pre-publication snapshot; superseded for current status by STATUS.md and post-publication-validation.json"
+}

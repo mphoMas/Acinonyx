@@ -1,0 +1,18 @@
+{
+  "scope": "local candidate qualification, not production acceptance",
+  "gate": {
+    "passed": 1006,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 247.57,
+    "raw_log": "/workspace/mas-release-evidence/post-publication-gate.log",
+    "junit": "/workspace/mas-release-evidence/post-publication.xml"
+  },
+  "terraform": {
+    "validate": true,
+    "mock_plan_tests_passed": 1,
+    "actual_cloud_plan": false,
+    "resources_created": false
+  },
+  "release_approved": false
+}

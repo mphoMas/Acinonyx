@@ -7,6 +7,7 @@ and durable receipt admissions within a single-process host environment.
 from __future__ import annotations
 
 import threading
+from functools import wraps
 from typing import Optional
 
 
@@ -36,3 +37,12 @@ _GLOBAL_AUTHORITY_GUARD = AuthorityGuard()
 def get_authority_guard() -> AuthorityGuard:
     """Returns the shared process-wide authority guard."""
     return _GLOBAL_AUTHORITY_GUARD
+
+
+def authority_guarded(operation):
+    """Serialize supported authority mutations with guarded local operations."""
+    @wraps(operation)
+    def guarded(*args, **kwargs):
+        with get_authority_guard():
+            return operation(*args, **kwargs)
+    return guarded

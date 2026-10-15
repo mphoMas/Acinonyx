@@ -317,8 +317,13 @@ def _event(conn, row, actor, kind, body):
 
 
 class DeliveryService:
-    def __init__(self, db):
+    def __init__(self, db, *, receipt_access=None):
         self.db = db
+        if receipt_access is not None:
+            from mas.pm.receipt_access import ReceiptAccess
+            if not isinstance(receipt_access, ReceiptAccess):
+                raise ValueError("Trusted receipt access configuration required")
+        self.receipt_access = receipt_access
 
     def _actor(self, tenant, action):
         from mas.pm.coordinator import is_trusted_coord_admin
@@ -734,12 +739,10 @@ class DeliveryService:
         *,
         issue_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        connector_registry: Optional[Any] = None,
     ) -> dict[str, Any]:
         """Record an untrusted observation into the durable quarantined receipt store."""
-        from mas.pm.receipts import DeliveryReceiptService
-        service = DeliveryReceiptService(self.db, connector_registry=connector_registry)
-        return service.record_observation(
+        from mas.pm.receipts import record_observation
+        return record_observation(
             authenticated_binding,
             action_id,
             observation_id,
@@ -747,6 +750,8 @@ class DeliveryService:
             payload,
             issue_id=issue_id,
             project_id=project_id,
+            db=self.db,
+            access=self.receipt_access,
         )
 
     def get_receipt(
@@ -755,6 +760,5 @@ class DeliveryService:
         receipt_id: str,
     ) -> Optional[dict[str, Any]]:
         """Retrieve an immutable quarantined receipt."""
-        from mas.pm.receipts import DeliveryReceiptService
-        service = DeliveryReceiptService(self.db)
-        return service.get_receipt(authenticated_binding, receipt_id)
+        from mas.pm.receipts import get_receipt
+        return get_receipt(authenticated_binding, receipt_id, db=self.db, access=self.receipt_access)

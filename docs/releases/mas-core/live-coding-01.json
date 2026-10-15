@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "operator-driven live coding qualification with disposable identities; not production admission",
+  "model": "gemini-3.8-flash",
+  "image": "python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f",
+  "pm_source": {
+    "issue_id": "62fd1d3a-cf16-4b6b-a5bd-5f9ccc38b115",
+    "issue_key": "LIVEQ-1",
+    "goal_hash": "438974896285085788f60743779e6d8a4a48937f58a579e141db67b6f332dbf2"
+  },
+  "run_id": "0c54e0f350f14cfebe447b91fdd9ac48",
+  "state": "awaiting_approval",
+  "usage": {
+    "calls": 3,
+    "reserved": 0,
+    "tokens": 1611
+  },
+  "elapsed_seconds": 15.453,
+  "candidate_hash": "eef20d2973d3f19c8d30378290799c76d143b1865b111416286619f24735ccb1",
+  "case_outcomes": [
+    {
+      "id": "empty",
+      "passed": true,
+      "status": "passed"
+    },
+    {
+      "id": "positive",
+      "passed": true,
+      "status": "passed"
+    },
+    {
+      "id": "mixed",
+      "passed": true,
+      "status": "passed"
+    },
+    {
+      "id": "bounds",
+      "passed": true,
+      "status": "passed"
+    }
+  ],
+  "model_review_approved": true,
+  "human_approval": "not_requested_or_granted",
+  "source_exported": false,
+  "production_deployed": false,
+  "requester_approval_denied": true,
+  "status": "passed",
+  "signed_audit_verified": true,
+  "durable_restart_verified": true,
+  "idempotent_recovery_verified": true,
+  "pm_source_state": "BACKLOG"
+}
