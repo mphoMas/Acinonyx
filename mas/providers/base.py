@@ -6,15 +6,17 @@ Architect: Acinonyx
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from mas.core.message import Message, TokenUsage
-
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 @dataclass
 class ToolCall:
     id: str
     name: str
     arguments: Dict[str, Any]
+
+
+if TYPE_CHECKING:
+    from mas.core.message import Message, TokenUsage
 
 
 @dataclass

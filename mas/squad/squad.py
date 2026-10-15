@@ -27,14 +27,15 @@ class SquadMissionResult:
 class ArchitectAgent(BaseAgent):
     """Lead Architect agent that designs specifications and API contracts."""
 
-    def __init__(self, name: str = "lead_architect", **kwargs) -> None:
+    def __init__(self, name: str = "lead_architect", system_prompt: Optional[str] = None, **kwargs) -> None:
+        default_prompt = (
+            "You are the Lead Systems Architect. Your responsibility is to analyze requirements, "
+            "define modular interfaces, specify invariants, and design the file hierarchy."
+        )
         super().__init__(
             name=name,
             role=Role.SUPERVISOR,
-            system_prompt=(
-                "You are the Lead Systems Architect. Your responsibility is to analyze requirements, "
-                "define modular interfaces, specify invariants, and design the file hierarchy."
-            ),
+            system_prompt=system_prompt or default_prompt,
             **kwargs,
         )
 
@@ -42,15 +43,16 @@ class ArchitectAgent(BaseAgent):
 class EngineerAgent(BaseAgent):
     """Senior Implementation Engineer agent that writes code and unit tests."""
 
-    def __init__(self, name: str = "senior_engineer", **kwargs) -> None:
+    def __init__(self, name: str = "senior_engineer", system_prompt: Optional[str] = None, **kwargs) -> None:
+        default_prompt = (
+            "You are the Senior Implementation Engineer. You translate architectural specs "
+            "into clean, robust, and well-typed Python code with unit tests. "
+            "When given a failure critique, emit only corrected source code."
+        )
         super().__init__(
             name=name,
             role=Role.ASSISTANT,
-            system_prompt=(
-                "You are the Senior Implementation Engineer. You translate architectural specs "
-                "into clean, robust, and well-typed Python code with unit tests. "
-                "When given a failure critique, emit only corrected source code."
-            ),
+            system_prompt=system_prompt or default_prompt,
             **kwargs,
         )
 
@@ -58,14 +60,15 @@ class EngineerAgent(BaseAgent):
 class QAAgent(BaseAgent):
     """QA & Verification agent that executes test suites and validates artifacts."""
 
-    def __init__(self, name: str = "qa_critic", **kwargs) -> None:
+    def __init__(self, name: str = "qa_critic", system_prompt: Optional[str] = None, **kwargs) -> None:
+        default_prompt = (
+            "You are the QA Reviewer and Verification Critic. You execute unit test suites, "
+            "diagnose runtime regressions, and provide constructive failure critiques."
+        )
         super().__init__(
             name=name,
             role=Role.CRITIC,
-            system_prompt=(
-                "You are the QA Reviewer and Verification Critic. You execute unit test suites, "
-                "diagnose runtime regressions, and provide constructive failure critiques."
-            ),
+            system_prompt=system_prompt or default_prompt,
             **kwargs,
         )
 
