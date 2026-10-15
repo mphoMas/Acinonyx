@@ -13,12 +13,16 @@ Verifies:
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
+import sys
+
 import pytest
 
-import sys
-sys.path.insert(0, "/home/acinonyx/Desktop/MAS/projects/platinum-lodge")
+_PLG_DIR = Path(__file__).resolve().parent.parent / "projects" / "platinum-lodge"
+if str(_PLG_DIR) not in sys.path:
+    sys.path.insert(0, str(_PLG_DIR))
 
-from hotel_core import (
+from hotel_core import (  # noqa: E402
     ConcurrencyConflictError,
     FolioSettlementError,
     HotelDatabase,

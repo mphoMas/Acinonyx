@@ -112,11 +112,9 @@ class HotelDatabase:
 
     def apply_migrations(self, conn: sqlite3.Connection) -> None:
         migration_file = Path(__file__).parent / "migrations" / "001_initial_multitenant_schema.sql"
-        if migration_file.exists():
-            sql = migration_file.read_text(encoding="utf-8")
-        else:
-            alt_path = Path("/home/acinonyx/Desktop/MAS/projects/platinum-lodge/migrations/001_initial_multitenant_schema.sql")
-            sql = alt_path.read_text(encoding="utf-8")
+        if not migration_file.exists():
+            raise FileNotFoundError(f"Migration file not found at {migration_file}")
+        sql = migration_file.read_text(encoding="utf-8")
         conn.executescript(sql)
 
 
