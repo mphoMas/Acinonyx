@@ -123,3 +123,48 @@ Logs are in `scratch/cc0506/`: the per-suite logs, `targeted_combined.log` and `
 1. Run the CC-05 and CC-06 container suites and the section 4 probes independently on a host that can run Docker, with the pinned image available. All must pass with zero skips, and no containers may remain afterwards.
 2. Fix the section 5 finding and add a regression test for it.
 3. Until both are done: live dispatch stays off, the registry stays synthetic-only, and provider access, candidate integration and continuous handoffs stay out of scope.
+
+---
+
+## 7. P0 Real-Docker Re-Verification & Resolution (16 October 2026)
+
+- **Reviewer:** Antigravity (independent reviewer)
+- **Reviewed HEAD:** `b99dfe05` (unified `main`, incorporating `653e26b3` missing-Docker typed-error fix and `7bd68812` GHA-04A)
+- **Host Docker Runtime:** Docker Engine `29.1.3` (`/usr/bin/docker`, `/var/run/docker.sock`)
+- **Pinned Execution Image:** `python:3.12-slim` (`sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1`)
+
+### 7.1 Independent Container & Targeted Suite Results
+
+```bash
+PYTHONPATH=. pytest \
+  tests/test_cc03_final_corrections.py \
+  tests/test_cc_03_coordinator_state.py \
+  tests/test_cc04_scheduler_worker.py \
+  tests/test_cc05_antigravity_adapter.py \
+  tests/test_cc06_verifier_reviewer.py -q
+```
+
+| Suite | Passed | Failed | Errors | Skipped |
+|---|---:|---:|---:|---:|
+| `tests/test_cc03_final_corrections.py` | 9 | 0 | 0 | 0 |
+| `tests/test_cc_03_coordinator_state.py` | 24 | 0 | 0 | 0 |
+| `tests/test_cc04_scheduler_worker.py` | 28 | 0 | 0 | 0 |
+| `tests/test_cc05_antigravity_adapter.py` | 29 | 0 | 0 | 0 |
+| `tests/test_cc06_verifier_reviewer.py` | 52 | 0 | 0 | 0 |
+| **Targeted total** | **142** | **0** | **0** | **0** |
+
+### 7.2 Verification of Section 4 Container Probes & Section 5 Fix (`653e26b3`)
+
+1. **Host-secret, file, home, and Docker socket isolation (`test_real_container_has_no_host_credentials_or_mounts`):** Passed on real Docker (`secret: None`, `home: '/tmp/home'`, `host: False`, `socket: False`).
+2. **Natural-parent-exit child containment (`test_natural_parent_exit_leaves_no_orphan_boundary`):** Passed; orphan background child killed with container boundary and zero containers remaining.
+3. **Timeout and cancellation cleanup (`test_timeout_and_cancel_cleanup`):** Passed; `TimeoutError` and `InterruptedError` deterministically clean up containers with zero orphans.
+4. **Output overflow containment (`test_single_line_output_is_bounded`):** Passed; `OutputLimitError` raised at 4096 bytes and journal records `CLOSED`.
+5. **Missing-image no-host-fallback (`test_missing_image_has_no_host_execution_fallback`):** Passed with daemon active (`SwarmError` raised, host payload never executed).
+6. **Missing-Docker-client typed error fix (`653e26b3`):** Independently verified via `test_missing_docker_client_returns_typed_uncertainty_without_host_execution` and `test_missing_docker_client_raises_domain_error`. `OSError` in `boundary._docker` maps cleanly to `SwarmError('Docker control unavailable; execution boundary not confirmed')`, returning `UNKNOWN_EXECUTION` with `settlement_allowed=False` and retaining budget holds.
+7. **External verifier measurement against faked stdout, wrong output, and secret reads (`test_real_candidate_measured_outside_container`, `test_faked_stdout_bad_output_and_secret_reads_do_not_pass`):** All 4 real-container verification probes passed.
+8. **Zero residual containers:** Confirmed via `docker ps -a --filter label=mas.runtime.operation` returning empty after suite execution.
+
+### 7.3 Updated P0 Verdict
+
+**APPROVED (P0 Containment & Bounded Verification Foundation Accepted).** All conditions in Section 6 and `CC_05_06_REVIEW_RECONCILIATION.md` are satisfied for the `P0` containment and `coding.solve.v1` verification foundation. Packages `P1`–`P6` are unblocked for implementation and qualification.
+

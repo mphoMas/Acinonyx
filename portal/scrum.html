@@ -72,7 +72,69 @@ const isSingle=app.colView==='DONE';
 $('#content').innerHTML='<div class="board'+(isSingle?' single-col':'')+'">'+activeStates.map(([id,label,color])=>{let group=a.filter(t=>t.current_state===id);if(id==='DONE'){group=[...group].sort((x,y)=>new Date(y.updated_at||0)-new Date(x.updated_at||0));}const c=app.board?.columns?.[id]||{};return `<section class="column" aria-label="${label}"><div class="column-head" style="--col:${color}"><h2>${label}</h2><span class="count">${group.length}${c.wip_limit!=null?' / '+c.wip_limit:''}</span></div><p class="stage-help">${c.is_saturated?'WIP limit reached':' '+(id==='DONE'?'Accepted and closed (latest first)':id==='JUDICIAL_REVIEW'?'Independent reviewer required':'')}</p><div class="column-cards">${group.map(ticket).join('')||'<div class="empty">No issues</div>'}</div></section>`}).join('')+'</div>'}
 async function loadProjects(){const d=await api('/api/pm/projects');app.projects=Array.isArray(d.projects)?d.projects:[];const old=app.project;app.project=app.projects.some(x=>x.key===old)?old:(app.projects.some(x=>x.key==='MAS')?'MAS':app.projects[0]?.key||'');$('#project').innerHTML=app.projects.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} (${esc(p.key)})</option>`).join('');$('#project').value=app.project}
 function populateSprints(){const select=$('#sprint-filter');if(!select||!app.board)return;const sprints=app.board.sprints||[];select.innerHTML=`<option value="ALL" ${app.sprint==='ALL'?'selected':''}>All Sprints</option><option value="ACTIVE" ${app.sprint==='ACTIVE'?'selected':''}>Active Sprint Only</option>`+sprints.map(s=>`<option value="${esc(s.id)}" ${app.sprint===s.id?'selected':''}>${esc(s.name)} (${esc(s.state)})</option>`).join('')}
-async function refresh(all=false){if(app.busy)return;app.busy=true;$('#content').setAttribute('aria-busy','true');$('#refresh').disabled=true;try{if(all||!app.projects.length)await loadProjects();if(!app.project){app.board=null;message('MAS-PM is reachable, but no projects exist. Create a project using the MAS-PM MCP tool before using this board.',true);connected(true)}else{const data=await api('/api/pm/board/'+encodeURIComponent(app.project));if(!data||!data.issues_by_column)throw Error('Unexpected board response: missing issues_by_column');app.board=data;populateSprints();message('');connected(true)}render()}catch(e){app.board=null;connected(false);message('Unable to load MAS-PM: '+e.message+' Check that the Acinonyx dashboard server is running and this file is served from /portal/.',true);render()}finally{app.busy=false;$('#content').setAttribute('aria-busy','false');$('#refresh').disabled=false}}
+async function refresh(all=false){if(app.busy)return;app.busy=true;pollGeneration++;clearTimeout(pollTimer);$('#content').setAttribute('aria-busy','true');$('#refresh').disabled=true;try{if(all||!app.projects.length)await loadProjects();if(!app.project){app.board=null;app.cursor=null;message('MAS-PM is reachable, but no projects exist. Create a project using the MAS-PM MCP tool before using this board.',true);connected(true)}else{const data=await api('/api/pm/board/'+encodeURIComponent(app.project));if(!data||!data.issues_by_column)throw Error('Unexpected board response: missing issues_by_column');app.board=data;app.cursor=typeof data.snapshot_cursor==='string'?data.snapshot_cursor:null;app.pollFailures=0;app.stale=false;populateSprints();message('');connected(true);if(app.cursor)schedulePoll(2000)}render()}catch(e){app.board=null;app.cursor=null;connected(false);message('Unable to load MAS-PM: '+e.message+' Check that the Acinonyx dashboard server is running and this file is served from /portal/.',true);render()}finally{app.busy=false;$('#content').setAttribute('aria-busy','false');$('#refresh').disabled=false}}
+
+let pollTimer=null,pollGeneration=0;
+function schedulePoll(ms){clearTimeout(pollTimer);if(!app.cursor||!app.project)return;const gen=pollGeneration;pollTimer=setTimeout(()=>{if(gen===pollGeneration)void pollChanges(gen)},ms)}
+function applyIssueSnapshot(issue){
+ if(!app.board?.issues_by_column||!issue?.key||!issue?.current_state)return;
+ for(const col of Object.keys(app.board.issues_by_column)){
+  if(Array.isArray(app.board.issues_by_column[col])){
+   app.board.issues_by_column[col]=app.board.issues_by_column[col].filter(x=>x.key!==issue.key&&x.id!==issue.id);
+  }
+ }
+ if(!Array.isArray(app.board.issues_by_column[issue.current_state]))app.board.issues_by_column[issue.current_state]=[];
+ app.board.issues_by_column[issue.current_state].push(issue);
+ if(app.board.columns){
+  let activeWip=0;
+  for(const [stateId] of STATES){
+   const cnt=(app.board.issues_by_column[stateId]||[]).length;
+   if(app.board.columns[stateId]){
+    app.board.columns[stateId].count=cnt;
+    const lim=app.board.columns[stateId].wip_limit;
+    app.board.columns[stateId].is_saturated=lim!=null&&cnt>=lim;
+   }
+   if(['IN_PROGRESS','VERIFICATION','JUDICIAL_REVIEW'].includes(stateId))activeWip+=cnt;
+  }
+  app.board.total_active_wip=activeWip;
+  app.board.wip_saturation_pct=Math.round((activeWip/8)*1000)/10;
+ }
+}
+async function pollChanges(gen=pollGeneration){
+ if(!app.project||!app.cursor||gen!==pollGeneration)return;
+ if(typeof document!=='undefined'&&document.visibilityState==='hidden'){schedulePoll(2000);return}
+ let pages=0;
+ while(pages<10&&gen===pollGeneration&&app.cursor){
+  pages++;
+  try{
+   const url=apiBase+'/api/pm/v1/projects/'+encodeURIComponent(app.project)+'/changes?after='+encodeURIComponent(app.cursor)+'&limit=100';
+   const r=await fetch(url,{method:'GET',credentials:'same-origin',headers:{'Accept':'application/json'},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});
+   if(gen!==pollGeneration)return;
+   if(r.status===410){await refresh(false);return}
+   if(r.status===401||r.status===403){clearTimeout(pollTimer);app.cursor=null;connected(false);message('Live updates stopped: session unauthorized or access denied.',true);return}
+   if(!r.ok)throw Error('HTTP '+r.status);
+   const data=await r.json();
+   if(gen!==pollGeneration)return;
+   if(!data||!Array.isArray(data.changes))throw Error('Invalid change feed response');
+   let changed=false;
+   for(const chg of data.changes){
+    if(chg&&chg.issue&&typeof chg.issue==='object'){applyIssueSnapshot(chg.issue);changed=true}
+   }
+   if(typeof data.next_cursor==='string'&&data.next_cursor)app.cursor=data.next_cursor;
+   app.pollFailures=0;app.stale=false;connected(true);
+   if(changed)render();else $('#updated').textContent='Last refreshed '+new Date().toLocaleTimeString();
+   if(!data.has_more)break;
+  }catch(err){
+   if(gen!==pollGeneration)return;
+   app.pollFailures=(app.pollFailures||0)+1;app.stale=true;
+   $('#updated').textContent='Stale · retry in progress';
+   const backoff=Math.min(30000,Math.round(2000*Math.pow(2,app.pollFailures-1)*(0.85+Math.random()*0.3)));
+   schedulePoll(backoff);
+   return;
+  }
+ }
+ if(gen===pollGeneration&&app.cursor)schedulePoll(2000);
+}
 
 let activityRequest=0;
 function workflowText(box, heading, text){const h=document.createElement('h4'),p=document.createElement('p');h.textContent=heading;p.textContent=text;box.append(h,p)}
@@ -96,21 +158,27 @@ function renderTaskWorkflow(data){
   workflowText(box,'Review '+(review.review_id||'identity missing'),status+' · Reviewer: '+(review.reviewer_principal||'not recorded')+' · Candidate: '+(review.candidate_commit||'not recorded'));
  }
 }
-async function loadTaskActivity(task){
+async function loadTaskActivity(task,afterCursor=''){
  const generation=++activityRequest,box=$('#task-activity'),workflow=$('#task-workflow');
  if(!task.id){box.textContent='Task identity is unavailable. Activity integration is pending.';workflow.textContent='Attempt and review integration is pending.';return}
- box.setAttribute('aria-busy','true');box.textContent='Loading activity…';workflow.textContent='Loading attempts and reviews…';
+ box.setAttribute('aria-busy','true');if(!afterCursor){box.textContent='Loading activity…';workflow.textContent='Loading attempts and reviews…';}
  try{
-  const data=await api('/api/pm/v1/tasks/'+encodeURIComponent(task.id)+'/activity?limit=100');
+  const path='/api/pm/v1/tasks/'+encodeURIComponent(task.id)+'/activity?'+(afterCursor?'after='+encodeURIComponent(afterCursor)+'&':'')+'limit=100';
+  const data=await api(path);
   if(generation!==activityRequest||!box.isConnected)return;
   if(!data||!Array.isArray(data.events)||data.events.some(e=>!e||typeof e!=='object')||(data.attempts!==undefined&&(!Array.isArray(data.attempts)||data.attempts.some(a=>!a||typeof a!=='object')))||(data.reviews!==undefined&&(!Array.isArray(data.reviews)||data.reviews.some(r=>!r||typeof r!=='object'))))throw Error('Activity response is unavailable or unsupported.');
-  renderTaskWorkflow(data);box.replaceChildren();
-  if(!data.events.length)box.textContent='No recorded activity for this task.';
+  renderTaskWorkflow(data);
+  const oldMore=$('#load-more-activity');if(oldMore)oldMore.remove();
+  if(!afterCursor)box.replaceChildren();
+  if(!data.events.length&&!afterCursor)box.textContent='No recorded activity for this task.';
   for(const event of data.events){
    const item=document.createElement('article'),title=document.createElement('strong'),text=document.createElement('p'),meta=document.createElement('small');
    title.textContent=(event.kind||'Activity')+' · '+(event.actor||'Actor not recorded');text.textContent=event.summary||'';meta.textContent=event.received_at||'Time not recorded';item.append(title,text,meta);
    if(event.evidence){const evidence=document.createElement('p');evidence.textContent='Evidence: '+(['claimed','validated','rejected'].includes(event.evidence.status)?event.evidence.status:'unverified')+' · Candidate: '+(event.evidence.candidate_commit||'not recorded');item.append(evidence)}
    box.append(item);
+  }
+  if(data.has_more&&data.next_cursor){
+   const moreBtn=document.createElement('button');moreBtn.id='load-more-activity';moreBtn.textContent='Load more activity';moreBtn.onclick=()=>loadTaskActivity(task,data.next_cursor);box.append(moreBtn);
   }
  }catch(error){if(generation===activityRequest&&box.isConnected){box.textContent='Activity unavailable: '+error.message;workflow.textContent='Attempts and reviews unavailable. Retry loading task activity.'}}
  finally{if(generation===activityRequest&&box.isConnected)box.setAttribute('aria-busy','false')}

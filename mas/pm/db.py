@@ -511,6 +511,8 @@ class PMDatabase:
         migrate(self)
         from mas.pm.receipts import migrate_receipts
         migrate_receipts(self)
+        from mas.pm.adapters.broker import migrate_live_loop
+        migrate_live_loop(self)
 
     def migrate_coordinator_schema(self) -> None:
         """

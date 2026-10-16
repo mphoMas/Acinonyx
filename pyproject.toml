@@ -36,6 +36,7 @@ mas = ["py.typed", "dashboard/static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", "tests"]
 
 [tool.ruff]
 line-length = 140

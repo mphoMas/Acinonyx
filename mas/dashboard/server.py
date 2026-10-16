@@ -423,6 +423,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             if len(parts) == 6 and parts[3] == "projects" and parts[5] == "board":
                 proj_ref = parts[4]
                 from mas.pm.tools import get_pm_db, pm_get_board_state
+                from mas.pm.activity import ActivityBridgeService
                 db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
                 proj = db.get_project(proj_ref) or db.get_project_by_key(proj_ref)
                 if not proj:
@@ -430,7 +431,81 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     return
                 try:
                     board = pm_get_board_state(proj.key, db=db)
+                    _, _, auth_tid, _, _ = self._resolve_session_or_auth()
+                    tid = auth_tid or getattr(self, "tenant_id", None) or "default"
+                    meta = ActivityBridgeService(db).get_board_snapshot_meta(tenant_id=tid, project_id_or_key=proj.id)
+                    board.update(meta)
                     self._send_json(board)
+                except Exception as e:
+                    self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
+                return
+
+        elif path.startswith("/api/pm/v1/projects/") and path.endswith("/changes"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) == 6 and parts[3] == "projects" and parts[5] == "changes":
+                proj_ref = parts[4]
+                from urllib.parse import parse_qs
+                from mas.pm.tools import get_pm_db
+                from mas.pm.activity import ActivityBridgeService, ActivityError
+                qs = parse_qs(parsed.query)
+                after_cursor = qs.get("after", [None])[0]
+                try:
+                    limit = int(qs.get("limit", ["100"])[0])
+                except ValueError:
+                    self._send_json({"error": {"code": "invalid_limit", "message": "Invalid limit parameter"}}, status=400)
+                    return
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+                _, _, auth_tid, _, _ = self._resolve_session_or_auth()
+                tid = auth_tid or getattr(self, "tenant_id", None) or "default"
+                srv = getattr(self, "server", None)
+                ds = getattr(srv, "dashboard_server", None)
+                min_seq = getattr(self, "min_retained_change_seq", None) or getattr(ds, "min_retained_change_seq", 1) or 1
+                try:
+                    svc = ActivityBridgeService(db, min_retained_change_seq=min_seq)
+                    resp = svc.get_project_changes(
+                        tenant_id=tid,
+                        project_id_or_key=proj_ref,
+                        after_cursor=after_cursor,
+                        limit=limit,
+                    )
+                    self._send_json(resp, status=200)
+                except ActivityError as ae:
+                    self._send_json({"error": {"code": ae.code, "message": str(ae)}}, status=ae.status_code)
+                except Exception as e:
+                    self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
+                return
+
+        elif path.startswith("/api/pm/v1/tasks/") and path.endswith("/activity"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) == 6 and parts[3] == "tasks" and parts[5] == "activity":
+                task_ref = parts[4]
+                from urllib.parse import parse_qs
+                from mas.pm.tools import get_pm_db
+                from mas.pm.activity import ActivityBridgeService, ActivityError
+                qs = parse_qs(parsed.query)
+                after_cursor = qs.get("after", [None])[0]
+                try:
+                    limit = int(qs.get("limit", ["100"])[0])
+                except ValueError:
+                    self._send_json({"error": {"code": "invalid_limit", "message": "Invalid limit parameter"}}, status=400)
+                    return
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+                _, _, auth_tid, _, _ = self._resolve_session_or_auth()
+                tid = auth_tid or getattr(self, "tenant_id", None) or "default"
+                srv = getattr(self, "server", None)
+                ds = getattr(srv, "dashboard_server", None)
+                ev_trust = getattr(self, "evidence_trust", None) or getattr(ds, "evidence_trust", None)
+                try:
+                    svc = ActivityBridgeService(db, evidence_trust=ev_trust)
+                    resp = svc.get_task_activity(
+                        tenant_id=tid,
+                        issue_or_task_id=task_ref,
+                        after_cursor=after_cursor,
+                        limit=limit,
+                    )
+                    self._send_json(resp, status=200)
+                except ActivityError as ae:
+                    self._send_json({"error": {"code": ae.code, "message": str(ae)}}, status=ae.status_code)
                 except Exception as e:
                     self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
                 return
@@ -469,7 +544,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/pm/projects"):
             from mas.pm.tools import get_pm_db
             try:
-                db = get_pm_db()
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
                 projects = db.list_projects()
                 self._send_json({"projects": [p.model_dump() for p in projects]})
             except Exception as e:
@@ -477,9 +552,15 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
         elif path.startswith("/api/pm/board/"):
             project_key = path.replace("/api/pm/board/", "").strip()
-            from mas.pm.tools import pm_get_board_state
+            from mas.pm.tools import get_pm_db, pm_get_board_state
+            from mas.pm.activity import ActivityBridgeService
             try:
-                board = pm_get_board_state(project_key)
+                db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+                board = pm_get_board_state(project_key, db=db)
+                _, _, auth_tid, _, _ = self._resolve_session_or_auth()
+                tid = auth_tid or getattr(self, "tenant_id", None) or "default"
+                meta = ActivityBridgeService(db).get_board_snapshot_meta(tenant_id=tid, project_id_or_key=project_key)
+                board.update(meta)
                 self._send_json(board)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=404)
@@ -1172,6 +1253,91 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": {"code": "not_found", "message": str(e)}}, status=404)
             except (PlanValidationError, ValueError) as e:
                 self._send_json({"error": {"code": "bad_request", "message": str(e)}}, status=400)
+            except Exception as e:
+                self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
+
+        elif path.startswith("/api/pm/v1/projects/") and path.endswith("/events"):
+            ok, actor, session_data = self._authenticate_pm_mutation()
+            if not ok:
+                return
+
+            parts = [p for p in path.split("/") if p]
+            if len(parts) != 6 or parts[3] != "projects" or parts[5] != "events":
+                self._send_json({"error": {"code": "not_found", "message": "Invalid endpoint path"}}, status=404)
+                return
+            project_id_or_key = parts[4]
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 65536:
+                self._send_json({"error": {"code": "payload_too_large", "message": "Event request exceeds 64 KiB limit"}}, status=413)
+                return
+
+            body = self.rfile.read(content_length) if content_length > 0 else b""
+            if not body:
+                self._send_json({"error": {"code": "malformed", "message": "Empty event request body"}}, status=400)
+                return
+
+            from mas.pm.activity import ActivityBridgeService, ActivityError
+            from mas.pm.tools import get_pm_db
+
+            db = self.pm_db if getattr(self, "tenant_id", None) else get_pm_db()
+            mode, _, auth_tenant_id, actions, session_data = self._resolve_session_or_auth()
+            tenant_id = auth_tenant_id or getattr(self, "tenant_id", None) or "default"
+
+            # Determine authority class (GUEST by default; SERVICE requires verified service/supervisor scope/role)
+            requested_class = self.headers.get("X-MAS-Authority-Class", "GUEST").strip().upper()
+            authority_class = "GUEST"
+            if requested_class == "SERVICE":
+                SERVICE_ROLES = {"supervisor", "coordinator", "tenant_admin"}
+                SERVICE_SCOPES = {"pm:service:events", "admin:*"}
+                user_roles = set()
+                user_scopes = set()
+                srv = getattr(self, "server", None)
+                ds = getattr(srv, "dashboard_server", None)
+                iam_inst = getattr(self, "iam", None) or getattr(srv, "iam", None) or getattr(ds, "iam", None)
+                if session_data and session_data.get("tenant_context"):
+                    ctx = session_data["tenant_context"]
+                    user_roles = set(getattr(ctx, "roles", set()))
+                    user_scopes = set(getattr(ctx, "scopes", set()))
+                elif mode == "BEARER" and iam_inst:
+                    auth_hdr = self.headers.get("Authorization", "")
+                    if auth_hdr.startswith("Bearer "):
+                        try:
+                            ctx = iam_inst.verify_token(auth_hdr[7:].strip())
+                            user_roles = set(getattr(ctx, "roles", set()))
+                            user_scopes = set(getattr(ctx, "scopes", set()))
+                        except Exception:
+                            pass
+                elif mode == "BEARER" and self.auth_token and not iam_inst:
+                    if getattr(self, "allow_service_events", False) or getattr(ds, "allow_service_events", False):
+                        user_scopes.add("pm:service:events")
+
+                if not ((user_roles & SERVICE_ROLES) or (set(actions or []) & SERVICE_SCOPES) or (user_scopes & SERVICE_SCOPES)):
+                    self._send_json({"error": {"code": "forbidden", "message": "Caller lacks service event authority"}}, status=403)
+                    return
+                authority_class = "SERVICE"
+
+            fencing_hdr = self.headers.get("X-MAS-Fencing-Token")
+            expected_fencing = None
+            if fencing_hdr is not None:
+                if not fencing_hdr.strip().isdigit():
+                    self._send_json({"error": {"code": "invalid_fencing_token", "message": "Invalid X-MAS-Fencing-Token header"}}, status=400)
+                    return
+                expected_fencing = int(fencing_hdr.strip())
+
+            try:
+                svc = ActivityBridgeService(db)
+                receipt = svc.ingest_event(
+                    tenant_id=tenant_id,
+                    project_id_or_key=project_id_or_key,
+                    actor=actor,
+                    authority_class=authority_class,
+                    raw_event=body,
+                    expected_fencing_token=expected_fencing,
+                )
+                self._send_json(receipt, status=200)
+            except ActivityError as ae:
+                self._send_json({"error": {"code": ae.code, "message": str(ae)}}, status=ae.status_code)
             except Exception as e:
                 self._send_json({"error": {"code": "internal_error", "message": str(e)}}, status=500)
 

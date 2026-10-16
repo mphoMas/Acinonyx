@@ -424,7 +424,7 @@ class CoordinatorStore:
                     return False
                 if issue_row["has_pending_reconciliation"] != 0:
                     return False
-                if issue_row["current_state"] not in ("BACKLOG", "REFINED", "STAGED"):
+                if issue_row["current_state"] not in ("BACKLOG", "REFINED", "STAGED", "REJECTED_REWORK"):
                     return False
 
                 # Policy version check

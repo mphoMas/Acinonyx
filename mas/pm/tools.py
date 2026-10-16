@@ -334,7 +334,7 @@ def pm_cast_verdict(
         reviewer_principal=reviewer_principal,
         verdict=CriticVerdictType(verdict.upper()),
         findings=findings or {},
-        signature=signature or f"sig_{reviewer_principal}_{issue.key}",
+        signature=signature,
     )
     saved = database.record_verdict(critic_verdict)
     return {

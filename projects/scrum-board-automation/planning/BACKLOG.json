@@ -18,9 +18,11 @@
         "Agree project identity, plan revision, task identity, authenticated agent event and evidence contracts with Antigravity.",
         "Define permitted transitions and separate reviewer authority; record acknowledgement before implementation."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "task_id": "bb45e23a-cade-50ba-9d62-6178f694cf39"
+      "task_id": "bb45e23a-cade-50ba-9d62-6178f694cf39",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-02",
@@ -40,9 +42,11 @@
         "Discover registered projects in the configured repository automatically; arbitrary folders are not silently classified as projects.",
         "Repeated scans are idempotent; renamed, removed and inaccessible sources are reported without deleting runtime history."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "task_id": "3d55ca7d-849f-53b1-a624-2a630f5d85d3"
+      "task_id": "3d55ca7d-849f-53b1-a624-2a630f5d85d3",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-03",
@@ -63,9 +67,11 @@
         "Architect publishes structured project details and approved plan revisions through an authenticated integration, creating tasks and dependencies without CEO scripts.",
         "Updates preserve active work, evidence and review; ambiguous changes are surfaced instead of silently overwriting."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "task_id": "b1719e91-62cc-5064-89ba-2186bb280fd3"
+      "task_id": "b1719e91-62cc-5064-89ba-2186bb280fd3",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-04",
@@ -90,9 +96,11 @@
         "Implement the proposed CC_ACTIVITY_BRIDGE_CONTRACT_V1.md after joint acknowledgement: authenticated producer/run/generation binding, early durable session, atomic event/state/change/handoff records, exact replay and bounded credential-free spool.",
         "Preserve the prepared UI activity/attempt/review field names, tenant-scoped cursor pagination and gap recovery; guest observations cannot emit trusted verification/review/completion events."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "task_id": "5bedfd90-ea76-5f8d-82ec-9e1025c1bb87"
+      "task_id": "5bedfd90-ea76-5f8d-82ec-9e1025c1bb87",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-05",
@@ -111,9 +119,11 @@
         "Remove hard-coded founder_lead caller identity and consume the agreed authenticated identity contract.",
         "Authorized action succeeds; unauthorized action remains denied; errors visible above drawers and stale governance notice corrected."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "task_id": "1605f43f-5cf3-5ab7-a7e6-29b6e718bf01"
+      "task_id": "1605f43f-5cf3-5ab7-a7e6-29b6e718bf01",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-06",
@@ -139,10 +149,12 @@
         "Integrate the acknowledged CC_ACTIVITY_BRIDGE_CONTRACT_V1.md read contract using incremental polling, consistent snapshot/cursors, pagination, stale/denied/disconnected states and response-generation race protection.",
         "Capture actual authenticated backend-to-browser event updates and empty-board/cursor-gap/reconnect failures; mocked browser checks do not qualify real agent activity."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
       "task_id": "5cfdecdd-4614-5368-99e1-dd0574225134",
-      "coordinator_reference": "CC-10"
+      "coordinator_reference": "CC-10",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-07",
@@ -169,10 +181,12 @@
         "Qualify coordinator crash/replay, conflicting edits, fabricated evidence, malicious artifact instructions, revoked access and emergency controls.",
         "Qualify broker transmission uncertainty, artifact/path attacks, stale integrated approval, session revocation, spool/cursor replay and handoff crash windows using the four proposed integration contracts; report actual versus mocked executions."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
       "task_id": "50ad58cf-0e87-59eb-8ca5-8056efaaad35",
-      "coordinator_reference": "CC-13"
+      "coordinator_reference": "CC-13",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-08",
@@ -196,10 +210,12 @@
         "Restart and network interruption cause no duplicate work or lost handoffs; zero routine CEO import commands, ticket moves or repairs.",
         "Complete the zero-routine-relay acceptance in CC_LIVE_LOOP_IMPLEMENTATION_PLAN.md with real provider, runtime, Git export/integration, external verification, independent review, rejected-candidate correction and live browser evidence; record remaining human decision gates separately."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
       "task_id": "da1721ca-9c75-5c27-9dbf-6c165dade857",
-      "coordinator_reference": "CC-14"
+      "coordinator_reference": "CC-14",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "SBA-09",
@@ -225,10 +241,12 @@
         "Preserve dirty checkouts; reject unapproved branch changes; prevent duplicate runs and stop on revoked credentials or unresolved conflicts.",
         "Demonstrate real startup, cancellation, restart and progress reporting; retain the manual pickup fallback."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
       "task_id": "9994fcd6-4b85-5a14-ae8c-f5a22d40d0b7",
-      "coordinator_reference": "CC-15"
+      "coordinator_reference": "CC-15",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-01",
@@ -248,9 +266,11 @@
         "Demonstrate real supported start, status, result and cancellation operations for both runtimes.",
         "Document unavailable operations and runtime versions; a notification or log watcher is not proof of dispatch."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-02",
@@ -272,9 +292,11 @@
         "Version task admission, attempts, events, candidate verification, review, escalation and cancellation contracts.",
         "Antigravity owns backend delivery; Codex supplies interface requirements; separate design review is recorded."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-03",
@@ -296,9 +318,11 @@
         "Persist dispatch intent, run references, leases, receipts and pending handoffs.",
         "Crash/retry tests prove no lost acknowledged handoffs or duplicate effective dispatch; network calls remain outside write transactions."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-04",
@@ -321,9 +345,11 @@
         "Select dependency-ready work with actual authenticated assignment, approved scope and execution allowance.",
         "Reject missing authority and exhausted budgets; proposed planning budgets cannot grant execution."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-05",
@@ -348,9 +374,11 @@
         "Complete the independent real-container acceptance gate recorded in CC_05_06_REVIEW_RECONCILIATION.md before any live registry admission.",
         "Implement the proposed CC_PROVIDER_BROKER_CONTRACT_V1.md after technical acknowledgement: service-owned provider/model authority, no guest credentials/egress, bounded mediated transport, measured usage and crash-safe funding holds; no silent model/runtime substitution."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-06",
@@ -376,9 +404,11 @@
         "Qualify a repository-profile external test driver/oracle against immutable exported candidates before treating arbitrary repository runs as completion evidence; printed pytest summaries and guest-produced reports remain claims.",
         "Use strict candidate/policy-bound final reviewer outputs, and independently test live provider-mediated review only after broker and export qualification."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-07",
@@ -406,9 +436,11 @@
         "Normalize rejected findings into one idempotent correction intent, preserve task identity and historical receipts, and reverify/review each exact new candidate without CEO message relay; retain required separate human approval.",
         "Reconcile phase dependencies from CC_LIVE_LOOP_IMPLEMENTATION_PLAN.md through the authenticated plan publisher before machine dispatch; do not create a reciprocal CC-06/CC-09 macro dependency."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-08",
@@ -431,9 +463,11 @@
         "Stage active scope/acceptance changes for authorized reconciliation; preserve history.",
         "Changed candidate or relevant plan invalidates applicable approval and cannot silently continue."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-09",
@@ -458,9 +492,11 @@
         "Implement the proposed CC_CANDIDATE_INTEGRATION_CONTRACT_V1.md: bounded regular-file export, exact authorized base/scope, trusted Git objects without guest hooks/credentials or dirty-checkout mutation.",
         "Integrate only under explicit merger/required approver authority and exact target-ref compare-and-swap; changed integrated candidates require fresh verification/review; reconcile lost acknowledgement before retry."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-11",
@@ -484,9 +520,11 @@
         "Revocation, outages and budget exhaustion stop safely; usage reservations remain until reconciliation.",
         "Retain UNKNOWN_CREATE and funding holds until durable container operations are reconciled; stale/canceled generations cannot start late-created objects. Verify the implementation and constraints in CONTAINER_RECOVERY_CODEX_DELIVERY.md."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     },
     {
       "source_key": "CC-12",
@@ -510,9 +548,11 @@
         "Demonstrate restart/restore without history loss or artificial completion.",
         "Operate the private durable container journal and authorized bounded janitor from CONTAINER_RECOVERY_RUNBOOK.md; reconcile late-created objects across restart without broad-prefix deletion, guessed absence, funding release or automatic retry."
       ],
-      "status": "BACKLOG",
+      "status": "DONE",
       "appetite_tokens": 0,
-      "workstream": "Capable Coordinator"
+      "workstream": "Capable Coordinator",
+      "progress_percent": 100,
+      "completed_at": "2026-10-16T12:00:00Z"
     }
   ],
   "workstream": "Capable Coordinator",

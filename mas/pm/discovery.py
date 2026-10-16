@@ -128,7 +128,7 @@ class ProjectRegistryDiscovery:
                     target_branch = reg_data.get("repository", {}).get("configured_branch")
                 except Exception:
                     pass
-        target_branch = target_branch or "feat/scrum-board-automation"
+        target_branch = target_branch or "main"
 
         try:
             remotes = subprocess.run(

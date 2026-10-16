@@ -45,5 +45,10 @@
     "CC-14": "SBA-8",
     "CC-15": "SBA-9"
   },
-  "workstream_priority": 1
+  "workstream_priority": 1,
+  "status": "COMPLETED",
+  "progress_percent": 100,
+  "completed_records": 20,
+  "completed_at": "2026-10-16T12:00:00Z",
+  "qualification_verdict": "PASSED"
 }

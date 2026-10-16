@@ -55,8 +55,9 @@ ALLOWED_TRANSITIONS: Dict[IssueState, Set[IssueState]] = {
 class FSMEngine:
     """Finite State Machine engine executing atomic guarded transitions."""
 
-    def __init__(self, db: PMDatabase) -> None:
+    def __init__(self, db: PMDatabase, workspace_root: Optional[Path] = None) -> None:
         self.db = db
+        self.workspace_root = workspace_root
         self._lock = threading.RLock()
 
     def can_transition(self, current_state: IssueState, target_state: IssueState) -> bool:
@@ -129,7 +130,7 @@ class FSMEngine:
 
                 elif current == IssueState.IN_PROGRESS and target_state == IssueState.VERIFICATION:
                     validate_pending_reconciliation(issue)
-                    validate_evidence(self.db, issue, enforce_git_commit=enforce_git_commit)
+                    validate_evidence(self.db, issue, workspace_root=self.workspace_root, enforce_git_commit=enforce_git_commit)
                     validate_wip_limit(self.db, issue.project_id, target_state.value, conn=conn)
 
                 elif current == IssueState.VERIFICATION and target_state == IssueState.JUDICIAL_REVIEW:
@@ -166,6 +167,40 @@ class FSMEngine:
                     blocker_reason=blocker_reason,
                     conn=conn,
                 )
+
+                # Record incremental board change cursor for live board projection
+                try:
+                    from datetime import datetime, timezone
+                    import json
+                    from mas.tenancy import current_binding
+                    b = current_binding()
+                    chg_tenant = b.identity.tenant_id if b else (caller_principal.split(":", 1)[0] if ":" in caller_principal else "default")
+                    conn.execute(
+                        """
+                        INSERT INTO pm_project_board_changes (
+                            tenant_id, project_id, issue_id, task_id,
+                            change_kind, task_version, summary_json, recorded_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            chg_tenant,
+                            issue.project_id,
+                            issue.id,
+                            issue.task_id or issue.id,
+                            f"state.{target_state.value.lower()}",
+                            issue.policy_version,
+                            json.dumps({
+                                "issue_key": issue.key,
+                                "from_state": current.value,
+                                "to_state": target_state.value,
+                                "actor": caller_principal,
+                                "reason": reason,
+                            }, sort_keys=True),
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+                except Exception:
+                    pass
 
         updated = self.db.get_issue(issue.id)
         assert updated is not None

@@ -267,10 +267,17 @@ def validate_evidence(
 
     root = (workspace_root or Path.cwd()).resolve()
 
-    git_link = next((lnk for lnk in valid_links if lnk.evidence_type == EvidenceType.GIT_COMMIT), None)
+    git_link = next((lnk for lnk in reversed(valid_links) if lnk.evidence_type == EvidenceType.GIT_COMMIT), None)
     expected_commit = (git_link.content_hash or git_link.uri.replace("git:commit:", "")).strip() if git_link else None
 
-    for link in valid_links:
+    active_links = [
+        lnk for lnk in valid_links
+        if not expected_commit
+        or lnk.payload.get("candidate_commit_sha") == expected_commit
+        or (lnk.content_hash or lnk.uri.replace("git:commit:", "")).strip() == expected_commit
+    ]
+
+    for link in active_links:
         if link.evidence_type == EvidenceType.TEST_RUN_LOG and expected_commit:
             test_commit = link.payload.get("candidate_commit_sha") or link.payload.get("commit_sha")
             if not isinstance(test_commit, str) or test_commit.strip() != expected_commit:
